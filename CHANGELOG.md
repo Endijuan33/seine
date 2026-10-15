@@ -8,6 +8,17 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+## v0.2.17
+
+**Less pool polling and better recovery when the pool is busy.** Seine reuses
+network hashrate readings for 30 seconds and staggers telemetry refreshes to
+reduce request bursts from rigs sharing an internet connection. It respects
+the pool's retry delay for both rate limits and temporary overload, and avoids
+requesting full miner details when a balance request fails temporarily.
+
+Recommended for pool miners, especially operators running several rigs behind
+one public IP. Mining and share submission are unchanged.
+
 ## v0.2.16
 
 **Mine with your Blocknet ID shortname.** Use `--address '@name'` or
