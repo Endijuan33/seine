@@ -8,6 +8,15 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+## v0.2.16
+
+**Mine with your Blocknet ID shortname.** Use `--address '@name'` or
+`--address '$name'` in pool or solo mode, or enter a shortname during first-run
+setup. The control API accepts shortnames too. Seine verifies the signed
+mapping, shows the full payout address, and keeps it fixed for the mining run,
+including reconnects. Quote shortnames in shell commands so `$` is passed
+literally. Full wallet addresses continue to work without a lookup.
+
 **Multi-GPU rigs now mine on every GPU out of the box.** Seine detects all
 NVIDIA GPUs at startup and runs one backend instance per device — no more
 `--nvidia-devices 0,1,...` needed (that flag still works to pin or subset
