@@ -79,7 +79,11 @@ gets a debounced opportunity even during kernel comparisons. The standalone
 repair passes 484 CPU-only workspace tests (four ignored) and independent
 review by the autotune owner. Native reruns additionally require at least
 4 GiB of resident anonymous memory after restart recovery, so a requested
-thread count alone cannot hide an undersized backend. Native reruns pending.
+thread count alone cannot hide an undersized backend. The complete fixed Sapphire Rapids rerun passed all nine phases, including
+fixed-thread opt-out. Restart recovery reached three workers and 6.028 GiB
+anonymous residency; no OOM kills or quarantine occurred. Both full-arena
+growth/switch tests, full-size ISA parity, 485 workspace tests and strict kernel
+Clippy passed. ARM repeat remains pending.
 
 Two clean alternating Ice Lake regression pairs compare the ARM-change build
 against its separately rebuilt CPU-only baseline: approximately −0.29% at one
@@ -98,7 +102,11 @@ reference parity and native workspace tests passed.
   results retain their existing policy.
 - [Draft PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
   worker capacity after temporary RAM limits, stacked on #41. Native fixed
-  lifecycle confirmation is running.
+  lifecycle passed on Sapphire Rapids; ARM repeat is pending.
+- [PR #45](https://github.com/zpalmtree/seine/pull/45): native CPU-only Linux
+  ARM release archive with kernel tests and full-size reference verification.
+  Native source build, package contents/digests and YAML checks pass; the hosted
+  release workflow has not been run.
 - [Draft PR #44](https://github.com/zpalmtree/seine/pull/44): runtime ARM
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
   boundary tests, real-arena worker switches and Graviton3 automatic selection
