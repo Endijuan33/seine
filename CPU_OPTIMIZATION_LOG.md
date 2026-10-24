@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 stable efficiency selections during productive rechecks`
 - `2026-10-24 productive CPU autotuning and changing resource budgets`
 
 - `2026-10-24 cross-generation CPU kernel matrix`
@@ -56,6 +57,32 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 stable efficiency selections during productive rechecks
+
+- Review of the merged productive controller found that efficiency mode could
+  repeatedly commit higher counts even when its current count already delivered
+  at least 75% of the tracked peak. A four-hour deterministic simulation using
+  rates `[0,24,48,72,96,112,124,132,136]` reproduced a confirmation of seven workers
+  at 1,859 seconds, although five workers met the profile floor. The previous
+  endpoint-only test missed the repeated climb and descent.
+- Initial exploration still discovers the peak. Once discovery completes,
+  upward acceptance also requires the current count to fall below the profile
+  floor. Probes continue, and a genuinely new peak can queue a farther probe
+  while retaining the lower operating count between measurements. CPU-rate
+  changes, unstable comparisons, and returning RAM reopen discovery.
+- Recovery tests cover normal/load/normal operation selecting 5→2→5 workers,
+  including a load change that leaves the two-worker rate unchanged, plus a RAM
+  ceiling growing from two to eight workers. These check every confirmation
+  after settling, not just the final count. The steady-load regression checks
+  repeated confirmations over four simulated hours.
+- Validation: CPU-only workspace suite **465 passed**, three opt-in tests
+  ignored; default-feature all-target check, Windows GNU CPU-only cross-check,
+  scoped formatting, and Clippy completed. Clippy retains the existing 61
+  binary/63 test warnings, with none in the edited policy module. This follow-up
+  changes only selection policy; the prior full-size lifecycle validation below
+  was not repeated. Logs are retained locally under
+  `data/adaptive-autotune-20261024/efficiency-cycling/`.
 
 ## 2026-10-24 productive CPU autotuning and changing resource budgets
 
