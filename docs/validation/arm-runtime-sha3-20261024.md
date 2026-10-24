@@ -100,9 +100,19 @@ instruction equivalence has not established performance equivalence. **Keep this
 PR draft until that signal is understood.** Positive results elsewhere do not
 remove this gate.
 
+Fresh final Sapphire Rapids checks passed full-size parity. At one/twelve
+workers, AVX2 paired differences were +0.116% to +0.129% / +0.471% to +0.700%;
+full AVX-512 was +0.202% to +0.286% / −0.783% to +0.154%. These small or mixed
+differences do not remove the separate Xeon 6975P-C integration gate.
+
 Haswell, Zen 1 and Zen 2 final AVX2 checks were near-flat. Earlier Ice Lake
-ARM-change checks were order-limited and retain small negatives; they are not
-substituted for the fresh final-binary Intel regressions still in progress.
+ARM-change checks were order-limited and retain small negatives. Fresh final
+Ice Lake comparisons now completed with negative differences in all eight
+pairs: one/twelve-worker AVX2 −2.640% to −1.691% / −1.721% to −0.920%, and
+full AVX-512 −0.782% to −0.413% / −1.334% to −1.280%. Independent order, binary,
+archive and full-size parity audit passed. This reinforces the combined-stack
+regression gate. Following the user's merge instruction, PRs #40/#41/#43/#45
+are being confirmed separately before runtime changes are merged; #44 stays draft.
 
 ## Review and retained limitations
 
