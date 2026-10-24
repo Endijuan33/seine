@@ -11,7 +11,7 @@ import matrix
 
 
 class MatrixOrderTest(unittest.TestCase):
-    def run_plan(self, labels):
+    def run_plan(self, labels, pairs=2):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             variants = []
@@ -20,7 +20,7 @@ class MatrixOrderTest(unittest.TestCase):
                 binary.write_bytes(label.encode())
                 variants.append(f'{label}:{binary}:avx2')
             args = argparse.Namespace(variant=variants, workers=[1, 16], out=root / 'out',
-                pairs=2, seconds=10, rounds=2, page='large', deadline_seconds=100)
+                pairs=pairs, seconds=10, rounds=2, page='large', deadline_seconds=100)
             pool = [0]
             read_text = Path.read_text
 
@@ -63,6 +63,11 @@ class MatrixOrderTest(unittest.TestCase):
         self.assertEqual(self.run_plan(['avx2', 'full', 'narrow']), [
             (1, 'avx2'), (1, 'full'), (1, 'narrow'), (16, 'full'), (16, 'narrow'), (16, 'avx2'),
             (16, 'avx2'), (16, 'narrow'), (16, 'full'), (1, 'narrow'), (1, 'full'), (1, 'avx2')])
+
+    def test_four_pass_confirmation_preserves_balance(self):
+        self.assertEqual(self.run_plan(['baseline', 'candidate'], pairs=4), [
+            (1, 'baseline'), (1, 'candidate'), (16, 'candidate'), (16, 'baseline'),
+            (16, 'baseline'), (16, 'candidate'), (1, 'candidate'), (1, 'baseline')] * 2)
 
 
 if __name__ == '__main__':

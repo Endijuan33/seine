@@ -43,7 +43,10 @@ per-configuration variant reversal. Original executed scripts and data are
 preserved; affected normalized evidence is explicitly order-limited. Current
 controllers rotate by stable configuration index, and `matrix.py` checks actual
 completed order before writing `COMPLETE`. `test_matrix_order.py` exercises the
-real controller without launching processes or touching OS settings. Native
+real controller without launching processes or touching OS settings, including
+four-pass balance. Confirmation export additionally requires COMPLETE, every
+report from an even-pass run, and reversal verified from completed records.
+Windows screening refuses to resume older-protocol data. Native
 Windows four-pair confirmation and direct interhash reversal were unaffected.
 Corrected ARM confirmation is required before the ARM PR becomes ready.
 

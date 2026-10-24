@@ -9,6 +9,10 @@ cases=[
  ('spread-w8',[0,2,4,6,16,18,20,22],8),('smt-w8',[0,1,2,3,16,17,18,19],8)]
 paths=['avx2','avx512','avx512-256'];results=json.loads((ROOT/'windows-screen-results.json').read_text()) if (ROOT/'windows-screen-results.json').exists() else [];started=time.monotonic()
 completed={r['label'] for r in results}
+protocol=ROOT/'windows-screen-order-protocol.json'
+if results:
+ assert protocol.exists() and json.loads(protocol.read_text()).get('version')==2,'archive old-protocol results before resuming'
+else:save(protocol,{'version':2,'order':'stable configuration rotation; reverse every pass'})
 def check(r,threads,kernel):
  assert r['schema_version']==14 and r['cpu_threads']==threads
  assert r['config_fingerprint']['cpu_kernel']==kernel
@@ -36,6 +40,9 @@ try:
     save(ROOT/'windows-screen-results.json',results)
     print(datetime.datetime.now(datetime.timezone.utc).isoformat(),label,f'{rate:.5f} H/s',flush=True)
     time.sleep(3)
- (ROOT/'WINDOWS-SCREEN-COMPLETE').write_text('Screening only; final gains require paired confirmation.\n')
+ for case,_,_ in cases:
+  passes=[[r['kernel'] for r in results if r['case']==case and r['repeat']==repeat] for repeat in (1,2)]
+  assert len(passes[0])==len(paths) and passes[1]==list(reversed(passes[0]))
+ (ROOT/'WINDOWS-SCREEN-COMPLETE').write_text('Screening only; actual per-configuration reversal verified.\n')
 finally:
  save(ROOT/'windows-screen-results.json',results)

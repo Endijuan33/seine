@@ -139,6 +139,13 @@ def main():
         run(["sudo", "sysctl", "-w", f"vm.nr_hugepages={old_pool}"], OUT / "release-pages.log")
         save(OUT / "screen.json", records)
     assert identities == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT / "bin").iterdir()}
+    for mode, workers in configs:
+        passes = [[(r['binary'], r['kernel']) for r in records
+                   if r['mode'] == mode and r['workers'] == workers and r['repeat'] == repeat]
+                  for repeat in (1, 2)]
+        assert len(passes[0]) == len(variants) and passes[1] == list(reversed(passes[0]))
+    save(OUT / 'screen-order-verification.json', {'per_configuration_order_reversed': True,
+        'source': 'actual completed record sequence', 'passes': 2})
     (OUT / "SCREEN-COMPLETE").write_text("Screening only; no production promotion.\n")
 
 
