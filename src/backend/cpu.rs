@@ -1,7 +1,7 @@
 #[cfg(any(target_os = "windows", test))]
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier, Condvar, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -12,8 +12,8 @@ use crossbeam_channel::{bounded, Sender};
 
 use crate::backend::{
     AssignmentSemantics, BackendCapabilities, BackendEvent, BackendExecutionModel,
-    BackendInstanceId, BackendTelemetry, BenchBackend, DeadlineSupport, PowBackend,
-    PreemptionGranularity, WorkAssignment, WORK_ID_MAX,
+    BackendInstanceId, BackendTelemetry, BenchBackend, DeadlineSupport, KernelBenchSample,
+    PowBackend, PreemptionGranularity, WorkAssignment, WORK_ID_MAX,
 };
 use crate::config::{CpuAffinityMode, CpuPageMode};
 
@@ -21,6 +21,8 @@ use crate::config::{CpuAffinityMode, CpuPageMode};
 mod events;
 #[path = "cpu/kernel.rs"]
 mod kernel;
+#[path = "cpu/sampling.rs"]
+mod sampling;
 #[cfg(target_os = "linux")]
 #[path = "cpu/topology.rs"]
 mod topology;
@@ -652,107 +654,74 @@ impl PowBackend for CpuBackend {
 
 impl BenchBackend for CpuBackend {
     fn kernel_bench(&self, seconds: u64, shutdown: &AtomicBool) -> Result<u64> {
+        Ok(self.sample_kernel(seconds, false, shutdown)?.hashes)
+    }
+}
+
+impl CpuBackend {
+    /// Warm every arena before scoring steady-state hashing. Keep lifecycle wall
+    /// time available for diagnostics, without penalizing larger arena counts.
+    pub(crate) fn autotune_sample(
+        &self,
+        seconds: u64,
+        shutdown: &AtomicBool,
+    ) -> Result<KernelBenchSample> {
+        self.sample_kernel(seconds, true, shutdown)
+    }
+
+    fn sample_kernel(
+        &self,
+        seconds: u64,
+        warmup: bool,
+        shutdown: &AtomicBool,
+    ) -> Result<KernelBenchSample> {
         reset_arena_telemetry(&self.shared);
         let lanes = self.threads.max(1);
-        let sample_duration = Duration::from_secs(seconds.max(1));
-        let total_hashes = AtomicU64::new(0);
-        let setup_barrier = Arc::new(Barrier::new(lanes.saturating_add(1)));
-        let start_barrier = Arc::new(Barrier::new(lanes.saturating_add(1)));
-        let stop_at = Arc::new(OnceLock::<Instant>::new());
-        let setup_error = Arc::new(Mutex::new(None::<String>));
         let core_ids = resolve_affinity_core_ids(self.affinity_mode);
         let page_mode = self.shared.page_mode;
-
-        thread::scope(|scope| {
-            for lane in 0..lanes {
-                let total_hashes = &total_hashes;
-                let setup_barrier = Arc::clone(&setup_barrier);
-                let start_barrier = Arc::clone(&start_barrier);
-                let stop_at = Arc::clone(&stop_at);
-                let setup_error = Arc::clone(&setup_error);
-                let core_id = core_ids
+        sampling::sample(
+            lanes,
+            Duration::from_secs(seconds.max(1)),
+            warmup,
+            shutdown,
+            |lane| {
+                set_thread_high_perf();
+                if let Some(core_id) = core_ids
                     .as_ref()
                     .and_then(|ids| ids.get(lane % ids.len()))
-                    .copied();
-                scope.spawn(move || {
-                    set_thread_high_perf();
-                    if let Some(core_id) = core_id {
-                        let _ = core_affinity::set_for_current(core_id);
-                    }
-                    let hasher = fixed_argon::FixedArgon2id::new(POW_MEMORY_KB);
-                    let block_count = hasher.block_count();
-                    let mut arena = match kernel::PowArena::new(block_count, page_mode) {
-                        Ok(arena) => arena,
-                        Err(err) => {
-                            if let Ok(mut slot) = setup_error.lock() {
-                                if slot.is_none() {
-                                    *slot = Some(format!(
-                                        "cpu lane {lane}: {} page-mode arena allocation failed ({err})",
-                                        page_mode.as_str()
-                                    ));
-                                }
-                            }
-                            setup_barrier.wait();
-                            start_barrier.wait();
-                            return;
-                        }
-                    };
-                    kernel::record_arena_backing(&self.shared, &arena, block_count);
-                    let memory_blocks = arena.as_mut_slice();
-
-                    let mut header_base = [0u8; blocknet_pow_spec::POW_HEADER_BASE_LEN];
-                    for (i, byte) in header_base.iter_mut().enumerate() {
-                        *byte = (i as u8).wrapping_mul(31).wrapping_add(7);
-                    }
-
-                    let mut output = [0u8; POW_OUTPUT_LEN];
-                    let mut nonce = lane as u64;
-                    let mut local_hashes = 0u64;
-                    let stride = lanes as u64;
-                    setup_barrier.wait();
-                    start_barrier.wait();
-
-                    let Some(stop_at) = stop_at.get().copied() else {
-                        return;
-                    };
-
-                    while Instant::now() < stop_at && !shutdown.load(Ordering::Relaxed) {
-                        let nonce_bytes = nonce.to_le_bytes();
-                        if hasher
-                            .hash_password_into_with_memory(
-                                &nonce_bytes,
-                                &header_base,
-                                &mut output,
-                                memory_blocks,
-                            )
-                            .is_err()
-                        {
-                            break;
-                        }
-                        nonce = nonce.wrapping_add(stride);
-                        local_hashes = local_hashes.saturating_add(1);
-                    }
-
-                    total_hashes.fetch_add(local_hashes, Ordering::Relaxed);
-                });
-            }
-
-            setup_barrier.wait();
-            let setup_failed = setup_error.lock().ok().is_some_and(|slot| slot.is_some());
-            let deadline = if setup_failed {
-                Instant::now()
-            } else {
-                Instant::now() + sample_duration
-            };
-            let _ = stop_at.set(deadline);
-            start_barrier.wait();
-        });
-
-        if let Some(err) = setup_error.lock().ok().and_then(|mut slot| slot.take()) {
-            return Err(anyhow!(err));
-        }
-
-        Ok(total_hashes.load(Ordering::Relaxed))
+                    .copied()
+                {
+                    let _ = core_affinity::set_for_current(core_id);
+                }
+                let hasher = fixed_argon::FixedArgon2id::new(POW_MEMORY_KB);
+                let block_count = hasher.block_count();
+                let mut arena = kernel::PowArena::new(block_count, page_mode).map_err(|err| {
+                    anyhow!(
+                        "cpu lane {lane}: {} page-mode arena allocation failed ({err})",
+                        page_mode.as_str()
+                    )
+                })?;
+                kernel::record_arena_backing(&self.shared, &arena, block_count);
+                let mut header_base = [0u8; blocknet_pow_spec::POW_HEADER_BASE_LEN];
+                for (i, byte) in header_base.iter_mut().enumerate() {
+                    *byte = (i as u8).wrapping_mul(31).wrapping_add(7);
+                }
+                let mut output = [0u8; POW_OUTPUT_LEN];
+                let mut nonce = lane as u64;
+                Ok(move || {
+                    hasher
+                        .hash_password_into_with_memory(
+                            &nonce.to_le_bytes(),
+                            &header_base,
+                            &mut output,
+                            arena.as_mut_slice(),
+                        )
+                        .map_err(|err| anyhow!("cpu lane {lane}: hash failed ({err:?})"))?;
+                    nonce = nonce.wrapping_add(lanes as u64);
+                    Ok(())
+                })
+            },
+        )
     }
 }
 

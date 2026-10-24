@@ -40,8 +40,8 @@ use crate::backend::metal::MetalBackend;
 use crate::backend::nvidia::{NvidiaBackend, NvidiaBackendTuningOptions};
 use crate::backend::{
     normalize_backend_capabilities, BackendCapabilities, BackendEvent, BackendExecutionModel,
-    BackendInstanceId, BackendTelemetry, BenchBackend, DeadlineSupport, DynamicShareTarget,
-    MiningSolution, PowBackend, PreemptionGranularity, WORK_ID_MAX,
+    BackendInstanceId, BackendTelemetry, DeadlineSupport, DynamicShareTarget, MiningSolution,
+    PowBackend, PreemptionGranularity, WORK_ID_MAX,
 };
 #[cfg(any(target_os = "linux", test))]
 use crate::config::CpuPageMode;
@@ -57,7 +57,7 @@ use ui::{info, warn};
 const TEMPLATE_RETRY_DELAY: Duration = Duration::from_secs(2);
 const MIN_EVENT_WAIT: Duration = Duration::from_millis(1);
 const BACKEND_EVENT_SOURCE_CAPACITY_MAX: usize = 256;
-const CPU_AUTOTUNE_RECORD_SCHEMA_VERSION: u32 = 9;
+const CPU_AUTOTUNE_RECORD_SCHEMA_VERSION: u32 = 10;
 const CPU_AUTOTUNE_RECORD_MAX_AGE_SECS: u64 = 14 * 24 * 60 * 60;
 const CPU_AUTOTUNE_LINEAR_SCAN_MAX_CANDIDATES: usize = 8;
 const CPU_AUTOTUNE_FINAL_SWEEP_RADIUS: usize = 2;
@@ -197,6 +197,7 @@ struct CpuAutotuneRecord {
 #[derive(Debug, Clone, Copy)]
 struct CpuAutotuneMeasurement {
     hashes: u64,
+    elapsed_secs: f64,
     wall_secs: f64,
     hps: f64,
 }
@@ -1524,10 +1525,11 @@ fn measure_cpu_autotune_candidate(
     info(
         tag,
         format!(
-            "cpu-autotune |   -> {} threads: {} ({} hashes in {:.1}s)",
+            "cpu-autotune |   -> {} threads: {} ({} hashes in {:.3}s hashing, {:.3}s total)",
             threads,
             format_hashrate(measurement.hps),
             measurement.hashes,
+            measurement.elapsed_secs,
             measurement.wall_secs,
         ),
     );
@@ -1540,11 +1542,13 @@ fn merge_cpu_autotune_measurements(
     confirmation: CpuAutotuneMeasurement,
 ) -> CpuAutotuneMeasurement {
     let hashes = initial.hashes.saturating_add(confirmation.hashes);
+    let elapsed_secs = initial.elapsed_secs + confirmation.elapsed_secs;
     let wall_secs = initial.wall_secs + confirmation.wall_secs;
     CpuAutotuneMeasurement {
         hashes,
+        elapsed_secs,
         wall_secs,
-        hps: hashes as f64 / wall_secs.max(f64::EPSILON),
+        hps: hashes as f64 / elapsed_secs.max(f64::EPSILON),
     }
 }
 
@@ -1583,10 +1587,11 @@ fn remeasure_cpu_autotune_candidate(
     info(
         tag,
         format!(
-            "cpu-autotune |   -> {} threads confirmed at {} (combined {} hashes in {:.1}s)",
+            "cpu-autotune |   -> {} threads confirmed at {} (combined {} hashes in {:.3}s hashing, {:.3}s total)",
             threads,
             format_hashrate(combined.hps),
             combined.hashes,
+            combined.elapsed_secs,
             combined.wall_secs,
         ),
     );
@@ -1618,6 +1623,7 @@ fn bench_cpu_autotune_candidate(
     let sample_window_secs = window_secs.max(1);
     let mut sampled_secs = 0u64;
     let mut sampled_hashes = 0u64;
+    let mut elapsed_secs = 0.0f64;
     let mut wall_secs = 0.0f64;
 
     while sampled_secs < CPU_AUTOTUNE_MAX_SAMPLE_SECS_PER_CANDIDATE
@@ -1631,27 +1637,27 @@ fn bench_cpu_autotune_candidate(
             sample_window_secs,
             sampled_secs,
             sampled_hashes,
-            wall_secs,
+            elapsed_secs,
         );
         if chunk_secs == 0 {
             break;
         }
-        let started_at = Instant::now();
-        let chunk_hashes = BenchBackend::kernel_bench(&backend, chunk_secs, shutdown)?;
-        wall_secs += started_at.elapsed().as_secs_f64();
+        let sample = backend.autotune_sample(chunk_secs, shutdown)?;
+        elapsed_secs += sample.elapsed_secs;
+        wall_secs += sample.wall_elapsed_secs;
         sampled_secs = sampled_secs.saturating_add(chunk_secs);
-        sampled_hashes = sampled_hashes.saturating_add(chunk_hashes);
+        sampled_hashes = sampled_hashes.saturating_add(sample.hashes);
     }
 
-    if sampled_secs == 0 {
+    if sampled_secs == 0 || shutdown.load(Ordering::Relaxed) {
         return Ok(None);
     }
 
-    // Use elapsed wall time for throughput so short windows don't overcount hashes
-    // that finish after the target window boundary.
-    let hps = (sampled_hashes as f64) / wall_secs.max(f64::EPSILON);
+    // Include last-hash overrun, but exclude allocation, warmup and arena teardown.
+    let hps = (sampled_hashes as f64) / elapsed_secs.max(f64::EPSILON);
     Ok(Some(CpuAutotuneMeasurement {
         hashes: sampled_hashes,
+        elapsed_secs,
         wall_secs,
         hps,
     }))
@@ -3657,6 +3663,7 @@ mod tests {
                     *threads,
                     CpuAutotuneMeasurement {
                         hashes: 0,
+                        elapsed_secs: 0.0,
                         wall_secs: 0.0,
                         hps: *hps,
                     },
@@ -3817,21 +3824,24 @@ mod tests {
     }
 
     #[test]
-    fn autotune_confirmation_combines_hashes_and_wall_time() {
+    fn autotune_confirmation_scores_hashing_time_without_lifecycle_bias() {
         let combined = merge_cpu_autotune_measurements(
             CpuAutotuneMeasurement {
                 hashes: 100,
-                wall_secs: 4.0,
+                elapsed_secs: 4.0,
+                wall_secs: 8.0,
                 hps: 25.0,
             },
             CpuAutotuneMeasurement {
                 hashes: 300,
-                wall_secs: 10.0,
+                elapsed_secs: 10.0,
+                wall_secs: 18.0,
                 hps: 30.0,
             },
         );
         assert_eq!(combined.hashes, 400);
-        assert_eq!(combined.wall_secs, 14.0);
+        assert_eq!(combined.elapsed_secs, 14.0);
+        assert_eq!(combined.wall_secs, 26.0);
         assert!((combined.hps - (400.0 / 14.0)).abs() < 1e-9);
     }
 
