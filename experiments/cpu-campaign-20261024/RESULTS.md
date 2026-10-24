@@ -142,6 +142,21 @@ CPU-sized parked pool plus runtime requirement. No Rayon environment override
 is used and product source remains frozen. Reducing startup's persistent Rayon
 thread footprint is a separate future optimization.
 
+The frozen final combined candidate `636e688` passed **495 CPU-only workspace
+tests** (five resource-dependent tests ignored), full-size scalar/AVX2/AVX-512/256
+parity, both explicit real-arena tests and strict kernel Clippy on Xeon 6975P-C.
+Its complete nine-phase lifecycle passed, including restart growth to three
+workers / 6.028 GiB anonymous residency, no OOM/quarantine and opt-out. The
+40-task full-pool check provisioned nine CPU slots, observed at most 35 tasks
+and 84 completed hashes before clean shutdown.
+
+Corrected-order final x86 regression pairs at one/twelve workers show AVX2 mean
+changes of +0.26% / −0.48% (the latter pairs range −1.13% to +0.16%) and full
+AVX-512 +0.53% / +0.58%. These small differences are retained without claiming
+an x86 kernel optimization. Both builds use the same CPU-only generic profile.
+All sixteen reports passed actual-order verification; a deliberately partial
+first-pass export was rejected without creating a confirmation artifact.
+
 ## Reviewable changes
 
 - [PR #40](https://github.com/zpalmtree/seine/pull/40): Windows tuning-cache
