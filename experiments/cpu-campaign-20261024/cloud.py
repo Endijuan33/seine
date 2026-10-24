@@ -22,7 +22,7 @@ ROOT = REPO / "data/cpu-campaign-20261024"
 EXPERIMENT = "cpu-campaign-20261024"
 DEADLINE = dt.datetime(2026, 10, 24, 20, 0, tzinfo=dt.timezone.utc)
 TYPES = {"m6g.4xlarge": "arm64", "m7g.4xlarge": "arm64", "m8g.4xlarge": "arm64",
-         "c4.4xlarge": "amd64",
+         "c4.4xlarge": "amd64", "c5.4xlarge": "amd64",
          "m5a.4xlarge": "amd64", "c5a.4xlarge": "amd64",
          "c6i.4xlarge": "amd64", "c7i.4xlarge": "amd64", "c8i.4xlarge": "amd64"}
 
