@@ -12,13 +12,16 @@ import cloud
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('instance')
+    parser.add_argument('--bundle', choices=['portable-final-x86', 'portable-codegen-x86'], default='portable-final-x86')
     args = parser.parse_args()
     record, info = cloud.owned(args.instance)
     assert record['timer_verified'] and info['State']['Name'] == 'running'
     assert cloud.TYPES[record['type']] == 'amd64'
-    root = cloud.ROOT / 'portable-final-x86'
+    root = cloud.ROOT / args.bundle
     identities = json.loads((root / 'identities.json').read_text())
-    assert identities['source_candidate'] == '636e6887c405c41d732433b1eeb018cefcdc962d'
+    expected = {'portable-final-x86': '636e6887c405c41d732433b1eeb018cefcdc962d',
+                'portable-codegen-x86': 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd'}
+    assert identities['source_candidate'] == expected[args.bundle]
     files = [root / name for name in identities['sha256']]
     files += [root / 'portable-x86-binaries.sha256', root / 'identities.json',
               Path(__file__).resolve().parent / 'portable_regression.sh']

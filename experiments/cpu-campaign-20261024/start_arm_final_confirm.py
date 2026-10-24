@@ -17,14 +17,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('instance')
     parser.add_argument('--regular', action='store_true')
+    parser.add_argument('--bundle', choices=['portable-final-arm', 'portable-codegen-arm'], default='portable-final-arm')
     args = parser.parse_args()
     record, info = cloud.owned(args.instance)
     assert record['timer_verified'] and info['State']['Name'] == 'running'
     assert record['type'] in ['m6g.4xlarge', 'm7g.4xlarge']
     kernel = 'neon' if record['type'] == 'm6g.4xlarge' else 'neon-sha3'
-    bundle = cloud.ROOT / 'portable-final-arm'
+    bundle = cloud.ROOT / args.bundle
     identity = json.loads((bundle / 'identities.json').read_text())
-    assert identity['source_candidate'] == '636e6887c405c41d732433b1eeb018cefcdc962d'
+    expected = {'portable-final-arm': '636e6887c405c41d732433b1eeb018cefcdc962d',
+                'portable-codegen-arm': 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd'}
+    assert identity['source_candidate'] == expected[args.bundle]
     cloud.ssh(args.instance, 'test ! -e /home/ubuntu/campaign && mkdir -p /home/ubuntu/campaign/bin /home/ubuntu/campaign/results')
     manifest = {}
     files = [(bundle / name, 'bin/' + name) for name in identity['sha256']]
