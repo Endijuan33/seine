@@ -11,6 +11,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 streaming-store kernel integration on validated EPYC`
+- `2026-10-24 sequential Milan/Turin investigation and streaming-store candidate`
+
 - `2026-10-24 automatic joint CPU kernel and worker selection`
 - `2026-10-24 stable efficiency selections during productive rechecks`
 - `2026-10-24 productive CPU autotuning and changing resource budgets`
@@ -58,6 +61,106 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 streaming-store kernel integration on validated EPYC
+
+- Adopted the distinct `avx512-256-stream` implementation: a 64 KiB recent-block
+  ring with non-temporal arena stores, preserving the full 2 GiB arena and PoW.
+  Automatic trials require AMD family 26/model 2 and independent ISA/OS checks.
+  The existing fallback and opt-out remain. No fixed worker threshold forces it.
+- Kernel tuning now visits every eligible challenger, retains a confirmed
+  incumbent, and caches only a completed sweep for the exact count/backing.
+  Schema 2 includes the candidate set; noisy/interrupted trials do not cache a
+  loss. This includes the retry semantics from PR #41, with the complete final
+  candidate independently checked on Intel in both feature profiles.
+- Native EPYC 9R45, 24 workers / 48 GiB explicit 2 MiB pages, portable default
+  release binary: streaming measured **+29.80% versus AVX2** (34.4705→44.7420
+  H/s), **+32.32% versus full-width AVX-512** (33.8080→44.7359), and **+27.37%
+  versus uniform 256-bit AVX-512** (35.1175→44.7295). Both orders were positive
+  for each control. These are within-host results, not universal EPYC gains.
+- Productive native tuning confirmed AVX2 first, then streaming in two A/B/A
+  comparisons, cached it for the measured context, completed 14,096 hashes,
+  and released all worker arenas. Full 2 GiB parity, 21 switches, 34 native
+  tuner/coordinator tests and 488 local CPU/workspace tests passed.
+- Intel Ice Lake 12-worker controls: CPU-only AVX2 +0.43%, full-width +0.08%;
+  default-profile controls showed no repeatable loss but up to 10% variation
+  between legs, so no Intel speedup or tight regression bound is claimed there. Cross-platform checks, formatting,
+  strict kernel Clippy and workspace Clippy with existing warnings passed.
+- All 148 native archive files verified; both instances, disks, security groups
+  and private keys were deleted. Conservative compute estimate: $0.7009,
+  excluding storage/IP/transfer. Source/binary identities, every pair, exact
+  productive transcript, limitations and cleanup receipts are in the
+  [integrated validation report](experiments/epyc-investigation/INTEGRATED_VALIDATION.md)
+  and its numeric evidence. The original low-count streaming regression remains
+  relevant; automatic selection still requires measured gains for each context.
+
+## 2026-10-24 sequential Milan/Turin investigation and streaming-store candidate
+
+- Investigated eight proposed directions in isolated experiments against
+  **785a06f**, with portable Rust 1.93.0 CPU-only builds. The full report,
+  reproducible generators, exact streaming patch, numeric comparisons and
+  integration requirements are in
+  [experiments/epyc-investigation](experiments/epyc-investigation/README.md).
+  Production allocation, automatic ISA selection and autotuning are unchanged.
+- Hosts: two-node EPYC 7R13 (c6a.8xlarge, 16 physical cores / 32 threads) for NUMA
+  and page sizes; EPYC 9R45 (c8a.8xlarge, 32 physical cores, one exposed NUMA node,
+  four L3 groups) for Zen 5 kernels. Both advertise 64 GiB. These are guests, not
+  complete physical sockets; guest page backing does not prove host backing.
+- **NUMA:** balanced pools were neutral (+0.057%). With a deliberately one-node
+  HugeTLB pool, strict local allocation plus local THP fallback improved eight
+  workers by **40.40%**, with all three pairs positive. It restored both locality
+  and memory-node distribution; this is not a pure remote-latency percentage or
+  a general EPYC gain. A balanced all-remote control lost about 7%.
+- **1 GiB pages:** +0.056% against verified 2 MiB HugeTLB at 12 workers, with mixed
+  pair signs. No useful advantage on the Milan guest.
+- **Earlier DD seed/prefetch:** 256-bit path regressed 0.88–4.96%; full-width path
+  was +0.39% at one worker and -0.64% at 24. Assembly verified earlier prefetch
+  placement. Rejected.
+- **Different DI/DD kernels:** apparent low-count improvements over uniform
+  256-bit AVX-512 lost to uniform full-width AVX-512. Reverse mixtures also lost
+  to stronger controls. Rejected tested mixtures; no per-phase policy adopted.
+- **DD prefetch hints:** T1 regressed 3–7% in both widths. NTA stayed within 0.3%
+  across eight/24-worker screens. Retain T0.
+- **Streaming stores with a cached ring:** a 64 KiB ring retains recent outputs
+  while aligned full-line non-temporal stores populate the unchanged 2 GiB
+  arena. MFENCE orders each 64-block batch and the final arena read. At exactly
+  64 blocks of reference distance, read the arena to avoid ring/output aliasing.
+  At 24 workers, three alternating pairs of two 20-second measured rounds after
+  one warmup confirmed **+27.78% versus AVX2** (35.3282 to 45.1427 completed H/s;
+  pair changes +27.34% to +28.42%) and **+25.27% versus uniform 256-bit AVX-512**
+  (36.0373 to 45.1441; +24.99% to +25.52%). Rates include final completed hashes
+  and end-fence elapsed time. The short one-worker screen regressed **3.53%**;
+  eight workers were flat (-0.20%). Retain as an experimental candidate with
+  explicit benchmark selection; no universal worker cutoff is established.
+- **Four independent row rounds:** additional YMM registers improved the weak
+  256-bit control at low counts, but lost **3.49% / 1.97%** against full-width
+  AVX-512 at one/eight workers and lost 1.24% against the 256-bit path at 24.
+  Rejected as a replacement.
+- **Hardware diagnostics:** four grouped core PMCs and DI/DD loop timings were
+  available on Turin. At 24 workers, full-width AVX-512 retired far fewer
+  instructions than AVX2 yet consumed more cycles. HugeTLB DTLB walks were few;
+  this does not establish a socket-bandwidth or clock explanation. No BIOS/NPS,
+  DIMM-channel controls, IBS, L3 or memory-controller PMUs were exposed. Physical
+  server controls remain hardware-limited; broader optional request/fill PMCs
+  were deferred before measurement to prioritize the confirmed throughput runs.
+- A final normal-loop streaming-store probe at 24 workers measured 24.06% fewer
+  cycles, 8.68% more retired instructions, and 42.70% fewer L2 data-cache store
+  requests per hash. This is one ordered diagnostic pass, consistent with less
+  cache-store pressure; it is not a socket-bandwidth measurement.
+- Correctness: kernel unit/integration checks, supported ISA outputs against
+  full-size RustCrypto, plus streaming ring/slice/rounding boundaries, three
+  inputs, dirty reuse and arena guards. Disassembly records actual instruction
+  changes. Normal production integration still needs an explicit candidate
+  identity/feature gate, live kernel-switch validation, and broader hardware
+  measurements; the architecture-dispatch session owns that follow-up.
+- Accepted backend comparisons verified arena backing/locality and retained
+  allocation, swap, OOM, steal and fence evidence. An entire NUMA pilot with an
+  incorrect startup-fallback assertion is excluded and preserved. Short screens
+  are directional; descriptive pair intervals do not quantify cross-host
+  uncertainty. Raw reports and binaries are archived under the worktree's
+  ignored `data/epyc-investigation/` with SHA-256 manifests and rental cleanup
+  records. All 136 Milan and 786 Turin archive files verified; both instances,
+  disks and security groups were deleted and their private keys removed.
 
 ## 2026-10-24 automatic joint CPU kernel and worker selection
 
@@ -838,6 +941,12 @@ step on this machine.
 | Attempt | Change | Kernel delta | Backend delta | Status |
 |---------|--------|-------------|---------------|--------|
 | 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +7.85% at 1T regular; +14.83% / +3.04% / +2.35% at 1T / 8T / 16T HugeTLB | Adopted |
+
+### x86_64 (AMD EPYC 9R45, Zen 5 / EC2)
+
+| Attempt | Change | Kernel delta | Backend delta | Status |
+|---------|--------|-------------|---------------|--------|
+| 2026-10-24 | Streaming-store recent-block ring and complete kernel sweeps | Count-dependent | +32.32% vs full-width AVX-512 at 24 workers, +29.80% vs AVX2 | Adopted via measured selection on family 26/model 2 |
 
 ### x86_64 (Intel Xeon E5-2686 v4, Broadwell / AVX2-only EC2)
 
