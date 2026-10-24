@@ -5,17 +5,26 @@ pub enum CpuKernel {
     Scalar,
     Avx2,
     Avx512,
+    /// Experimental 256-bit AVX-512 path; never selected automatically.
+    Avx512256,
     Neon,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 4] = [Self::Scalar, Self::Avx2, Self::Avx512, Self::Neon];
+    pub const ALL: [Self; 5] = [
+        Self::Scalar,
+        Self::Avx2,
+        Self::Avx512,
+        Self::Avx512256,
+        Self::Neon,
+    ];
 
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Scalar => "scalar",
             Self::Avx2 => "avx2",
             Self::Avx512 => "avx512",
+            Self::Avx512256 => "avx512-256",
             Self::Neon => "neon",
         }
     }
@@ -28,6 +37,12 @@ impl CpuKernel {
             #[cfg(target_arch = "x86_64")]
             Self::Avx512 => {
                 std::arch::is_x86_feature_detected!("avx512f")
+                    && std::arch::is_x86_feature_detected!("avx512vl")
+            }
+            #[cfg(target_arch = "x86_64")]
+            Self::Avx512256 => {
+                std::arch::is_x86_feature_detected!("avx2")
+                    && std::arch::is_x86_feature_detected!("avx512f")
                     && std::arch::is_x86_feature_detected!("avx512vl")
             }
             #[cfg(target_arch = "aarch64")]
@@ -58,6 +73,6 @@ impl std::str::FromStr for CpuKernel {
         Self::ALL
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
-            .ok_or_else(|| "expected scalar, avx2, avx512, or neon".to_string())
+            .ok_or_else(|| "expected scalar, avx2, avx512, avx512-256, or neon".to_string())
     }
 }

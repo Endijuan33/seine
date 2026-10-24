@@ -53,4 +53,5 @@ fn kernel_names_are_unambiguous_and_preferred_is_supported() {
     assert!("auto".parse::<CpuKernel>().is_err());
     assert!("avx512f".parse::<CpuKernel>().is_err());
     assert!(CpuKernel::preferred().is_supported());
+    assert_ne!(CpuKernel::preferred(), CpuKernel::Avx512256);
 }

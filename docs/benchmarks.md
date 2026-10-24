@@ -159,6 +159,11 @@ read or write CPU autotune caches. There is no global/environment override.
 Unsupported instruction sets fail before hash-worker or arena startup; there
 is no silent fallback. All benchmark kinds honor the selection.
 
+`avx512-256` is an experimental 256-bit implementation using AVX-512 rotate
+instructions. It requires AVX2, AVX-512F and AVX-512VL, including OS support.
+Select it explicitly for benchmarks; automatic mining and autotuning never
+choose it. Its report identity is distinct from the existing `avx512` path.
+
 ```sh
 ./target/release/seine --bench --bench-kind backend --backend cpu \
   --threads 1 --disable-cpu-autotune-threads --cpu-page-mode regular \
