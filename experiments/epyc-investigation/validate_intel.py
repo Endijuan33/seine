@@ -14,10 +14,12 @@ assert cpu['Vendor ID'] == 'GenuineIntel' and cpu['Model'] == '106'
 expected = json.loads((root / 'expected-binaries.json').read_text())
 for name, digest in expected.items():
     assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name
-for kernel in ['avx2', 'avx512']:
-    result = paired(root, root / ('control-' + kernel),
-                    {'binary': 'baseline', 'kernel': kernel},
-                    {'binary': 'seine', 'kernel': kernel},
-                    workers=12, pairs=2, seconds=20, rounds=2, warmup=1)
-    print(kernel, json.dumps(result), flush=True)
-(root / 'VALIDATION_COMPLETE').write_text('Both fixed-path controls completed; inspect deltas before merge.\n')
+for profile, baseline, candidate in [('cpu-only', 'baseline-cpu', 'seine-cpu'),
+                                      ('default', 'baseline', 'seine')]:
+    for kernel in ['avx2', 'avx512']:
+        result = paired(root, root / ('control-' + profile + '-' + kernel),
+                        {'binary': baseline, 'kernel': kernel},
+                        {'binary': candidate, 'kernel': kernel},
+                        workers=12, pairs=2, seconds=20, rounds=2, warmup=1)
+        print(profile, kernel, json.dumps(result), flush=True)
+(root / 'VALIDATION_COMPLETE').write_text('Both build profiles and fixed paths completed; inspect deltas before merge.\n')
