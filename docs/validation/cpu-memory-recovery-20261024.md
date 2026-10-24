@@ -36,7 +36,7 @@ A short withdrawn headroom spike does not interrupt a comparison.
   the HugeTLB pool was zero before subsequent timing.
 - The native recovery archive SHA256 is
   `76dca6714fd3b7ebf8131673c9f28e3b5ca9712917cc234f633c619111678cd2`;
-  all 24 archived files were individually verified. ARM native repeat pending.
+  all 24 archived files were individually verified. Final ARM repeats follow below.
 
 Original failed lifecycle archives and their interpretations are retained in
 the architecture campaign. The failure is not hidden by extending its timeout.
@@ -77,3 +77,11 @@ Strict workspace Clippy still reports 124 pre-existing diagnostics across binary
 and test targets, none on changed lines; only kernel Clippy is reported clean.
 Independent read-only review found no blocker in stride preservation, partial
 startup teardown, nested limits, manual bounds or platform-scoped spawn errors.
+
+Graviton4's final `636e688` lifecycle also passed all nine phases, including
+restart growth to three workers and **6.02784 GiB** anonymous residency, productive
+recovery, zero-worker parking and fixed-worker opt-out. No OOM kills or backend
+quarantine occurred. All owned service units were inactive and the HugeTLB pool
+was zero before lease cleanup. The final native archive contains 221 individually
+verified files, SHA256
+`34e36b972ce5d2da2a0ea28c511be3ac52503b38add2888ac1fc4c4fe94041b1`.
