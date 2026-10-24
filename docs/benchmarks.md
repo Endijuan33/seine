@@ -213,3 +213,7 @@ AVX2 override on Zen 5 evidence for Zen 3 or Intel. Add microarchitecture-specif
 implementations or dispatch rules only after correctness and repeatable
 same-host backend measurements support them. No new architecture-specific
 preference or autotuning policy is introduced here.
+
+The [2026-10-24 architecture matrix](../experiments/cpu-architecture-20261024/README.md)
+records real AMD Zen 1–5 and five Intel server generations, including the
+worker-count and page-backing limits of those measurements.

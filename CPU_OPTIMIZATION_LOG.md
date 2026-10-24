@@ -11,9 +11,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 cross-generation CPU kernel matrix`
 - `2026-10-24 EPYC 9R14 256-bit AVX-512 kernel experiment`
 - `2026-10-24 explicit CPU kernel benchmarks and architecture identity`
-
 - `2026-10-24 CPU sampler panic handling`
 - `2026-10-24 CPU autotuner warmed sampling and lifecycle timing`
 - `2026-10-24 independent two-node Milan release validation`
@@ -54,6 +54,47 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 cross-generation CPU kernel matrix
+
+- Real x86-64 EC2 guests cover AMD Zen 1/Naples, Zen 2/Rome, Zen 3/Milan,
+  Zen 4/Genoa, Zen 5/Turin, and Intel Broadwell, Cascade Lake, Ice Lake,
+  Sapphire Rapids and Granite Rapids. Full 2 GiB reference parity runs on
+  every host before timing. An ISA override on a newer CPU is not used as a
+  substitute for an older architecture.
+- AVX2-only hosts compare pre-pairing against paired AVX2; AVX-512 hosts
+  compare two explicit paths in one portable binary. Fixed workers, page
+  backing, affinity and disabled autotuning isolate each comparison.
+  Four alternating pairs use a warmup plus two measured rounds per invocation.
+  The main matrix uses 12-second rounds; independent Turin and larger Genoa
+  followups use 20 seconds. Completed H/s includes round-end fence time.
+- Full protocol, generation/CPUID identity, rates, paired intervals, source and
+  executable hashes, followups, limitations and cloud cleanup are recorded in
+  [the architecture matrix](experiments/cpu-architecture-20261024/README.md).
+  Its machine-readable summary preserves counted and completed rates separately.
+- Paired AVX2 improves every tested AVX2-only configuration (+3.2% to +34.4%).
+  Existing AVX-512 improves every measured Intel case (+6.1% to +28.7%). Genoa
+  favors AVX2 across the measured one/four/eight/twelve-worker configurations.
+  Turin repeats a worker-count crossover on a second VM: AVX-512 gains about
+  15% at one HugeTLB worker but loses 1.7% and 2.6% at four. The larger Genoa
+  guest has two L3 groups and fixed `os` placement; production `auto` placement
+  differs. These results do not justify a blanket generation-specific default.
+- `avx512-256` integrates the cooperating EPYC experiment under a distinct,
+  explicit benchmark label. AVX2 + AVX-512F/VL and OS vector support are required.
+  It is never automatically selected. The module is unchanged from its full-size
+  Genoa/local reference checks; the rejected row-fusion prototype is not included.
+- Integration preserves the upstream warmed sampler and panic barriers from
+  `2ed5beb`. After that merge: 438 Rust tests passed, one existing 1 GiB HugeTLB
+  test remained ignored, and 10 architecture-analysis tests passed. Full-size
+  one-worker CLI smoke checks passed for automatic and explicit SIMD backends,
+  all four benchmark modes for the new path, and cross-kernel baseline rejection.
+  Default-feature compilation and CPU-only Clippy passed with existing warnings.
+  Earlier kernel/test cross-checks passed for Windows x86-64 GNU and macOS
+  AArch64; those operating systems were not executed in this matrix.
+- Normal ISA preference and CPU autotune policy remain unchanged. Existing
+  cache keys include the full build fingerprint, so integrating kernel/source
+  changes invalidates old tuning observations without a separate schema bump.
+  The new benchmark override is never persisted into a tuning cache.
 
 ## 2026-10-24 EPYC 9R14 256-bit AVX-512 kernel experiment
 
