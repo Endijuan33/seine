@@ -65,6 +65,28 @@ interleaving losses are recorded in CPU journal attempt 34. Historical Apple
 attempt 31 mixes total pair throughput and per-lane rates; this campaign compares
 total completed throughput directly and reports allocated cores and RAM.
 
+## Retained research code
+
+The inert patches [interhash-research.patch](interhash-research.patch) and
+[streaming-ring-research.patch](streaming-ring-research.patch) reproduce the
+isolated experiment branches against v0.2.21. Both pass `git apply --check`
+against that source. Apply each in a different disposable worktree, and give
+each source revision and feature profile its own Cargo target directory.
+They are evidence artifacts; applying this PR does not compile either patch.
+
+The interhash patch corresponds to `8432f45`; build its Linux-only runner with
+`cargo +1.93.0 build --locked --release -p blocknet-pow-kernel --features interhash-experiment --example interhash_experiment`.
+The `interhash-experiment` feature is off by default. `interhash_screen.py`
+supplies verified physical/SMT CPU controls and equal total RAM.
+
+The streaming patch corresponds to `d283877`, rebased from the coordinated EPYC
+research. Its isolated build deliberately routes manual `avx512-256` selection
+to the research ring, so it must never replace a normal release binary. Build
+CPU-only Seine and `--example verify_streaming_dispatch` in its isolated target.
+The ring needs a distinct production identity and applicable worker-switch
+validation before any future promotion. `intel_ring_screen.sh` checks the
+research candidate against matched CPU-only AVX2 and full AVX-512 controls.
+
 ## Cloud accounting and ownership
 
 `cloud.py` uses the existing `seine-bench` profile in `us-east-1`. It checks the
