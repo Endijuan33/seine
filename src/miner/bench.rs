@@ -2022,6 +2022,7 @@ fn work_allocation_label(mode: WorkAllocation) -> &'static str {
 
 fn cpu_affinity_label(mode: CpuAffinityMode) -> &'static str {
     match mode {
+        CpuAffinityMode::Os => "os",
         CpuAffinityMode::Off => "off",
         CpuAffinityMode::Auto => "auto",
         CpuAffinityMode::PcoreOnly => "pcore-only",
@@ -2029,6 +2030,9 @@ fn cpu_affinity_label(mode: CpuAffinityMode) -> &'static str {
 }
 
 fn cpu_affinity_strategy_label(mode: CpuAffinityMode) -> &'static str {
+    if mode == CpuAffinityMode::Os {
+        return "os-order";
+    }
     if mode == CpuAffinityMode::Off {
         return "off";
     }
@@ -2038,13 +2042,14 @@ fn cpu_affinity_strategy_label(mode: CpuAffinityMode) -> &'static str {
     }
     #[cfg(target_os = "linux")]
     {
-        "linux-os-order"
+        "linux-numa-l3-physical-first-if-complete"
     }
     #[cfg(target_os = "macos")]
     {
         match mode {
             CpuAffinityMode::PcoreOnly => "macos-limited-affinity-tags-high-qos",
             CpuAffinityMode::Auto => "macos-affinity-tags-high-qos",
+            CpuAffinityMode::Os => "os",
             CpuAffinityMode::Off => "off",
         }
     }
@@ -2454,7 +2459,7 @@ mod tests {
                 start_nonce: 7,
                 work_allocation: "adaptive".to_string(),
                 cpu_affinity: "auto".to_string(),
-                cpu_affinity_strategy: "linux-os-order".to_string(),
+                cpu_affinity_strategy: "linux-numa-l3-physical-first-if-complete".to_string(),
                 events_idle_timeout_secs: 90,
                 backend_runtime: vec![BenchBackendRuntimeFingerprint {
                     backend_id: 1,
@@ -2513,7 +2518,7 @@ mod tests {
         #[cfg(target_os = "linux")]
         assert_eq!(
             cpu_affinity_strategy_label(CpuAffinityMode::Auto),
-            "linux-os-order"
+            "linux-numa-l3-physical-first-if-complete"
         );
         #[cfg(target_os = "windows")]
         assert_eq!(

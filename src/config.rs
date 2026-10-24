@@ -49,6 +49,8 @@ pub enum MiningMode {
 pub enum CpuAffinityMode {
     Off,
     Auto,
+    /// Pin workers in OS CPU order without topology-based reordering.
+    Os,
     PcoreOnly,
 }
 
@@ -379,6 +381,11 @@ struct Cli {
     /// When omitted, threads auto-size from available CPU parallelism and RAM budget.
     #[arg(long, alias = "cpu-threads")]
     threads: Option<usize>,
+
+    /// Percentage of effective total RAM left unused by automatic CPU sizing/autotuning.
+    /// Explicit thread counts override this reserve. Set 0 to disable headroom.
+    #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(0..=99))]
+    cpu_memory_reserve_percent: u8,
 
     /// CPU affinity/scheduler-hint policy for CPU mining workers.
     /// Default: `pcore-only` on macOS Apple Silicon, otherwise `auto`.
@@ -1074,6 +1081,7 @@ impl Config {
                 gpu_memory_reservation,
                 cli.cpu_affinity,
                 cli.cpu_page_mode,
+                cli.cpu_memory_reserve_percent,
             ),
         };
         let profile_defaults = cpu_profile_defaults(cli.cpu_profile, auto_threads_cap);
@@ -1084,6 +1092,12 @@ impl Config {
         } else {
             cli.cpu_autotune_threads || cpu_autotune_default_enabled
         };
+        if cpu_backend_instances > 0 && (cli.threads.is_none() || cpu_autotune_threads) {
+            startup_notices.push(format!(
+                "CPU automatic sizing reserves {}% of effective RAM; cap={} thread(s) per instance (--cpu-memory-reserve-percent 0 disables the reserve)",
+                cli.cpu_memory_reserve_percent, auto_threads_cap,
+            ));
+        }
         let cpu_autotune_config_path = cli
             .cpu_autotune_config
             .clone()
@@ -2742,19 +2756,31 @@ fn auto_cpu_threads(
     gpu_memory_reservation: u64,
     affinity: CpuAffinityMode,
     page_mode: CpuPageMode,
+    reserve_percent: u8,
 ) -> usize {
     let cpu_parallelism = cpu_parallelism_cap(affinity);
     let memory_cap_total = detect_memory_budget_bytes(page_mode)
         .map(|budget| {
-            let available = budget
-                .effective_available
-                .saturating_sub(gpu_memory_reservation);
+            let available = auto_cpu_memory_bytes(budget, gpu_memory_reservation, reserve_percent);
             (available / CPU_LANE_MEMORY_BYTES) as usize
         })
         .unwrap_or(cpu_parallelism)
         .max(1);
     let total_lanes_cap = cpu_parallelism.min(memory_cap_total).max(1);
     distribute_auto_cpu_threads(total_lanes_cap, cpu_backend_instances)
+}
+
+fn auto_cpu_memory_bytes(
+    budget: MemoryBudgetBytes,
+    gpu_memory_reservation: u64,
+    reserve_percent: u8,
+) -> u64 {
+    // Reserve a share of the effective (including cgroup) total, not just free RAM.
+    let reserve = budget.effective_total / 100 * u64::from(reserve_percent);
+    budget
+        .effective_available
+        .saturating_sub(gpu_memory_reservation)
+        .saturating_sub(reserve)
 }
 
 fn distribute_auto_cpu_threads(total_lanes_cap: usize, cpu_backend_instances: usize) -> usize {
@@ -3029,6 +3055,7 @@ mod tests {
             cpu_profile: CpuPerformanceProfile::Balanced,
             cpu_threads_per_instance: Vec::new(),
             cpu_affinity_per_instance: Vec::new(),
+            cpu_memory_reserve_percent: 5,
             allow_oversubscribe: false,
             refresh_secs: 20,
             request_timeout_secs: 10,
@@ -3873,8 +3900,8 @@ HugePages_Rsvd:          0
 
     #[test]
     fn auto_cpu_threads_is_never_zero_and_scales_per_instance() {
-        let single_instance = auto_cpu_threads(1, 0, CpuAffinityMode::Auto, CpuPageMode::Auto);
-        let dual_instance = auto_cpu_threads(2, 0, CpuAffinityMode::Auto, CpuPageMode::Auto);
+        let single_instance = auto_cpu_threads(1, 0, CpuAffinityMode::Auto, CpuPageMode::Auto, 5);
+        let dual_instance = auto_cpu_threads(2, 0, CpuAffinityMode::Auto, CpuPageMode::Auto, 5);
 
         assert!(single_instance >= 1);
         assert!(dual_instance >= 1);
@@ -3882,13 +3909,54 @@ HugePages_Rsvd:          0
     }
 
     #[test]
+    fn automatic_memory_headroom_respects_effective_total_and_gpu_reservation() {
+        let gib = 1024 * 1024 * 1024;
+        let budget = MemoryBudgetBytes {
+            effective_total: 512 * gib,
+            effective_available: 490 * gib,
+        };
+        let usable = auto_cpu_memory_bytes(budget, 8 * gib, 5);
+        assert_eq!(usable, 482 * gib - (512 * gib / 100 * 5));
+        assert_eq!(usable / CPU_LANE_MEMORY_BYTES, 228);
+        assert_eq!(auto_cpu_memory_bytes(budget, 0, 0), 490 * gib);
+        let constrained = MemoryBudgetBytes {
+            effective_total: 16 * gib,
+            effective_available: gib / 2,
+        };
+        assert_eq!(auto_cpu_memory_bytes(constrained, 0, 5), 0);
+        assert_eq!(auto_cpu_memory_bytes(constrained, 20 * gib, 0), 0);
+    }
+
+    #[test]
+    fn automatic_memory_reserve_cli_default_and_opt_out() {
+        assert_eq!(
+            Cli::try_parse_from(["seine"])
+                .unwrap()
+                .cpu_memory_reserve_percent,
+            5
+        );
+        let cli = Cli::try_parse_from([
+            "seine",
+            "--cpu-memory-reserve-percent",
+            "0",
+            "--cpu-affinity",
+            "os",
+        ])
+        .unwrap();
+        assert_eq!(cli.cpu_memory_reserve_percent, 0);
+        assert_eq!(cli.cpu_affinity, CpuAffinityMode::Os);
+        assert!(Cli::try_parse_from(["seine", "--cpu-memory-reserve-percent", "100"]).is_err());
+    }
+
+    #[test]
     fn auto_cpu_threads_reduced_by_gpu_reservation() {
-        let without_gpu = auto_cpu_threads(1, 0, CpuAffinityMode::Auto, CpuPageMode::Auto);
+        let without_gpu = auto_cpu_threads(1, 0, CpuAffinityMode::Auto, CpuPageMode::Auto, 5);
         let with_gpu = auto_cpu_threads(
             1,
             4 * CPU_LANE_MEMORY_BYTES,
             CpuAffinityMode::Auto,
             CpuPageMode::Auto,
+            5,
         );
 
         assert!(with_gpu >= 1);
@@ -3939,6 +4007,7 @@ HugePages_Rsvd:          0
             0,
             cli.cpu_affinity,
             cli.cpu_page_mode,
+            cli.cpu_memory_reserve_percent,
         );
         let defaults = cpu_profile_defaults(cli.cpu_profile, auto_threads_cap);
         let cpu_autotune_default_enabled = cli.threads.is_none() && cpu_backend_instances > 0;

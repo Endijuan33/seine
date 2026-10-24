@@ -101,6 +101,40 @@ Full CLI reference: [`docs/MINER_FLAGS.md`](docs/MINER_FLAGS.md)
 Each CPU thread needs ~2 GB RAM (Argon2id parameters). Seine auto-sizes thread count from available cores and memory.
 On x86_64, CPU builds include both AVX2 and AVX-512 kernels and dispatch at runtime when the host supports them.
 
+## Large Linux servers (NUMA and L3 caches)
+
+On Linux, the default `--cpu-affinity auto` spreads workers across usable NUMA
+nodes and across L3 cache groups within each node, using one thread per physical
+core before SMT siblings. This also spreads workers on single-node servers with
+multiple L3 groups. It respects the process CPU and memory masks. Each worker
+pins itself before allocating its 2 GiB arena, allowing Linux's local allocation policy to
+place memory near that worker. Existing memory policies still apply; this does
+not enforce memory binding or guarantee local huge-page availability.
+
+Missing or inconsistent cache data retains NUMA-only placement. A single node
+with one cache group (or unavailable cache data), and incomplete NUMA/core
+topology, retain OS CPU order.
+Use `--cpu-affinity os` to opt out of topology ordering while retaining pinning,
+or `--cpu-affinity off` to let the scheduler place workers.
+
+Automatic thread sizing and autotuning subtract 5% of effective total RAM from
+the available budget, in addition to any GPU/Metal reservation. Adjust this with
+`--cpu-memory-reserve-percent <0..99>`; `0` restores the previous memory budget.
+Explicit `--threads` / `--cpu-threads-per-instance` counts bypass this reserve
+(unless thread autotuning is explicitly requested), but retain the existing
+memory checks. The existing minimum of one worker per CPU instance still applies.
+Autotune caches are invalidated when the allowed CPU set or detected NUMA/L3 layout
+changes, including changes that leave the CPU count unchanged.
+
+On a rented EPYC 8434P, L3 spreading improved the 24-worker offline backend
+benchmark by 16.7% across three alternating pairs; the 32-worker result was
+inconclusive. See [the CPU optimization log](CPU_OPTIMIZATION_LOG.md) for the
+method and limitations. Multi-node NUMA performance remains unmeasured.
+Compare `auto` against `os` with the same thread count and verified page
+backing before attributing a hashrate change to placement. HugeTLB pools need
+sufficient pages on the nodes hosting workers; a sufficient global count alone
+does not guarantee local placement.
+
 ## Linux HugePages (CPU Throughput)
 
 For best CPU mining performance on Linux, reserve explicit HugeTLB pages so each worker can map its Argon2 arena with `MAP_HUGETLB` (the backend falls back to THP if unavailable, which is often slower/inconsistent under fragmentation).

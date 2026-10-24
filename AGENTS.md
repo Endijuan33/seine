@@ -113,9 +113,11 @@ This file preserves the full engineering reference for AI agents doing optimizat
 
 - Late-solution template retention is timeout-aware (derived from refresh/control/assign/prefetch timing) with time-based eviction and a bounded cache (entry and memory caps) to reduce stale drops during backend lag/spiky tip churn.
 - Deferred solution submission deduplicates by `(epoch, nonce)` across backends and suppresses repeat submit attempts across later rounds.
-- `--cpu-affinity` (`auto`, `pcore-only`, or `off`) controls CPU worker affinity/scheduler hints.
+- `--cpu-affinity` (`auto`, `os`, `pcore-only`, or `off`) controls CPU worker affinity/scheduler hints.
   - Default is `pcore-only` on macOS Apple Silicon (`auto` on other platforms).
-  - Native Windows `auto` spreads workers across complete physical-core topology groups before using SMT siblings; Linux/WSL retain the OS order because WSL topology and page coverage produced unstable results.
+  - Native Windows `auto` spreads workers across complete physical-core topology groups before using SMT siblings. Linux `auto` spreads workers across usable NUMA nodes and L3 groups within each node, physical cores before SMT, using allowed CPU/memory masks. Missing/inconsistent cache data retains NUMA-only placement; a single node/cache or incomplete NUMA/core topology retains OS order. `os` opts out of topology reordering while keeping pinning. Workers allocate arenas after pinning; existing memory policies and HugeTLB pool placement still apply.
+  - Automatic CPU sizing/autotuning reserves 5% of effective total RAM by default; `--cpu-memory-reserve-percent 0` restores the previous budget. Explicit counts bypass the reserve unless autotuning is forced. The minimum-one-worker rule and existing RAM checks still apply.
+  - CPU autotune schema 9 fingerprints Linux allowed CPUs and NUMA/L3 topology. L3 spreading has worker-only EPYC 8434P evidence (+16.7% at 24 workers; 32-worker result inconclusive). Multi-node NUMA placement still has synthetic correctness coverage only; see the CPU journal for scope and variance.
   - On macOS, `core_affinity` uses Mach affinity tags rather than hard CPU IDs. `pcore-only` limits the tag set using the perflevel0 count and combines it with a high-QoS preference, but cannot guarantee P-core placement.
 - `--ui` (`auto`, `tui`, `plain`) controls rendering mode. `auto` enables TUI only when stdout/stderr are terminals.
 - A backend runtime fault quarantines only that backend; mining continues on remaining active backends when possible.
