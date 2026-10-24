@@ -61,7 +61,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   barriers. Sampling rejects the failed measurement. Normal score calculation
   and warmup policy are unchanged.
 - Regression tests cover panics during setup, warmup, and measured hashing.
-  Integrated with the v0.2.19 source, 428 CPU-only workspace tests pass, with
+  Integrated with the v0.2.19 source and cancellation coverage, 429 CPU-only workspace tests pass, with
   one pre-reserved 1 GiB HugeTLB test ignored. Default-feature compilation and
   CPU-only Clippy pass with existing warnings. Scoped Rust 1.93.0 formatting
   and `git diff --check` pass.
