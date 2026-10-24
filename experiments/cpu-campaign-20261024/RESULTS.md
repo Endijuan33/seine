@@ -289,6 +289,18 @@ is preserved with a scope-stop explanation and successful unit/hugepage cleanup;
 it is neither a product failure nor a lifecycle pass. The prototype remains
 excluded from accepted defaults. See [joint evidence](evidence/skylake-joint-confirm.json).
 
+Independent review of the joint trajectories found that quick startup survived
+(all windows connected in about 1.8 seconds), but candidate windows spent about
+197 additional seconds in productive kernel comparisons. Final worker choices
+matched their controls (nine in pair A, eight in pair B), and no alternate kernel
+was promoted. Candidate A also exposed a coverage gap: a five-minute kernel
+cooldown allowed count exploration to reject twelve workers before AVX2 was
+compared there. Candidate B's twelve-worker AVX2 trial measured +2.55%, below its
+uncertainty-adjusted +3.53% threshold, and was correctly left unpromoted. Native
+successful repeated joint confirmation, warm-cache amortization and the
+prototype's changed-load/RAM behavior remain unvalidated. No late product change
+was made to conceal or repair these observations inside the frozen campaign.
+
 The rejected or deferred policy changes are explicit: no new CCD preference,
 no automatic 256-bit AVX-512 path, no Intel streaming-ring default, and no
 independent-hash interleaving default. Their controls and negative results remain

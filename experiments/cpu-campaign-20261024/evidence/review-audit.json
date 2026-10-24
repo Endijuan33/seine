@@ -109,5 +109,20 @@
       "24GiB backing, zero swap/OOM/errors; max steal fraction 0.00133%"
     ],
     "finding": "Four longer full512 pairs all negative, mean -1.30408175%; two short full512 pairs also negative. Effect size and causal change within stack unresolved. Keep PR44 draft; do not discard negative data."
+  },
+  "joint_trajectory_review": {
+    "reviewed_at": "2026-10-24T19:31:23.097963+00:00",
+    "reviewer": "existing autotune owner; read-only",
+    "completed_windows": 4,
+    "disposition": "keep PR46 draft; no promotion",
+    "findings": [
+      "Both candidate logged-work rates lower than paired control",
+      "Quick connection startup retained at about1.8seconds",
+      "About197seconds extra productive kernel comparisons per candidate window; causal contribution not isolated",
+      "Final selections match paired controls9/8workers; no alternate kernel promoted",
+      "CandidateA count exploration can reject12workers during kernel cooldown without AVX2 comparison",
+      "CandidateB AVX2 +2.55% below uncertainty-adjusted +3.53% threshold; correctly unpromoted",
+      "Warm-cache and prototype changed-load/RAM behavior remain unvalidated; scope-stop is not product failure or lifecycle pass"
+    ]
   }
 }

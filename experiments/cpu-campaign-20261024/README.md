@@ -5,7 +5,7 @@ Baseline: released **v0.2.21**, source
 New experiments stop by 17:57:13 UTC; confirmation, review, documentation and
 cleanup have the final 2.5 hours, ending no later than 20:27:13 UTC.
 
-This directory holds reproducible campaign controllers and the eventual results.
+This directory holds reproducible campaign controllers and the [results](RESULTS.md).
 It does not change default kernel selection. Raw reports, downloaded binaries,
 cloud credentials and private resource identifiers stay in ignored
 `data/cpu-campaign-20261024/`. No GPU or energy measurements are part of this work.
@@ -60,7 +60,9 @@ four-pass balance. Confirmation export additionally requires COMPLETE, every
 report from an even-pass run, and reversal verified from completed records.
 Windows screening refuses to resume older-protocol data. Native
 Windows four-pair confirmation and direct interhash reversal were unaffected.
-Corrected ARM confirmation is required before the ARM PR becomes ready.
+Corrected ARM confirmation has passed. A later final-build Xeon 6975P-C
+regression signal still blocks ARM PR readiness; see the results for the full
+stack comparison and causal limitations.
 
 ## Initial observations
 
@@ -191,6 +193,9 @@ eventual deletion of the task-owned security group and SSH keys.
   cleanup. `pid_probe.py` separately forces a backend-only 12-task spawn race.
 - `portable_regression.sh`: transfer-frozen, same-profile x86 control/candidate
   binaries; native full-size parity and alternating architecture regressions.
+- `summarize_joint.py`: retain all completed ABBA windows, actual CPU identity,
+  logged-work comparisons, tuning trajectories and explicit scope interruptions.
+  A successful execution protocol is not a performance promotion decision.
 - `summarize_matrix.py`, `summarize_lifecycle.py`: verify completion and export
   paired gains or actual resident-arena lifecycle evidence.
 - `summarize_provenance.py`: verify frozen binary digests and archived matrix
