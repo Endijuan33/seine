@@ -29,9 +29,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=900)
-    parser.add_argument('--label', choices=['joint-baseline', 'joint-candidate'], required=True)
+    parser.add_argument('--label', required=True)
     args = parser.parse_args()
     assert 300 <= args.seconds <= 1200
+    assert re.fullmatch(r'joint-[a-z0-9-]{1,30}', args.label)
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     out = life.ROOT / 'results' / args.label
@@ -49,6 +50,8 @@ def main():
     server = life.Server(('127.0.0.1', 3333), life.Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     samples = []
+    observation_start = None
+    stop_timing = {}
     before = counters()
     (out / 'identity.json').write_text(json.dumps({
         'binary_sha256': hashlib.sha256(args.binary.read_bytes()).hexdigest(),
@@ -75,6 +78,7 @@ def main():
             '--cpu-autotune-config', str(out / 'tuning.json'), '--data-dir', str(out / 'config'),
             '--ui', 'plain', '--stats-secs', '5']
         (out / 'command.json').write_text(json.dumps(command, indent=2) + '\n')
+        observation_start = time.monotonic()
         life.command(command)
         end = time.monotonic() + args.seconds
         while time.monotonic() < end:
@@ -106,6 +110,7 @@ def main():
         after = counters()
         delta = {key: after[key] - before[key] for key in before}
         assert all(delta[k] == 0 for k in ('pswpin', 'pswpout', 'oom_kill')), delta
+        assert 100 * delta['cpu_steal'] / max(1, delta['cpu_total']) < 2, delta
         (out / 'observation.json').write_text(json.dumps({'completed_hashes': hashes,
             'initial_capacity_slots_available': list(map(int, capacity.groups())),
             'vm_delta': delta, 'kernel_and_count_trajectory': 'miner.log and tuning.json*',
@@ -117,8 +122,13 @@ def main():
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         cleanup_failures = []
+
+        def stop_owned_unit():
+            life.stop(unit)
+            stop_timing['stopped_at_monotonic'] = time.monotonic()
+
         operations = [
-            ('stop owned unit', lambda: life.stop(unit)),
+            ('stop owned unit', stop_owned_unit),
             ('reset failed unit', lambda: subprocess.run(
                 ['sudo', 'systemctl', 'reset-failed', unit], capture_output=True, timeout=30)),
             ('stop fixture', server.shutdown),
@@ -141,6 +151,13 @@ def main():
         (out / 'fixture-events.json').write_text(json.dumps(life.SERVER_EVENTS, indent=2) + '\n')
         if cleanup_failures:
             raise RuntimeError(cleanup_failures) from primary_failure
+    final_hashes = max([0] + [int(n) for n in re.findall(r'\bhashes=(\d+)', log.read_text())])
+    elapsed = stop_timing['stopped_at_monotonic'] - observation_start
+    (out / 'productive-window.json').write_text(json.dumps({
+        'completed_hashes_lower_bound': final_hashes,
+        'elapsed_start_request_through_stopped_seconds': elapsed,
+        'completed_hps_lower_bound': final_hashes / elapsed,
+        'scope': 'Cold-cache real pool runtime including startup, productive trials and shutdown; log counters may omit final unreported hashes. Not a fixed-kernel throughput benchmark.'}, indent=2) + '\n')
     (out / 'COMPLETE').write_text(datetime.datetime.now(datetime.timezone.utc).isoformat() + '\n')
     print(args.label, 'complete; owned service stopped and hugepage pool released', flush=True)
 
