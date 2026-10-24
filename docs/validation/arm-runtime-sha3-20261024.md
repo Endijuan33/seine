@@ -55,8 +55,10 @@ Full-size scalar, AVX2, AVX-512 and AVX-512/256 reference parity passed. Strict
 workspace Clippy reports the same existing diagnostics on both builds; strict
 kernel-crate Clippy passes.
 
-Native Graviton4 and the repaired complete lifecycle remain pending. Apple
-Silicon candidate performance is untested. No Apple cache-line policy change is
+The kernel library also builds with pinned Rust 1.93.0 for
+`aarch64-apple-darwin` in an isolated Cargo target. This verifies compilation
+only; Apple Silicon candidate execution and performance remain untested.
+Native Graviton4 and the repaired complete lifecycle remain pending. No Apple cache-line policy change is
 made. The startup preference stays NEON everywhere; SHA3 is runtime-guarded and
 must pass the normal repeated productive comparison. Fixed-thread opt-out keeps
 the startup path. Experimental AVX-512/256 remains outside automatic candidates.
