@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 independent two-node Milan release validation`
 - `2026-10-24 Intel AVX2 release validation`
 - `2026-10-24 two-node EPYC placement and autotuner validation`
 - `2026-10-24 automatic Linux L3 placement: worker-only EPYC validation`
@@ -48,6 +49,54 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 independent two-node Milan release validation
+
+- **Host/build**: a separate EC2 `c6a.8xlarge` on-demand VM, AMD EPYC 7R13,
+  16 physical cores/32 vCPUs, 64 GiB RAM, Ubuntu 24.04. The guest exposes two
+  NUMA nodes, each with eight physical cores and one L3 sharing group. Both
+  variants use the same generic Rust 1.93.0 CPU-only release binary from the
+  combined AVX2 + NUMA/L3 merge `8e96bba`, SHA-256
+  `2015385d5487d4d085f6190cd7103627f9f354549a760b9bff50d3490cbf6dd1`.
+  This independently repeats the placement comparison below; it does not
+  repeat the fresh-autotune experiment.
+- **Method**: `--cpu-affinity os` versus `auto`, fixed worker counts, autotuning
+  disabled, four order-balanced pairs per configuration. Each backend sample
+  has one warmup and two 12-second measured rounds, with three-second cooldowns.
+  Ordinary pages disable THP; explicit 2 MiB HugeTLB backing is verified for
+  every large-page worker. A 32 GiB HugeTLB pool is released after the trials.
+- **Observed placement**: separate live probes verify both page modes. OS order
+  pins eight workers to CPUs 0-7, placing all 16 GiB of arenas on node 0. Auto
+  uses CPUs 0,8,1,9,2,10,3,11: four workers and 8 GiB of arenas per node. Every
+  worker uses a distinct physical core. These CPU IDs describe this guest;
+  they are not recommended settings for other hosts.
+
+| Workers | Backing | OS-order completed H/s | Auto completed H/s | Completed gain | Paired bootstrap 95% interval |
+|---|---|---:|---:|---:|---:|
+| 8 | Regular | 6.1885 | 10.2441 | +65.53% | +64.29%..+66.63% |
+| 8 | 2 MiB HugeTLB | 5.9944 | 11.8514 | +97.71% | +97.36%..+98.20% |
+| 16 | 2 MiB HugeTLB | 11.6764 | 11.7535 | +0.66% | +0.42%..+0.91% |
+
+- **Accounting/limits**: this table counts all completed hashes over actual
+  elapsed time, including the round-end fence. Deadline-counted backend
+  `avg_hps` changes are 5.5548 to 9.5994 (+72.81%), 5.3582 to 11.2108 (+109.23%),
+  and 10.4080 to 10.4818 (+0.71%), respectively. Every pair favors auto under
+  both metrics. The all-core control changes by less than 1%; the large gains
+  occur where OS order crowds eight workers into one of the two nodes.
+  Four-pair intervals describe repeatability on this VM, not variation across
+  machines. This measures combined NUMA/L3 placement and does not isolate
+  memory-bandwidth and cache contributions or establish a universal gain.
+- **Checks**: binary hashes match before/after testing. Allocation failures,
+  page fallback, dropped events, assignment/control timeouts, swap activity,
+  and OOM counter deltas are zero. Maximum aggregate CPU steal is 0.0011%; the
+  longest measurement fence is 0.775 seconds. The earlier Intel checks cover
+  reference-hash correctness of the kernel changes, while this run exercises
+  the combined release code on the exposed two-node topology.
+- **Evidence/cleanup**: `data/numa-milan-20261024/` retains exact source/binary
+  identities, runner/analyzer scripts, `comparison.json`, raw benchmark reports,
+  live worker/arena snapshots, and host counters. `cleanup.json` records the
+  terminated instance and deleted root disk/security group. The temporary SSH
+  key is removed and the expiry timer stopped after collection.
 
 ## 2026-10-24 Intel AVX2 release validation
 
@@ -299,9 +348,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   identity. Benchmark reports distinguish the new placement policy from OS order.
 - Synthetic tests cover node spreading, SMT ordering, sparse/asymmetric CPU sets,
   memory restrictions, inconsistent/missing topology, and RAM budget arithmetic.
-- No EPYC speedup is claimed: representative native Linux multi-node A/B runs
-  with controlled HugeTLB backing remain necessary. This does not supersede the
-  earlier WSL results; single-node WSL placement remains unchanged.
+- This initial implementation had no measured EPYC speedup. The newer two-node
+  validations above supply controlled regular/HugeTLB evidence. They do not
+  supersede the earlier WSL results; single-node WSL placement remains unchanged.
 
 ## 2026-10-24 AVX2 paired rounds and contiguous column loads/stores
 
