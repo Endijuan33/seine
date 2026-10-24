@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 Intel AVX2 release validation`
 - `2026-10-24 automatic Linux L3 placement: worker-only EPYC validation`
 - `2026-10-24 EPYC 8534P hourly rental: cache placement, threads, and page backing`
 - `2026-10-23 Linux NUMA defaults and automatic RAM headroom`
@@ -46,6 +47,50 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 Intel AVX2 release validation
+
+- **Host/builds**: EC2 `r4.8xlarge`, Intel Xeon E5-2686 v4 (Broadwell),
+  16 cores/32 vCPUs, 244 GiB advertised RAM (239 GiB visible), Ubuntu 24.04.
+  The guest exposes AVX2, no AVX-512, and one NUMA node. Fresh, independent
+  generic Rust 1.93.0 release builds compare `v0.2.17` (`710ea09`) with the
+  AVX2 merge (`ac213e9`); this comparison excludes the later NUMA/L3 change.
+  Audited AVX2 function sizes are 1888/2544 bytes versus 2596/3736 bytes.
+- **Method**: persistent CPU backend, fixed worker counts, affinity `auto`,
+  autotuning disabled, four order-balanced A/B pairs per configuration.
+  Each sample has one warmup and two 12-second measured rounds, with a
+  three-second cooldown. Regular pages disable THP; large-page runs verify
+  explicit 2 MiB HugeTLB backing for every worker. The 32 GiB pool is released
+  after testing. Local/guest binary hashes match and remain stable.
+
+| Workers | Page backing | Baseline H/s | Candidate H/s | Gain | Paired bootstrap 95% interval |
+|---------|--------------|-------------:|--------------:|-----:|-----------------------------:|
+| 1 | Regular | 0.6902 | 0.7713 | +11.74% | +11.33%..+12.25% |
+| 1 | 2 MiB HugeTLB | 0.8856 | 0.9984 | +12.74% | +12.41%..+13.21% |
+| 8 | 2 MiB HugeTLB | 6.4700 | 7.2453 | +11.98% | +11.85%..+12.12% |
+| 16 | 2 MiB HugeTLB | 9.9549 | 10.2222 | +2.69% | +1.78%..+3.60% |
+
+- **Accounting**: the table uses backend `avg_hps`, excluding late hashes and
+  including fence time. All-completed throughput gains are +10.63%, +11.88%,
+  +11.06% and +2.68%, respectively. Every pair favors the candidate under both
+  metrics. The paired bootstrap intervals describe four pairs on this VM, not variance
+  across Intel machines or every AVX2 implementation.
+- **Correctness/controls**: both builds match full 2 GiB RustCrypto reference
+  hashes; all three kernel tests and 18 CPU-backend tests pass on the guest.
+  Allocation fallback, allocation failures, dropped events, assignment/control
+  timeouts, swap activity and OOM counter deltas are zero. Maximum aggregate
+  CPU steal is 0.0349%; the longest round-end fence is 1.116 seconds.
+- **Combined release check**: the later AVX2 + NUMA/L3 build (`8e96bba`) passes
+  separate 8-worker backend smoke runs on both regular and explicit 2 MiB
+  pages, with verified backing and no dropped events or control timeouts.
+  The combined code also passes 410 local workspace tests; one pre-reserved
+  1 GiB HugeTLB test is ignored. The Intel guest's single-node layout does not
+  establish multi-node placement performance.
+- **Evidence/cleanup**: `data/intel-avx2-20261024/` retains `sources.json`,
+  `comparison.json`, raw reports/test logs in `results/`, the combined-build
+  manifest and smoke reports in `results/integration/`, and exact run/analysis
+  scripts. The instance is terminated and its disk and temporary security
+  group are deleted; `cleanup.json` records verification.
 
 ## 2026-10-24 automatic Linux L3 placement: worker-only EPYC validation
 
@@ -248,10 +293,10 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   raw reports, backing checks, test logs and analysis. The instance was
   terminated, and its root disk and temporary security group were deleted
   after collection; verification is recorded in `cleanup.json`.
-- **Limits**: tested on one Zen 5/WSL host and one AVX2-only Milan cloud VM.
-  Intel AVX2 performance remains unmeasured, and this does not validate the
-  separate NUMA-default changes. The external screenshot's claimed C# advantage
-  remains unverified.
+- **Limits**: these measurements cover one Zen 5/WSL host and one AVX2-only
+  Milan cloud VM. The Intel release-validation section above adds Broadwell
+  coverage. These AVX2 comparisons do not measure the separate NUMA-default
+  changes. The external screenshot's claimed C# advantage remains unverified.
 
 ## Updated summary of cumulative adopted optimizations
 
@@ -297,6 +342,12 @@ step on this machine.
 | Attempt | Change | Kernel delta | Backend delta | Status |
 |---------|--------|-------------|---------------|--------|
 | 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +7.85% at 1T regular; +14.83% / +3.04% / +2.35% at 1T / 8T / 16T HugeTLB | Adopted |
+
+### x86_64 (Intel Xeon E5-2686 v4, Broadwell / AVX2-only EC2)
+
+| Attempt | Change | Kernel delta | Backend delta | Status |
+|---------|--------|-------------|---------------|--------|
+| 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +11.74% at 1T regular; +12.74% / +11.98% / +2.69% at 1T / 8T / 16T HugeTLB | Adopted |
 
 ### AArch64 (Apple M4 Max)
 
