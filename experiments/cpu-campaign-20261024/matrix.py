@@ -33,9 +33,17 @@ def main():
     assert len(variants) >= 2 and a.pairs >= 2 and a.seconds >= 10 and a.rounds >= 1
     cpus = physical_first()
     assert min(a.workers) >= 1 and max(a.workers) <= min(16, len(cpus))
-    memory = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
+    # Just-finished compiler processes can briefly retain memory. Wait only for
+    # the fixed headroom contract; do not lower it or forcibly drop OS caches.
+    required = max(a.workers) * 2 * 1024**3 + 5 * 1024**3
+    for attempt in range(16):
+        memory = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
+        if memory['MemAvailable'] * 1024 >= required:
+            break
+        if attempt < 15:
+            time.sleep(2)
     assert memory['Hugepagesize'] == 2048
-    assert memory['MemAvailable'] * 1024 >= max(a.workers) * 2 * 1024**3 + 5 * 1024**3
+    assert memory['MemAvailable'] * 1024 >= required, ('bounded memory headroom unavailable', memory['MemAvailable'], required)
     assert len(Path('/proc/swaps').read_text().splitlines()) == 1
     pool = Path('/proc/sys/vm/nr_hugepages')
     old = int(pool.read_text())

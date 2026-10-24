@@ -23,6 +23,7 @@ EXPERIMENT = "cpu-campaign-20261024"
 DEADLINE = dt.datetime(2026, 10, 24, 20, 0, tzinfo=dt.timezone.utc)
 TYPES = {"m6g.4xlarge": "arm64", "m7g.4xlarge": "arm64", "m8g.4xlarge": "arm64",
          "c4.4xlarge": "amd64",
+         "m5a.4xlarge": "amd64", "c5a.4xlarge": "amd64",
          "c6i.4xlarge": "amd64", "c7i.4xlarge": "amd64", "c8i.4xlarge": "amd64"}
 
 
@@ -52,6 +53,30 @@ def state():
 
 def persist(s):
     save(ROOT / "cloud-leases.json", s)
+
+
+def quote(instance_type):
+    filters = [{"Type": "TERM_MATCH", "Field": key, "Value": value} for key, value in {
+        "instanceType": instance_type, "location": "US East (N. Virginia)",
+        "operatingSystem": "Linux", "tenancy": "Shared", "preInstalledSw": "NA",
+        "capacitystatus": "Used"}.items()]
+    raw = aws("pricing", "get-products", "--service-code", "AmazonEC2", "--filters", json.dumps(filters))
+    retrieved = now()
+    save(ROOT / f"price-{instance_type}-{retrieved.strftime('%H%M%S')}.json", raw)
+    values = []
+    for entry in raw["PriceList"]:
+        product = json.loads(entry) if isinstance(entry, str) else entry
+        for term in product.get("terms", {}).get("OnDemand", {}).values():
+            for dimension in term["priceDimensions"].values():
+                if dimension["unit"] == "Hrs":
+                    values.append(float(dimension["pricePerUnit"]["USD"]))
+    assert len(values) == 1 and values[0] > 0, values
+    record = {"usd_per_hour": values[0], "region": "us-east-1", "source": "AWS Pricing API",
+              "retrieved_utc": retrieved.isoformat()}
+    prices = json.loads((ROOT / "prices.json").read_text())
+    prices[instance_type] = record
+    save(ROOT / "prices.json", prices)
+    return record
 
 
 def owned(ident):
@@ -100,10 +125,10 @@ def launch(instance_type, minutes):
     specs = aws("ec2", "describe-instance-types", "--instance-types", *names)["InstanceTypes"]
     cpus = {i["InstanceType"]: i["VCpuInfo"]["DefaultVCpus"] for i in specs}
     assert sum(cpus[i["InstanceType"]] for i in standard) + cpus[instance_type] <= limit, "shared quota occupied"
-    prices = json.loads((ROOT / "prices.json").read_text())
+    price = quote(instance_type)  # Refresh before every rental, not just campaign start.
     # Price API artifacts are retained separately. Reserve a full three hours,
     # 16 GiB gp3 ($.08/GB-month), IPv4 ($.005/h), and $1 transfer contingency.
-    hourly = float(prices[instance_type]["usd_per_hour"])
+    hourly = float(price["usd_per_hour"])
     reserve = (hourly + .005 + 16 * .08 / (28 * 24)) * 3 + 1
     s = state()
     assert sum(x["cost_reserved_usd"] for x in s["leases"]) + reserve <= 40, "campaign budget exhausted"
@@ -168,6 +193,7 @@ chmod 600 /home/ubuntu/.ssh/authorized_keys
     instance = answer["Instances"][0]
     record = {"instance_id": instance["InstanceId"], "type": instance_type,
               "hourly_usd": hourly, "cost_reserved_usd": reserve, "launched_at": instance["LaunchTime"],
+              "price_retrieved_utc": price["retrieved_utc"],
               "expires_at": end.isoformat(), "volume_ids": [], "timer_verified": False}
     s["leases"].append(record)
     persist(s)

@@ -119,6 +119,9 @@ def observe(unit, label, seconds, records):
         sample = state(unit)
         sample["phase"] = label
         sample["completed_hashes"] = completed_hashes(unit)
+        log = (OUT / (unit + ".log")).read_text(errors="replace")
+        counts = re.findall(r"cpu-autotune \| (?:starting with |done — )?(\d+) threads", log)
+        sample["requested_threads"] = int(counts[-1]) if counts else None
         assert "oom_kill 0" in sample.get("memory.events", ""), sample
         records.append(sample)
         save(unit + "-samples.json", records)
@@ -177,6 +180,7 @@ def main():
         assert cache.exists(), "no stable observation was persisted"
         seed = json.loads(cache.read_text())
         save("seed-before-restart.json", seed)
+        assert seed["selected_threads"] > 1, "restart cap must be below the remembered count for this test"
         text = (OUT / (unit + ".log")).read_text()
         assert "cpu-autotune | 0 threads" in text, "did not park under insufficient RAM"
         assert "quarantined" not in text.lower(), "backend quarantine"
@@ -191,7 +195,8 @@ def main():
         save("seed-during-constrained-restart.json", constrained)
         assert constrained["selected_threads"] == seed["selected_threads"], "temporary cap overwrote remembered count"
         set_high(unit, "12G")
-        observe(unit, "restart-recovery", 150, records)
+        observe(unit, "restart-recovery", 210, records)
+        assert any(s["phase"] == "restart-recovery" and (s["requested_threads"] or 0) > 1 for s in records), "did not recover above the temporary one-arena cap"
         stop(unit)
         text = (OUT / (unit + ".log")).read_text()
         assert "cached starting point" in text, "restart did not reuse cache"
