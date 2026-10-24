@@ -274,6 +274,27 @@ benefit. The candidate still needs a distinct production identity and applicable
 worker-switch validation before promotion. No DRAM-bandwidth claim is inferred
 from its available performance counters.
 
+## Remaining hardware and experience gaps
+
+- Final-candidate native Zen 3 and Zen 4/5 EPYC validation remains separate work.
+  Existing coordinated results use older sources and are not relabelled as
+  fresh measurements of this campaign's frozen combined candidate.
+- The 9950X3D campaign used regular pages and at most eight workers. Native
+  Windows large pages, higher worker counts, final combined-binary performance
+  and machines spanning Windows processor groups remain unverified.
+- Apple Silicon, Intel hybrid P/E-core machines and multi-socket NUMA systems
+  need native candidate measurements. Cloud results apply to the observed guest
+  topology; they do not establish bare-metal bandwidth or frequency behavior.
+- The separate joint-count/kernel prototype still needs repeatable end-to-end
+  benefit across more than one architecture before becoming a default.
+  Its fixed-kernel results alone cannot establish that policy benefit.
+- Startup discovery's persistent Rayon thread pool remains an opportunity to
+  reduce overhead and support tighter PID budgets. The campaign's 24-task
+  failures affected the baseline too; they were not hidden by an environment
+  override.
+
+GPU, a new PoW and energy measurements were intentionally outside this campaign.
+
 ## Resources and completion
 
 Current resource accounting, additional hardware gaps, final PRs and verified
