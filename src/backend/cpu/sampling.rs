@@ -1,11 +1,12 @@
 //! Synchronized CPU samples with hashing time separate from arena lifecycle time.
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Barrier, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::backend::KernelBenchSample;
 
@@ -46,11 +47,13 @@ where
                 let mut worker = if shutdown.load(Ordering::Relaxed) {
                     None
                 } else {
-                    match setup(lane).and_then(|mut hash| {
-                        if warmup && !shutdown.load(Ordering::Relaxed) {
-                            hash()?;
-                        }
-                        Ok(hash)
+                    match catch_worker_panic(|| {
+                        setup(lane).and_then(|mut hash| {
+                            if warmup && !shutdown.load(Ordering::Relaxed) {
+                                hash()?;
+                            }
+                            Ok(hash)
+                        })
                     }) {
                         Ok(hash) => Some(hash),
                         Err(err) => {
@@ -68,7 +71,7 @@ where
                 let mut local_hashes = 0u64;
                 if let Some(hash) = worker.as_mut() {
                     while Instant::now() < stop_at && !shutdown.load(Ordering::Relaxed) {
-                        if let Err(err) = hash() {
+                        if let Err(err) = catch_worker_panic(&mut *hash) {
                             *error.lock().unwrap() = Some(err);
                             break;
                         }
@@ -107,6 +110,13 @@ where
         elapsed_secs,
         wall_elapsed_secs: wall_start.elapsed().as_secs_f64(),
     })
+}
+
+// A panic before either rendezvous must become an error so the remaining
+// lanes can leave their barriers. The normal hashing path is unchanged.
+fn catch_worker_panic<T>(work: impl FnOnce() -> Result<T>) -> Result<T> {
+    catch_unwind(AssertUnwindSafe(work))
+        .unwrap_or_else(|_| Err(anyhow!("CPU sample worker panicked")))
 }
 
 #[cfg(test)]
@@ -209,6 +219,35 @@ mod tests {
                     .to_string()
                     .contains("measured hash failure"));
             }
+        }
+    }
+
+    #[test]
+    fn worker_panics_release_setup_and_finish_barriers() {
+        for phase in 0..3 {
+            let result = sample(
+                3,
+                Duration::from_millis(10),
+                true,
+                &AtomicBool::new(false),
+                |lane| {
+                    assert!(!(lane == 1 && phase == 0), "setup panic");
+                    let mut calls = 0;
+                    Ok(move || {
+                        calls += 1;
+                        assert!(
+                            !(lane == 1
+                                && ((phase == 1 && calls == 1) || (phase == 2 && calls == 2))),
+                            "hash panic"
+                        );
+                        Ok(())
+                    })
+                },
+            );
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("CPU sample worker panicked"));
         }
     }
 
