@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 AVX2 paired rounds and contiguous column loads/stores`
 - `Updated summary of cumulative adopted optimizations`
 - `2026-07-11 1 GiB explicit hugepages on WSL Zen 5 (adopted, pending boot pool)`
 - `2026-07-11 verifiable page modes, native Windows, and WSL HugeTLB confirmation`
@@ -43,6 +44,88 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Baseline`
 - `Benchmark protocol`
 
+## 2026-10-24 AVX2 paired rounds and contiguous column loads/stores
+
+- **Adopted**: interleave two independent AVX2 BLAMKA row/column rounds and
+  combine adjacent columns into 256-bit loads/stores with 128-bit-half
+  permutations. The data-dependent path retains column 0 before the existing
+  mid-compress prefetch, then pairs columns 1+2, 3+4, 5+6 and handles column 7
+  separately. Runtime ISA selection and the AVX-512/NEON/scalar kernels are unchanged.
+- **Host/method**: Ryzen 9 9950X3D, WSL, pinned logical CPU 0, Rust 1.93.0,
+  generic release build with fat LTO. Six order-balanced samples per variant,
+  at least six seconds each, measuring complete 2 GiB Argon2id hashes using
+  actual elapsed time. The reused arena had verified 2 GiB THP backing;
+  allocation, reference-index precomputation and warmup were outside timing.
+- **Full-hash kernel**: stock AVX2 `1.9501 H/s`, candidate `2.0644 H/s`
+  (**+5.86%**, winning all six paired rounds). Paired bootstrap 95% interval
+  was `+3.62%..+8.20%`; it describes these short local samples only. Stock
+  AVX-512 remained faster at `2.2144 H/s` and stays preferred on this host.
+- **Compression only**: `131.15 ns` to `115.12 ns` per 1 KiB block
+  (**+13.92% throughput**, five samples). This is not a full-miner gain.
+- **Correctness**: the investigation passed 640 reference comparisons across
+  eight configurations and matched full 2 GiB warmup hashes. In-repo regression
+  coverage now forces AVX2 on AVX-512 hosts and compares complete hashes with
+  RustCrypto Argon2. Direct compression tests cover both prefetch paths,
+  shared immutable inputs, varied block words and output boundary guards.
+- **Applied validation**: kernel tests pass in debug and release; kernel Clippy
+  passes with `-D warnings`. Workspace/all-target compilation and kernel/test
+  compile checks for Windows x86-64 and macOS ARM64 pass. Applied AVX2 hot
+  functions retain the measured candidate's sizes (2596/3736 bytes) and contain
+  no EVEX instructions or ZMM register operands.
+- **Evidence**: `data/isa-audit-8bn0w33f/REPORT.txt`, `hash-confirmation.jsonl`,
+  `micro-contiguous.jsonl`, `summary.json` and assembly dumps. The candidate's
+  hot functions contain no AVX-512 instructions. Nearby variants (unrolling,
+  phase fusion, pairing rows only, and 256-bit AVX-512 rotates) were screened
+  separately; only the pure-AVX2 paired/contiguous variant was adopted.
+- **AVX2-only cloud follow-up**: Ubuntu 24.04 on an EC2 `c6a.8xlarge`, AMD
+  EPYC 7R13 (Milan/Zen 3), 16 physical cores/32 vCPUs, 64 GiB RAM and two NUMA
+  nodes. The guest exposes AVX2 and no AVX-512. Generic Rust 1.93.0 release
+  builds with fat LTO compare baseline `b19904e` with candidate `ecf200b`;
+  the only code difference is `pow-kernel/src/fixed_argon.rs`. These builds
+  exclude the separate Linux NUMA-default changes in the main working tree.
+- **Cloud method**: persistent CPU backend, fixed 1/8/16 workers, affinity
+  `auto`, autotuning disabled, four order-balanced A/B pairs per configuration.
+  Each sample has one warmup and two 12-second measured rounds, with a
+  three-second cooldown between samples. Regular pages disable THP; large-page
+  runs require verified explicit 2 MiB HugeTLB backing for every worker.
+  The large-page pool reserves 32 GiB and is released after the tests.
+- **Build provenance**: the baseline was rebuilt in a fresh, separate target
+  directory, and the AVX2 function sizes were audited: baseline 1888/2544 bytes,
+  candidate 2596/3736 bytes. An earlier batch reused a cached candidate kernel
+  in the baseline build and was discarded; none of those timings appear below.
+  Local and guest binary SHA-256 values match and remain unchanged across runs.
+- **Cloud correctness/controls**: both builds match the RustCrypto reference
+  for a full 2 GiB hash; all three kernel tests and 18 CPU-backend tests pass
+  on the AVX2-only guest. Benchmark reports show no allocation fallback,
+  allocation failures, dropped events or assignment/control timeouts. Swap
+  and OOM counter deltas remain zero; aggregate CPU steal stays below 0.001%
+  in every trial. The longest measured round-end fence is 0.788 seconds.
+
+| Workers | Page backing | Baseline H/s | Candidate H/s | Gain | Paired bootstrap 95% interval |
+|---------|--------------|-------------:|--------------:|-----:|-----------------------------:|
+| 1 | Regular | 1.4748 | 1.5907 | +7.85% | +7.06%..+8.41% |
+| 1 | 2 MiB HugeTLB | 1.8845 | 2.1639 | +14.83% | +14.53%..+15.09% |
+| 8 | 2 MiB HugeTLB | 5.2100 | 5.3684 | +3.04% | +2.78%..+3.43% |
+| 16 | 2 MiB HugeTLB | 10.2070 | 10.4470 | +2.35% | +1.12%..+3.61% |
+
+- **Accounting/interpretation**: the table uses reported backend `avg_hps`,
+  which excludes late hashes but includes fence time. Counting all completed
+  hashes over actual measured elapsed time gives gains of +7.47%, +14.23%,
+  +2.51% and +2.22%, respectively. Every pair favors the candidate under both
+  metrics. The intervals enumerate all 256 resamples of four paired deltas;
+  they describe these short samples, not variation across machines. The
+  smaller multi-worker gains are consistent with shared-memory bandwidth
+  limiting throughput; hardware bandwidth counters were not measured.
+- **Cloud evidence**: `data/cloud-avx2-2026-10-24/comparison.json`, `sources.json`,
+  `run_cloud.py`, `analyze_cloud.py` and `results/` retain the binary identities,
+  raw reports, backing checks, test logs and analysis. The instance was
+  terminated, and its root disk and temporary security group were deleted
+  after collection; verification is recorded in `cleanup.json`.
+- **Limits**: tested on one Zen 5/WSL host and one AVX2-only Milan cloud VM.
+  Intel AVX2 performance remains unmeasured, and this does not validate the
+  separate NUMA-default changes. The external screenshot's claimed C# advantage
+  remains unverified.
+
 ## Updated summary of cumulative adopted optimizations
 
 ### x86_64 (AMD Ryzen 9 5900X, Zen 3)
@@ -70,6 +153,7 @@ Cumulative x86_64: from ~1.19 H/s (original) to ~2.34 H/s, **~97% total improvem
 | 48 | Compile AVX-512 x86 path into normal builds and keep runtime dispatch | +19.65% (1T kernel) | -0.28% at 16T backend (effectively flat) | Adopted |
 | 49 | `target-cpu=native` on top of the AVX-512-enabled build | +0.00% (1T kernel) | +0.71% at 16T backend | Recommended for host-local builds |
 | 51 | AVX-512 256-bit contiguous column gather/scatter + MaybeUninit q buffer | +1.5% (1T kernel) | memory-bound at 14T | Adopted |
+| 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | +5.86% (forced AVX2, 1T kernel) | Unmeasured | Adopted |
 
 Zen 5 result: AVX-512 materially reduces per-hash compute cost, but once 16 CPU
 lanes are active the backend is mostly memory/hugepage limited on this host, so
@@ -80,6 +164,12 @@ Operational note: a partial runtime HugeTLB reservation (`6136 / 16384` pages)
 raised the same host's 16T native backend from ~`7.998 H/s` to ~`8.479 H/s`
 (~**+6.0%**), which makes early hugepage reservation the highest-leverage next
 step on this machine.
+
+### x86_64 (AMD EPYC 7R13, Zen 3 / AVX2-only EC2)
+
+| Attempt | Change | Kernel delta | Backend delta | Status |
+|---------|--------|-------------|---------------|--------|
+| 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +7.85% at 1T regular; +14.83% / +3.04% / +2.35% at 1T / 8T / 16T HugeTLB | Adopted |
 
 ### AArch64 (Apple M4 Max)
 
