@@ -1,10 +1,12 @@
 # CPU architecture campaign results
 
-**Work in progress.** Baseline v0.2.21 (`359265e`), current 2 GiB Argon2id PoW.
+**Completed CPU architecture investigation and confirmation.** Baseline v0.2.21 (`359265e`), current 2 GiB Argon2id PoW.
 All rates below are completed hashes divided by actual elapsed time, including
 round-end fences. They describe the tested configuration, not a guaranteed gain
 on another machine. Following the user’s merge instruction, PRs #40 and #45 have been merged.
-The runtime subset is in final confirmation; no release has been published.
+The memory/PID subset retained an AVX2 regression and PR #43 is held in draft.
+Standalone retry PR #41 also retained a negative signal and remains draft.
+No release has been published.
 
 ## Architecture evidence collected
 
@@ -39,14 +41,17 @@ The runtime subset is in final confirmation; no release has been published.
 | Haswell / Xeon E5-2666 v3, final AVX2 regression, 1 / 11 workers | 1.175 → 1.175 / 9.722 → 9.679 | Two balanced pairs; eleven-worker differences −1.30% and +0.41%, so no repeatable loss or gain established. |
 | Zen 1 / EPYC 7571, final AVX2 regression, 1 / 16 workers | 0.901 → 0.905 / 4.594 → 4.596 | Two balanced pairs and native full-size parity; sixteen-worker differences −0.027% to +0.111%, near-flat. |
 | Zen 2 / EPYC 7R32, final AVX2 regression, 1 / 12 workers | 1.883 → 1.885 / 6.012 → 6.007 | Two balanced pairs and native full-size parity; twelve-worker differences −0.088% to −0.078%, near-flat. |
+| Ice Lake, proposed #40/#41/#43/#45 subset, 12 workers, AVX2 | 11.234 → 10.997 | Two reversed pairs, −2.277% and −1.930%; #43 held in draft. Full AVX-512 was mixed (+2.051%, −0.257%). |
+| Same guest, standalone retry PR #41, 12 workers, AVX2 | 11.198 → 11.095 | Two reversed pairs, −1.011% and −0.821%; #41 also held. Native full-size parity and independent artifact audit passed. Source-level cause remains unresolved. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
 Final Graviton2/3 corrected confirmations passed. Fresh Xeon 6975P-C confirmation
 retains a negative final-build signal, so ARM PR #44 remains draft. Final Sapphire
 Rapids checks passed correctness with small/mixed timing differences. Ice Lake
 confirmation also retained negative differences in all eight paired comparisons.
-Following the user’s subsequent merge instruction, the accepted subset is being
-confirmed separately before runtime changes are merged.
+Following the user’s subsequent merge instruction, the proposed subset and
+standalone retry PR were confirmed separately. Their AVX2 losses kept #41 and
+#43 out of production; only #40 and #45 were merged.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -108,7 +113,8 @@ the two-variant/two-worker ARM matrices always ran baseline first at one worker
 and candidate first at sixteen. Those earlier gains did not meet
 the intended per-worker order-reversal requirement. Raw results remain intact;
 normalized evidence is labelled `order_limited`, and corrected native Graviton2,
-Graviton3 and Graviton4 confirmation is required before making the ARM PR ready.
+Graviton3 and Graviton4 confirmation was required before ARM promotion; the
+corrected series passed, while later x86 regression gates remained unresolved.
 
 Graviton4 and fresh Graviton2/3 completed the corrected four-pass protocol with
 gains in every pair; their original interrupted/order-limited runs remain archived.
@@ -164,8 +170,9 @@ bounds parked slots, adaptive resource-related spawn failures clean up and retry
 with fewer workers, and manual counts retain RAM-safe limits. The same real OS
 probe now passes with four provisioned slots and unchanged stride 16; the legacy
 one-slot control also passes. This probe deliberately bypasses preflight and is
-not a full pool runtime test. PR #43 is ready for review after combined native pool
-startup and resource lifecycle checks passed on Graviton4 and Xeon 6975P-C.
+not a full pool runtime test. PR #43 passed combined native pool startup and resource lifecycle checks on
+Graviton4 and Xeon 6975P-C, but the later separate merge-subset AVX2 regression
+returned it to draft; correctness did not clear the performance gate.
 The final combined candidate `636e688` passes all-feature/all-target Linux
 compilation and scoped Rust formatting. A separate read-only review by the
 research owner found no blocker in nonce stride, teardown/retry, PID headroom,
@@ -236,88 +243,88 @@ all-feature/all-target Linux compilation, Windows GNU test cross-compilation,
 scoped formatting and strict kernel Clippy. Cross-compilation is not native
 Windows execution. [Evidence](evidence/integration-check.json) retains log hashes.
 
-## Reviewable changes
+## Final merge and experiment disposition
 
-All proposed production behavior is automatic by default. ARM startup retains
-portable NEON; runtime feature detection only admits SHA3 as a challenger, and
-productive-work confirmation selects a winner. The existing
-`--disable-cpu-autotune-threads` disables both automatic count and kernel tuning.
-Explicit fixed counts retain the default ISA unless tuning is explicitly enabled.
-Resource-lifecycle acceptance includes the opt-out case. These changes do not
-introduce an offline startup benchmark or require users to select a CPU family.
+The user subsequently authorized merging the good PRs. Two production changes
+were merged into `master`, followed by fresh verification of that exact source
+(`0e6b43e`): **479 CPU-only workspace tests passed, four ignored**.
 
-- [PR #40](https://github.com/zpalmtree/seine/pull/40): Windows tuning-cache
+- **Merged [#40](https://github.com/zpalmtree/seine/pull/40):** Windows tuning-cache
   identity includes permitted CPUs and canonical physical-core groups. Native
-  mask tests and CPU-only workspace tests passed. No placement policy change.
-- [PR #41](https://github.com/zpalmtree/seine/pull/41): inconclusive kernel
-  confirmations retry after five minutes without caching a loss; aborted new
-  contexts do not inherit an old 30-minute delay. CPU-only workspace tests and
-  independent review by the autotune owner passed. Stable below-threshold
-  results retain their existing policy.
-- [PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
-  worker capacity after temporary RAM limits, stacked on #41. Native fixed
-  lifecycle passed on Sapphire Rapids and Graviton2. Final PID-safe combined
-  native confirmation passed on Graviton4 and Xeon 6975P-C.
-- [PR #45](https://github.com/zpalmtree/seine/pull/45): native CPU-only Linux
-  ARM release archive with kernel tests and full-size reference verification.
-  Native source build, package contents/digests and YAML checks pass. The
-  Ubuntu 24.04 ARM archive requires glibc 2.39 (verified by ELF inspection),
-  documented with a source-build fallback for older systems; the hosted
-  release workflow has not been run.
-- [Draft PR #44](https://github.com/zpalmtree/seine/pull/44): runtime ARM
-  SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
-  boundary tests, real-arena worker switches and Graviton3 automatic selection
-  passed. Graviton4 and complete repaired lifecycle confirmation passed, as did
-  corrected final Graviton2/3 confirmation. Fresh Xeon 6975P-C final-build checks
-  retain a negative throughput signal. This combined-stack result does not
-  isolate the causal change to #44; the draft gate remains closed. Cascade Lake's
-  earlier inlining regression was reduced, with the residual negative disclosed.
+  mask tests passed. Existing physical-first placement is retained; no new CCD
+  preference is introduced.
+- **Merged [#45](https://github.com/zpalmtree/seine/pull/45):** native CPU-only Linux
+  ARM release packaging, with kernel tests and full-size verification in the
+  workflow. Native source/package/digest/YAML checks passed. The archive requires
+  glibc 2.39, with a documented source-build fallback. The hosted release workflow
+  has not been executed and no release was published.
+- **Draft [#41](https://github.com/zpalmtree/seine/pull/41):** retry inconclusive
+  kernel comparisons without caching a false loss. Its original 479 tests and
+  independent source review passed, but standalone native Ice Lake AVX2 pairs
+  lost 1.011% and 0.821%. This gate supersedes its earlier review-ready status.
+- **Draft [#43](https://github.com/zpalmtree/seine/pull/43):** recover worker
+  capacity after temporary RAM limits while respecting PID headroom and manual
+  bounds. Native CPU-load, pressure, zero-worker parking, restart recovery and
+  opt-out checks passed on ARM and x86. The proposed #40/#41/#43/#45 subset passed
+  496 tests (five ignored), all-feature compilation, scoped formatting and native
+  full-size parity, yet its twelve-worker AVX2 pairs lost 2.277% and 1.930%.
+  Correctness does not establish performance neutrality. Standalone #41 also
+  loses throughput, so these comparisons do not isolate the causal change to #43.
+- **Draft [#44](https://github.com/zpalmtree/seine/pull/44):** runtime ARM
+  SHA3/prefetch candidate. Corrected native ARM confirmation shows repeatable
+  gains, but combined-stack Intel regression signals and held prerequisites
+  prevent integration. Startup remains portable NEON; runtime feature detection
+  admits the challenger, and productive-work confirmation is required before
+  automatic selection. Existing opt-out remains available.
+- **Draft [#46](https://github.com/zpalmtree/seine/pull/46):** joint count/kernel
+  prototype. It passed 506 local tests (five ignored), full-size parity and build
+  checks. Four 900-second fresh-process/cache ABBA windows on actual Skylake
+  Xeon 8124M produced −2.006% and −0.836% paired logged-work differences, aggregate
+  −1.424%. No alternate kernel was promoted; final worker counts matched controls.
+  About 197 extra seconds per candidate window went to productive kernel trials.
+  A cooldown could skip comparison at a candidate count. The subsequent prototype
+  lifecycle was intentionally interrupted to prioritize final Intel checks;
+  raw `FAILED / InterruptedError(15)` and scope decision remain, with successful
+  cleanup. It establishes neither a product failure nor a lifecycle pass.
 
-Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
-and candidate all-target runs produced the same 65 error-message lines (63
-underlying diagnostics plus build summaries); strict kernel-crate Clippy passed.
-The Windows cache PR's binary-only check found 61 existing diagnostics, all in
-source files byte-identical to its parent. These are disclosed, not counted as
-passing checks. The final combined all-target check reported 124 existing
-diagnostics, with none on changed lines; strict kernel-crate Clippy passed.
+The standalone retry isolation used the same guest after the proposed-subset
+matrix, fresh isolated binaries and actual reverse-order confirmation. The
+[accepted-subset evidence](evidence/icelake-accepted-final-confirm.json) and
+[retry-only evidence](evidence/icelake-retry-only-confirm.json) retain every pair.
+Static inspection found matching normalized hash/compression instructions in the
+subset, but code placement differed in a worker wrapper; no added steady-state
+work or changed fixed-benchmark nonce stride was found. Static similarity cannot
+clear the native performance gate. Source-level attribution remains open.
 
-[Draft PR #46](https://github.com/zpalmtree/seine/pull/46) separately prototypes
-joint worker-count/kernel exploration. It restores the original configuration
-for confirmation and requires a repeated outer comparison when both change.
-Review found and fixed a quarantine/survivor cancellation issue. The frozen
-review build passes 506 workspace tests (five ignored), full-size local parity,
-all-feature compilation and Windows test cross-compilation. Native full-size parity and all four 900-second fresh-process/cache ABBA windows
-completed on an actual Skylake Xeon 8124M guest. The prototype's logged completed
-work was lower in both comparisons (−2.006% and −0.836%; aggregate −1.424%).
-Execution health checks passed with no swap or OOM; they do not establish a gain.
-This is not a rerun of the earlier Cascade Lake crossover because the CPU differs.
-The subsequent prototype lifecycle was intentionally interrupted to prioritize
-final Intel regressions within the deadline. Raw `FAILED / InterruptedError(15)`
-is preserved with a scope-stop explanation and successful unit/hugepage cleanup;
-it is neither a product failure nor a lifecycle pass. The prototype remains
-excluded from accepted defaults. See [joint evidence](evidence/skylake-joint-confirm.json).
+The final archive controller initially matched a third, separately named retry
+parity log and failed its exact-two-logs export assertion. Native matrices had
+completed and all archive files verified. Explicit control/candidate filenames
+recovered the parity export; the original controller error and duplicate failure
+archive remain. This was an exporter error, not a native test failure.
 
-Independent review of the joint trajectories found that quick startup survived
-(all windows connected in about 1.8 seconds), but candidate windows spent about
-197 additional seconds in productive kernel comparisons. Final worker choices
-matched their controls (nine in pair A, eight in pair B), and no alternate kernel
-was promoted. Candidate A also exposed a coverage gap: a five-minute kernel
-cooldown allowed count exploration to reject twelve workers before AVX2 was
-compared there. Candidate B's twelve-worker AVX2 trial measured +2.55%, below its
-uncertainty-adjusted +3.53% threshold, and was correctly left unpromoted. Native
-successful repeated joint confirmation, warm-cache amortization and the
-prototype's changed-load/RAM behavior remain unvalidated. No late product change
-was made to conceal or repair these observations inside the frozen campaign.
+All proposed runtime changes preserve productive startup and automatic defaults
+with `--disable-cpu-autotune-threads` as opt-out. Explicit fixed counts retain
+the startup ISA unless tuning is explicitly enabled. No new PoW, GPU default,
+automatic 256-bit AVX-512, Intel streaming-ring or interhash default was merged.
+Interhash was rejected against the stronger equal-RAM SMT control; new CCD policy
+was inconclusive. Intel ring/narrow kernels did not justify promotion.
 
-The rejected or deferred policy changes are explicit: no new CCD preference,
-no automatic 256-bit AVX-512 path, no Intel streaming-ring default, and no
-independent-hash interleaving default. Their controls and negative results remain
-available for future work. The coordinated EPYC ring is a separate unpromoted
-candidate, described below.
+Strict repository-wide Clippy remains limited by existing diagnostics (124 in
+the final combined check; none on changed lines). Strict kernel Clippy passed.
+The larger combined integration passed 497 tests (five ignored), all-feature
+Linux compilation and Windows test cross-compilation. Cross-compilation is not
+native Windows execution. GitHub returned no hosted check results; local/native
+evidence is identified explicitly.
+
+Subsequent user-requested investigations continue separately: draft
+[#47](https://github.com/zpalmtree/seine/pull/47) addresses the joint cooldown gap,
+and draft [#49](https://github.com/zpalmtree/seine/pull/49) isolates ARM enum/CLI
+changes. Neither has native performance evidence sufficient for promotion.
+Their work does not change this campaign's held gates or cleanup scope.
 
 ## Coordinated EPYC evidence
 
-The EPYC owner completed its work and released all cloud resources before this
+The initial EPYC investigation released its cloud resources before this
 campaign acquired the shared 32-vCPU quota. On its older base `785a06f`, a 64 KiB
 streaming ring on EPYC 9R45 at 24 workers measured 45.143 H/s versus 35.328 AVX2,
 with three alternating pairs (+27.34% to +28.42%), full-size parity, dirty reuse
@@ -334,8 +341,8 @@ from its available performance counters.
 - The 9950X3D campaign used regular pages and at most eight workers. Native
   Windows large pages, higher worker counts, final combined-binary performance
   and machines spanning Windows processor groups remain unverified.
-- Apple Silicon, Intel hybrid P/E-core machines and multi-socket NUMA systems
-  need native candidate measurements. Cloud results apply to the observed guest
+- Apple Silicon, Intel hybrid P/E-core machines, pre-AVX2 legacy x86 and
+  multi-socket NUMA systems need native candidate measurements. Cloud results apply to the observed guest
   topology; they do not establish bare-metal bandwidth or frequency behavior.
 - The separate joint-count/kernel prototype still needs repeatable end-to-end
   benefit across more than one architecture before becoming a default.
@@ -355,8 +362,31 @@ disk were verified deleted, and its charges remain in the ledger. The replacemen
 uses bounded retries only for proven pre-connection timeouts; command execution
 errors are never replayed. This is an operational failure, not a benchmark result.
 
-Current resource accounting, additional hardware gaps, final PRs and verified
-cleanup will be added before the 20:27:13 UTC deadline. Every lease has an
-independent guest shutdown and EC2 terminate-on-shutdown behavior. The campaign
-reserves at most $40 incremental cloud spending and stops new experiments by
-17:57:13 UTC to protect the final 2.5-hour confirmation/review/cleanup window.
+The campaign began at **10:27:13 UTC**, froze new experiments at **17:57:13**,
+and reserved the final 2.5 hours for confirmation, review, documentation and
+cleanup within the **20:27:13** finish bound. After the later explicit merge
+instruction, one additional accepted-subset/isolation lease received an
+independent **20:20** deadline; the $40 cap and ten-hour finish bound were unchanged.
+It was terminated early at 20:12:58. All other rentals had deadlines no later than 20:00.
+
+**All 18 campaign rentals and their known root disks were verified deleted.**
+Final cloud cleanup at 20:13:06 also verified the campaign security group absent
+and removed local SSH keys/known-host material. Known disk IDs were checked
+independently of tags. Native Windows cleanup verified zero owned processes,
+removed its temporary directory and retained 450 verified text artifacts. All
+campaign test units/controllers ended, and 15 disposable build-target directories
+were removed. Committed source worktrees, frozen binaries and raw evidence are
+intentionally retained for review; unrelated resources were untouched.
+
+Live-price-based estimated compute, storage and IPv4 cost is **$12.02**.
+Including the retained **$18 transfer contingency**, the conservative estimate is
+**$30.02**. The maximum recorded reservation commitment was **$38.82**, below the
+**$40 cap**. These are estimates/reservations, not an AWS invoice. Unused reserved
+hours were released only after both termination and disk deletion proof.
+See [cost/cleanup evidence](evidence/cloud-costs-cleanup.json),
+[local cleanup](evidence/local-cleanup.json), [Windows cleanup](evidence/windows-cleanup.json)
+and [merged-source tests](evidence/merged-master-validation.json).
+
+After quota release, the separately requested EPYC implementation/validation
+continues under its own ownership and deadlines. Those later resources and the
+separate regression investigations are outside this campaign's 18-rental ledger.

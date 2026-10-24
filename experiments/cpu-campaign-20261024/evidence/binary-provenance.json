@@ -61,6 +61,30 @@
         "verify-joint-control": "9837aac9b855982444a8c4758d01d69d9023e6f78dc36aa8eb13946aaaad95a8"
       },
       "identity_file_sha256": "2d51f43d543eff1f1151317e612f4a82e09249f90f2373f400719db093a084c8"
+    },
+    "portable-accepted-x86": {
+      "source_control": "359265e325d85c9c7b6e3eed7b5b126fcec63f9c",
+      "source_candidate": "be242364db5665f26fb978652e113509a62a8d41",
+      "profile": "Rust1.93.0 generic x86_64 CPU-only release; isolated target; no RUSTFLAGS",
+      "sha256": {
+        "seine-portable-candidate": "8eec17aec005fdf94dca1b8d798d65058edb4d8c55bdf099f96e015ddb404558",
+        "verify-portable-control": "3ecdce8a76d4d19f007e90c07b647907de795e8037b58ea59bc454212deafda4",
+        "seine-portable-control": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+        "verify-portable-candidate": "3ecdce8a76d4d19f007e90c07b647907de795e8037b58ea59bc454212deafda4"
+      },
+      "identity_file_sha256": "e1946be3bd6ff4aaab60074dc0bd773acac9a1df366bb5d5f495aa4a02d7656b"
+    },
+    "portable-retry-only-x86": {
+      "source_control": "359265e325d85c9c7b6e3eed7b5b126fcec63f9c",
+      "source_candidate": "c65493705619b6a8d38790ae9afa31adbe3f58af",
+      "profile": "Rust1.93.0 generic CPU-only release; isolated target; no RUSTFLAGS",
+      "sha256": {
+        "seine-portable-candidate": "abdee56eac34f0e644aef9026939bc694721d859f3efc84cafd406a23a3d0cbf",
+        "verify-portable-control": "3ecdce8a76d4d19f007e90c07b647907de795e8037b58ea59bc454212deafda4",
+        "seine-portable-control": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+        "verify-portable-candidate": "75fd431672c81a40cd0c56db74af9c53af6cda8657a26deac055b674a08869d7"
+      },
+      "identity_file_sha256": "d4add4b3004b462a7f0779a4488fdbd6503f784a410d8bfadfda77d6da4f24e6"
     }
   },
   "matrices": [
@@ -237,6 +261,161 @@
           ],
           "matching_frozen_sources": [
             "636e6887c405c41d732433b1eeb018cefcdc962d"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "graniterapids",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/final-x86-confirm/experiment.json",
+      "experiment_sha256": "f9b38f871a3ef33f21e0fe062da0d26971b986902a692414537ab4a27f8c81b6",
+      "archive_sha256": "61d90b4c20e72135a693e145e9886df05f0bde8d42d946c2c2b0ebaf5b409553",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "graniterapids",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/final-x86-long/experiment.json",
+      "experiment_sha256": "dba5c2dabdf0bb6032a134e9ee6a20decff28833bc02157d205266b007ffc176",
+      "archive_sha256": "61d90b4c20e72135a693e145e9886df05f0bde8d42d946c2c2b0ebaf5b409553",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 4,
+      "variants": {
+        "control-full": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-full": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "graniterapids",
+      "stage": "f20-long-confirm",
+      "experiment_relative_path": "results/final-x86-long/experiment.json",
+      "experiment_sha256": "dba5c2dabdf0bb6032a134e9ee6a20decff28833bc02157d205266b007ffc176",
+      "archive_sha256": "fbbbb90d3df34968204ca7ee4abb1dd1b935692549eb9b65f1fdf9ffa1569d37",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 4,
+      "variants": {
+        "control-full": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-full": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
           ]
         }
       }
@@ -590,6 +769,92 @@
             "8280a66"
           ],
           "matching_frozen_sources": []
+        }
+      }
+    },
+    {
+      "hardware": "graviton3",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/arm-final-confirm/experiment.json",
+      "experiment_sha256": "59e83a7ef0426194818cd223be3e2d270c5a37910454e8c7a8f26d41db945b4f",
+      "archive_sha256": "935799f8c78b0507ea8f68480ca98fbf7007809db5c6a26dd32123c2d99ae6c6",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        16
+      ],
+      "passes": 4,
+      "variants": {
+        "baseline": {
+          "binary_name": "seine-arm-control",
+          "binary_sha256": "82bbb59089dedd5851e013c9760acaf791fa5e4b07a9bc7c00cb2a47dd7f7fb4",
+          "kernel": "neon",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d8"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate": {
+          "binary_name": "seine-arm-candidate",
+          "binary_sha256": "4e4b0bbdba495a44d7605a2bbc453b4f1d6d6761e1374761835a2de2fa74455e",
+          "kernel": "neon-sha3",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "graviton3",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/arm-final-regular/experiment.json",
+      "experiment_sha256": "3d5e29ce06a55fc66ae9b52b60cac61f68e0fa521ed16874aada55a5d1ebb11b",
+      "archive_sha256": "935799f8c78b0507ea8f68480ca98fbf7007809db5c6a26dd32123c2d99ae6c6",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        8
+      ],
+      "passes": 4,
+      "variants": {
+        "baseline": {
+          "binary_name": "seine-arm-control",
+          "binary_sha256": "82bbb59089dedd5851e013c9760acaf791fa5e4b07a9bc7c00cb2a47dd7f7fb4",
+          "kernel": "neon",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d8"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate": {
+          "binary_name": "seine-arm-candidate",
+          "binary_sha256": "4e4b0bbdba495a44d7605a2bbc453b4f1d6d6761e1374761835a2de2fa74455e",
+          "kernel": "neon-sha3",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
         }
       }
     },
@@ -1060,6 +1325,232 @@
     },
     {
       "hardware": "icelake",
+      "stage": "accepted-final-confirm",
+      "experiment_relative_path": "results/final-x86-confirm/experiment.json",
+      "experiment_sha256": "4ef41af44d22ffebc7f883be7aefa188b4a1bad109981f1e2c54e1e51ebf6519",
+      "archive_sha256": "af69380ed0a23e474e0484f999569bbdac81e13467f0616f399d16d53a83d2d4",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "8eec17aec005fdf94dca1b8d798d65058edb4d8c55bdf099f96e015ddb404558",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "318d8809177fb2dc"
+          ],
+          "reported_git_annotations": [
+            "be242364db56"
+          ],
+          "matching_frozen_sources": [
+            "be242364db5665f26fb978652e113509a62a8d41"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "8eec17aec005fdf94dca1b8d798d65058edb4d8c55bdf099f96e015ddb404558",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "318d8809177fb2dc"
+          ],
+          "reported_git_annotations": [
+            "be242364db56"
+          ],
+          "matching_frozen_sources": [
+            "be242364db5665f26fb978652e113509a62a8d41"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
+      "stage": "accepted-final-confirm",
+      "experiment_relative_path": "results/retry-only/experiment.json",
+      "experiment_sha256": "cf9a9af5b13892458f473dfbdbeefcfd2b870560c1894eabcde8250ba762ebc2",
+      "archive_sha256": "af69380ed0a23e474e0484f999569bbdac81e13467f0616f399d16d53a83d2d4",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-retry-only",
+          "binary_sha256": "abdee56eac34f0e644aef9026939bc694721d859f3efc84cafd406a23a3d0cbf",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "9873fcb395d1f5ae"
+          ],
+          "reported_git_annotations": [
+            "c65493705619"
+          ],
+          "matching_frozen_sources": [
+            "c65493705619b6a8d38790ae9afa31adbe3f58af"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
+      "stage": "accepted-final-failed",
+      "experiment_relative_path": "results/final-x86-confirm/experiment.json",
+      "experiment_sha256": "4ef41af44d22ffebc7f883be7aefa188b4a1bad109981f1e2c54e1e51ebf6519",
+      "archive_sha256": "f6ed9714fdf81197c50d79297aff5acf39ece7cf994cad3eaa377900750316a2",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "8eec17aec005fdf94dca1b8d798d65058edb4d8c55bdf099f96e015ddb404558",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "318d8809177fb2dc"
+          ],
+          "reported_git_annotations": [
+            "be242364db56"
+          ],
+          "matching_frozen_sources": [
+            "be242364db5665f26fb978652e113509a62a8d41"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "8eec17aec005fdf94dca1b8d798d65058edb4d8c55bdf099f96e015ddb404558",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "318d8809177fb2dc"
+          ],
+          "reported_git_annotations": [
+            "be242364db56"
+          ],
+          "matching_frozen_sources": [
+            "be242364db5665f26fb978652e113509a62a8d41"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
+      "stage": "accepted-final-failed",
+      "experiment_relative_path": "results/retry-only/experiment.json",
+      "experiment_sha256": "cf9a9af5b13892458f473dfbdbeefcfd2b870560c1894eabcde8250ba762ebc2",
+      "archive_sha256": "f6ed9714fdf81197c50d79297aff5acf39ece7cf994cad3eaa377900750316a2",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-retry-only",
+          "binary_sha256": "abdee56eac34f0e644aef9026939bc694721d859f3efc84cafd406a23a3d0cbf",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "9873fcb395d1f5ae"
+          ],
+          "reported_git_annotations": [
+            "c65493705619"
+          ],
+          "matching_frozen_sources": [
+            "c65493705619b6a8d38790ae9afa31adbe3f58af"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
       "stage": "controls",
       "experiment_relative_path": "results/control-screen/experiment.json",
       "experiment_sha256": "bb55d9591dc7600f97ab32002c8c302f96af2ebf92049743250146ebfbd67340",
@@ -1142,6 +1633,119 @@
             "d283877"
           ],
           "matching_frozen_sources": []
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/final-x86-confirm/experiment.json",
+      "experiment_sha256": "f9b38f871a3ef33f21e0fe062da0d26971b986902a692414537ab4a27f8c81b6",
+      "archive_sha256": "4fe5b07b6d4fb94a555bb5121bf8795235604b3a5060dd4ab99ab0923857996d",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        }
+      }
+    },
+    {
+      "hardware": "icelake",
+      "stage": "retry-only-confirm",
+      "experiment_relative_path": "results/retry-only/experiment.json",
+      "experiment_sha256": "cf9a9af5b13892458f473dfbdbeefcfd2b870560c1894eabcde8250ba762ebc2",
+      "archive_sha256": "02148ced3967e3fdfc46bdd8fc5ba685c056c42a138e4472ea079998e3be2a61",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-retry-only",
+          "binary_sha256": "abdee56eac34f0e644aef9026939bc694721d859f3efc84cafd406a23a3d0cbf",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "9873fcb395d1f5ae"
+          ],
+          "reported_git_annotations": [
+            "c65493705619"
+          ],
+          "matching_frozen_sources": [
+            "c65493705619b6a8d38790ae9afa31adbe3f58af"
+          ]
         }
       }
     },
@@ -1234,6 +1838,77 @@
             "2ce28ae"
           ],
           "matching_frozen_sources": []
+        }
+      }
+    },
+    {
+      "hardware": "sapphirerapids",
+      "stage": "f20-final-confirm",
+      "experiment_relative_path": "results/final-x86-confirm/experiment.json",
+      "experiment_sha256": "f9b38f871a3ef33f21e0fe062da0d26971b986902a692414537ab4a27f8c81b6",
+      "archive_sha256": "9a875c6caddc94cd515e4d08def5f6189f59190d201741b423881e8527db679d",
+      "completion_marker_present": true,
+      "workers": [
+        1,
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-portable-control",
+          "binary_sha256": "879203959abf3e1ac511e180d802cc20c7200f1f042db245f7095ba9568bd0e3",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "d8248e278baf1c66"
+          ],
+          "reported_git_annotations": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ],
+          "matching_frozen_sources": [
+            "359265e325d85c9c7b6e3eed7b5b126fcec63f9c"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-portable-candidate",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
         }
       }
     },
@@ -1340,6 +2015,76 @@
             "d283877"
           ],
           "matching_frozen_sources": []
+        }
+      }
+    },
+    {
+      "hardware": "skylake",
+      "stage": "joint-final-confirm",
+      "experiment_relative_path": "results/fixed-kernel/experiment.json",
+      "experiment_sha256": "6e4ae7308d2bd6f19c7908310f253d73a42bae14c4656ab221e5792c0cc08001",
+      "archive_sha256": "93cfb1e3fbff6fc4f63ebf7441fa994ba99d1d9cbb24cb0fe8628e3f74ce8dd5",
+      "completion_marker_present": true,
+      "workers": [
+        12
+      ],
+      "passes": 2,
+      "variants": {
+        "control-avx2": {
+          "binary_name": "seine-joint-control",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        },
+        "candidate-avx2": {
+          "binary_name": "seine-joint-candidate",
+          "binary_sha256": "1200135d8d7b6b6cfebc56e1da8612e50fa334d4e0423f59f7cc2c776f53e1f4",
+          "kernel": "avx2",
+          "compiled_source_fingerprints": [
+            "10c45d551e212dae"
+          ],
+          "reported_git_annotations": [
+            "e6809bb78b51"
+          ],
+          "matching_frozen_sources": [
+            "e6809bb78b51c6b94c6a6b7ebcff2cf21f95faa3"
+          ]
+        },
+        "control-avx512": {
+          "binary_name": "seine-joint-control",
+          "binary_sha256": "24149835ff2468ba75f95c5e34c0d5f0ca4edd0a2848dc16da16534e0812d86f",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "f24ac20c126a52cc"
+          ],
+          "reported_git_annotations": [
+            "f20e7bb1772b"
+          ],
+          "matching_frozen_sources": [
+            "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd"
+          ]
+        },
+        "candidate-avx512": {
+          "binary_name": "seine-joint-candidate",
+          "binary_sha256": "1200135d8d7b6b6cfebc56e1da8612e50fa334d4e0423f59f7cc2c776f53e1f4",
+          "kernel": "avx512",
+          "compiled_source_fingerprints": [
+            "10c45d551e212dae"
+          ],
+          "reported_git_annotations": [
+            "e6809bb78b51"
+          ],
+          "matching_frozen_sources": [
+            "e6809bb78b51c6b94c6a6b7ebcff2cf21f95faa3"
+          ]
         }
       }
     },

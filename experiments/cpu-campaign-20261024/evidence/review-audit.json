@@ -152,5 +152,20 @@
       "Expected24GiB HugeTLB backing; zero OOM/swap/errors/drops; max steal0.00207%"
     ],
     "finding": "All eight paired differences negative; twelve-worker means AVX2 -1.322%,full512 -1.307%. Do not characterize final combined x86 as near-flat across hosts; retain draft gate."
+  },
+  "final_subset_and_retry_review": {
+    "reviewed_at": "2026-10-24T20:18:25.727682+00:00",
+    "status": "artifact audit passed; both performance gates held",
+    "subset_reports": 16,
+    "retry_reports": 4,
+    "subset_archive_files": 69,
+    "retry_archive_files": 20,
+    "checks": [
+      "Raw SHA/rates and summaries match",
+      "Actual reverse-order timestamps, backing and error counters verified",
+      "Frozen binaries and source fingerprints match",
+      "Full-size parity logs verified"
+    ],
+    "finding": "Subset12wAVX2 -2.2768/-1.9295%; standalone retry -1.0105/-.8209%. No cause inferred from static similarity. PR41/43 held."
   }
 }

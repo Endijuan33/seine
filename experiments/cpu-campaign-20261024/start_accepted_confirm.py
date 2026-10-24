@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Confirm the accepted merge subset independently of the held ARM/kernel drafts."""
+"""Confirm the proposed merge subset independently of the held ARM/kernel drafts."""
 import argparse
 import datetime
 import hashlib
