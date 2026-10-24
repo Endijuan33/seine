@@ -92,18 +92,28 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   schema-10 records remain startup seeds. A temporarily lower RAM ceiling retains
   a previous higher selected count on disk. Offline kernel and live mining scores
   remain distinct; hardware/build/topology/page-mode compatibility still applies.
-- Validation: CPU-only workspace suite **452 passed**, three opt-in tests ignored;
+- Validation after integration with v0.2.20: CPU-only workspace suite **462 passed**,
+  three opt-in tests ignored;
   default-feature all-target check, Windows GNU CPU-only cross-check, scoped
   formatting and Clippy completed (existing warnings retained). Deterministic
   simulations cover a peak changing 8→2→8 workers, noncompounding efficiency
   selection, interrupted trials, constrained-cache preservation, and recovery.
   Real small-arena workers cover nonce uniqueness, allocation failure, parking,
   new work while parked, cancellation, resumed accounting, and bounded shutdown.
-- An optimized full-size backend lifecycle smoke (at most 4 GiB of arenas) passed
-  1→2→0→1 resizing: startup **0.946 s**, first two hashes **2.415 s**, release
-  **1.831 s**, 12 completed hashes. These are local lifecycle observations, not a
+- An optimized full-size backend lifecycle smoke after v0.2.20 integration
+  (at most 4 GiB of arenas) passed 1→2→0→1 resizing: startup **0.808 s**, first
+  two hashes **2.036 s**, release **0.844 s**, 12 completed hashes.
+  These are local lifecycle observations, not a
   cross-host throughput improvement claim. Native Windows/macOS runtime testing
   remains outstanding; the macOS cross-check lacked an Apple C toolchain/SDK.
+- Before integration, the live controller completed 445 hashes while responding to pressure and
+  discarding an unstable comparison, then confirmed two workers after 223.614 s.
+  After stopping the first backend, cached preparation reused that count in
+  **0.0112 s**. The run used a bounded scope under `agents-tool.slice` with
+  `MemoryHigh=6G`, `MemoryMax=8G`, and `CPUQuota=200%`; arenas remained at most
+  4 GiB. The integrated rerun using the shipping `auto` affinity completed
+  **192 hashes** and confirmed two workers after **94.935 s**, then reused the
+  cache in **0.0112 s**. Both full-size opt-in tests passed on the integrated code.
 - Local evidence is retained under ignored `data/adaptive-autotune-20261024/`,
   including failed/interrupted pilots. No cloud resources or GPU jobs were used.
 
