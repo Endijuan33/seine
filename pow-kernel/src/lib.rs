@@ -1,4 +1,6 @@
+mod cpu_kernel;
 mod fixed_argon;
+pub use cpu_kernel::CpuKernel;
 
 pub use fixed_argon::{
     active_isa_label, compiled_isa_variants, Error, FixedArgon2id, PowBlock, Result,

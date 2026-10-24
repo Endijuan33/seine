@@ -11,6 +11,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 cross-generation CPU kernel matrix`
+- `2026-10-24 EPYC 9R14 256-bit AVX-512 kernel experiment`
+- `2026-10-24 explicit CPU kernel benchmarks and architecture identity`
 - `2026-10-24 CPU sampler panic handling`
 - `2026-10-24 CPU autotuner warmed sampling and lifecycle timing`
 - `2026-10-24 independent two-node Milan release validation`
@@ -51,6 +54,124 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 cross-generation CPU kernel matrix
+
+- Real x86-64 EC2 guests cover AMD Zen 1/Naples, Zen 2/Rome, Zen 3/Milan,
+  Zen 4/Genoa, Zen 5/Turin, and Intel Broadwell, Cascade Lake, Ice Lake,
+  Sapphire Rapids and Granite Rapids. Full 2 GiB reference parity runs on
+  every host before timing. An ISA override on a newer CPU is not used as a
+  substitute for an older architecture.
+- AVX2-only hosts compare pre-pairing against paired AVX2; AVX-512 hosts
+  compare two explicit paths in one portable binary. Fixed workers, page
+  backing, affinity and disabled autotuning isolate each comparison.
+  Four alternating pairs use a warmup plus two measured rounds per invocation.
+  The main matrix uses 12-second rounds; independent Turin and larger Genoa
+  followups use 20 seconds. Completed H/s includes round-end fence time.
+- Full protocol, generation/CPUID identity, rates, paired intervals, source and
+  executable hashes, followups, limitations and cloud cleanup are recorded in
+  [the architecture matrix](experiments/cpu-architecture-20261024/README.md).
+  Its machine-readable summary preserves counted and completed rates separately.
+- Paired AVX2 improves every tested AVX2-only configuration (+3.2% to +34.4%).
+  Existing AVX-512 improves every measured Intel case (+6.1% to +28.7%). Genoa
+  favors AVX2 across the measured one/four/eight/twelve-worker configurations.
+  Turin repeats a worker-count crossover on a second VM: AVX-512 gains about
+  15% at one HugeTLB worker but loses 1.7% and 2.6% at four. The larger Genoa
+  guest has two L3 groups and fixed `os` placement; production `auto` placement
+  differs. These results do not justify a blanket generation-specific default.
+- `avx512-256` integrates the cooperating EPYC experiment under a distinct,
+  explicit benchmark label. AVX2 + AVX-512F/VL and OS vector support are required.
+  It is never automatically selected. The module is unchanged from its full-size
+  Genoa/local reference checks; the rejected row-fusion prototype is not included.
+- Integration preserves the upstream warmed sampler and panic barriers from
+  `2ed5beb`. After that merge: 438 Rust tests passed, one existing 1 GiB HugeTLB
+  test remained ignored, and 10 architecture-analysis tests passed. Full-size
+  one-worker CLI smoke checks passed for automatic and explicit SIMD backends,
+  all four benchmark modes for the new path, and cross-kernel baseline rejection.
+  Default-feature compilation and CPU-only Clippy passed with existing warnings.
+  Earlier kernel/test cross-checks passed for Windows x86-64 GNU and macOS
+  AArch64; those operating systems were not executed in this matrix.
+- Normal ISA preference and CPU autotune policy remain unchanged. Existing
+  cache keys include the full build fingerprint, so integrating kernel/source
+  changes invalidates old tuning observations without a separate schema bump.
+  The new benchmark override is never persisted into a tuning cache.
+
+## 2026-10-24 EPYC 9R14 256-bit AVX-512 kernel experiment
+
+- Added an isolated 256-bit AVX-512 compression module (`7cf7981`) and handed it
+  to the architecture session, which integrated explicit benchmark selection as
+  `avx512-256` in `ac4feba`. No automatic kernel preference or autotuning policy
+  changes are made by this experiment.
+- Host: EC2 c7a.2xlarge, AMD EPYC 9R14, AuthenticAMD family 25/model 17/stepping 1,
+  eight physical cores, one NUMA node and one L3 group. Portable Rust 1.93.0
+  CPU-only release builds, fixed workers, verified page backing, autotuning off.
+- The candidate combines paired 256-bit rows/columns, native AVX-512VL rotates,
+  and data-dependent prefetch after column zero. It requires AVX2 + AVX-512F/VL.
+  The disassembly uses no ZMM operations or high YMM registers; no speedup is
+  attributed to an expanded register file.
+- Three alternating pairs, each with one warmup and two measured 20-second
+  backend rounds, found these completed-hash gains against existing AVX-512:
+  **+5.71% at one HugeTLB worker**, **+5.53% at four HugeTLB workers**, and
+  **+1.86% at four ordinary-page workers**. Every pair improved.
+- The necessary same-binary AVX2 control changes the interpretation: the new
+  path beats paired AVX2 by **+2.13% at one HugeTLB worker**, but only **+0.27%
+  at four**, with mixed pair signs (+0.34%, -0.12%, +0.58%). A useful four-worker
+  advantage over AVX2 is not established by that comparison.
+- Native integrated confirmation checked all three SIMD paths at four workers
+  with two opposite-order passes. AVX2 beat existing AVX-512 by +4.07% with
+  HugeTLB and +2.06% with ordinary pages. The new path was +1.30% / -0.08%
+  relative to AVX2. These shorter checks confirm integration and the weaker
+  existing AVX-512 default, but do not establish a broad generation preference.
+- Both experimental builds and the distinct-label integration passed full 2 GiB
+  RustCrypto parity on the EPYC host. The module's scalar-comparison tests cover
+  shared inputs, edge/random words, ordinary/mid-prefetch paths and guarded
+  outputs. Six kernel tests pass; Windows x86-64 GNU and macOS AArch64 checks
+  compile. The architecture session separately reports 432 workspace tests
+  passed, one existing 1 GiB HugeTLB test ignored, and strict kernel Clippy.
+- No memory-backing failures, backend timeouts, swapping or OOM events occurred.
+  All paired results and the integrated check have checksummed local archives.
+  A pilot stopped on a checker field-name error and is excluded. See
+  `experiments/epyc-avx512vl/README.md`, `results.json`, source hashes and runners.
+  Raw evidence is under `data/epyc-avx512vl`, `data/epyc-control` and
+  `data/epyc-final` in the EPYC worktree.
+- A second candidate fused the 256-bit input XOR/backup with row rounds to
+  remove a scratch-buffer store/reload. It passed full-size reference checks but
+  regressed four-worker HugeTLB throughput by **13.37%** in all three paired
+  comparisons (7.40367 to 6.41361 completed H/s). It is rejected and retained only
+  as an experimental patch/results, not in the kernel module.
+- Scope: an eight-core guest with one/four-worker measurements, not a full EPYC
+  socket or Siena/Zen 4c. The architecture session owns the subsequent 8/12-worker
+  Genoa check and coordinates any cache/default change with the autotune session.
+
+## 2026-10-24 explicit CPU kernel benchmarks and architecture identity
+
+- Added benchmark-only `--bench-cpu-kernel scalar|avx2|avx512|neon`. Selection
+  is passed per backend, requires fixed threads and CPU-only benchmarking with
+  autotuning disabled, and rejects unsupported paths before arena allocation.
+  Normal mining and autotuning retain the existing automatic ISA preference.
+- Schema-14 reports record selected/requested kernels, supported kernels and
+  guest-visible x86 vendor/family/model/stepping. CPU baseline comparisons now
+  require matching known kernel identities, including under ignore-environment.
+  Auto and explicit selection of the same kernel remain comparable. The paired
+  A/B harness supports intentional cross-kernel experiments; see
+  `docs/benchmarks.md`. No generation-specific kernel preference is introduced.
+- Validation host: Ryzen 9 9950X3D, WSL2, AuthenticAMD family 26/model 68/stepping 0.
+  CPU-only generic release build, Rust 1.93.0; executable SHA-256
+  `cfc9cda0a7ef16a1c7ba0a36f12f730b60c4fc4d2d92074bb58bfdd404668d27`.
+- All 431 workspace tests passed; the existing test requiring a reserved 1 GiB
+  HugeTLB pool was ignored. Supported explicit kernels match RustCrypto for
+  three memory sizes and three nonces each, including a non-aligned memory size.
+  Unsupported kernels fail before precomputation/allocation.
+- Full 2 GiB, one-worker, regular-page CLI smoke runs completed for automatic,
+  scalar, AVX2 and AVX-512 backend selection; AVX2 also completed kernel,
+  kernel-effective and end-to-end modes. CLI restrictions, same/different-kernel
+  baseline behavior and unchanged autotune-cache contents/mtime were checked.
+  These two-second rounds validate plumbing, not relative throughput.
+- CPU-only Clippy and default-feature compilation passed (existing Clippy
+  warnings remain). Kernel/tests cross-checks passed for Windows x86-64 GNU and
+  macOS AArch64; neither target was executed. Edited-file formatting passed.
+- Local evidence and the CLI validation runner are in ignored
+  `data/kernel-selection-validation/`. No AWS resources were provisioned.
 
 ## 2026-10-24 CPU sampler panic handling
 

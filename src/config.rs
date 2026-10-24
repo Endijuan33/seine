@@ -676,6 +676,11 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = BenchKind::Backend)]
     bench_kind: BenchKind,
 
+    /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, neon).
+    /// Requires --bench, CPU-only backends, fixed --threads, and no CPU autotuning.
+    #[arg(long, requires_all = ["bench", "threads"])]
+    bench_cpu_kernel: Option<blocknet_pow_kernel::CpuKernel>,
+
     /// Per-round benchmark duration in seconds.
     #[arg(long, default_value_t = 20)]
     bench_secs: u64,
@@ -786,6 +791,7 @@ pub struct Config {
     pub allow_wallet_prompt: bool,
     pub bench: bool,
     pub bench_kind: BenchKind,
+    pub bench_cpu_kernel: Option<blocknet_pow_kernel::CpuKernel>,
     pub bench_secs: u64,
     pub bench_rounds: u32,
     pub bench_warmup_rounds: u32,
@@ -808,6 +814,11 @@ impl Config {
         );
         let mut cli =
             Cli::from_arg_matches(&matches).expect("clap matches should deserialize into Cli");
+        if let Some(kernel) = cli.bench_cpu_kernel {
+            if !kernel.is_supported() {
+                bail!("CPU kernel {kernel} is not supported by this host/build");
+            }
+        }
         let user_config_path = cli.data_dir.join(DEFAULT_USER_CONFIG_FILE);
         let user_cfg = read_user_config(&user_config_path)?;
         let user_config_exists = user_cfg.is_some();
@@ -1091,6 +1102,13 @@ impl Config {
         } else {
             cli.cpu_autotune_threads || cpu_autotune_default_enabled
         };
+        validate_benchmark_cpu_kernel(
+            cli.bench_cpu_kernel,
+            cli.bench,
+            &backends,
+            cli.threads,
+            cpu_autotune_threads,
+        )?;
         if cpu_backend_instances > 0 && (cli.threads.is_none() || cpu_autotune_threads) {
             startup_notices.push(format!(
                 "CPU automatic sizing reserves {}% of effective RAM; cap={} thread(s) per instance (--cpu-memory-reserve-percent 0 disables the reserve)",
@@ -1282,6 +1300,7 @@ impl Config {
             allow_wallet_prompt: true,
             bench: cli.bench,
             bench_kind: cli.bench_kind,
+            bench_cpu_kernel: cli.bench_cpu_kernel,
             bench_secs: cli.bench_secs.max(1),
             bench_rounds: cli.bench_rounds.max(1),
             bench_warmup_rounds: cli.bench_warmup_rounds,
@@ -3110,6 +3129,7 @@ mod tests {
             api_cors: "*".to_string(),
             bench: false,
             bench_kind: BenchKind::Backend,
+            bench_cpu_kernel: None,
             bench_secs: 20,
             bench_rounds: 3,
             bench_warmup_rounds: 0,
@@ -4087,5 +4107,94 @@ HugePages_Rsvd:          0
     fn resolve_backend_selection_skips_cuda_hint_on_macos() {
         let (_, hint) = resolve_backend_selection(&[], &[], false);
         assert!(hint.is_none());
+    }
+}
+
+/// Kept separate from config persistence so the restrictions can be tested
+/// without creating a user config or probing GPU drivers.
+pub(crate) fn validate_benchmark_cpu_kernel(
+    kernel: Option<blocknet_pow_kernel::CpuKernel>,
+    bench: bool,
+    backends: &[BackendKind],
+    threads: Option<usize>,
+    autotune: bool,
+) -> Result<()> {
+    let Some(kernel) = kernel else {
+        return Ok(());
+    };
+    if !bench {
+        bail!("--bench-cpu-kernel requires --bench");
+    }
+    if backends.is_empty() || backends.iter().any(|kind| *kind != BackendKind::Cpu) {
+        bail!("--bench-cpu-kernel requires CPU-only backends (--backend cpu)");
+    }
+    if threads.is_none() || threads == Some(0) || autotune {
+        bail!("--bench-cpu-kernel requires fixed --threads and CPU autotuning disabled");
+    }
+    if !kernel.is_supported() {
+        bail!("CPU kernel {kernel} is not supported by this host/build");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod benchmark_kernel_tests {
+    use super::*;
+    use blocknet_pow_kernel::CpuKernel;
+
+    #[test]
+    fn explicit_kernel_requires_offline_fixed_cpu_benchmark() {
+        let kernel = Some(CpuKernel::Scalar);
+        for (bench, backends, threads, autotune) in [
+            (false, vec![BackendKind::Cpu], Some(1), false),
+            (true, vec![], Some(1), false),
+            (true, vec![BackendKind::Nvidia], Some(1), false),
+            (
+                true,
+                vec![BackendKind::Cpu, BackendKind::Nvidia],
+                Some(1),
+                false,
+            ),
+            (true, vec![BackendKind::Cpu], None, false),
+            (true, vec![BackendKind::Cpu], Some(0), false),
+            (true, vec![BackendKind::Cpu], Some(1), true),
+        ] {
+            assert!(
+                validate_benchmark_cpu_kernel(kernel, bench, &backends, threads, autotune).is_err()
+            );
+        }
+        assert!(
+            validate_benchmark_cpu_kernel(kernel, true, &[BackendKind::Cpu], Some(1), false)
+                .is_ok()
+        );
+        assert!(validate_benchmark_cpu_kernel(None, false, &[], None, true).is_ok());
+        for unsupported in CpuKernel::ALL.into_iter().filter(|k| !k.is_supported()) {
+            assert!(validate_benchmark_cpu_kernel(
+                Some(unsupported),
+                true,
+                &[BackendKind::Cpu],
+                Some(1),
+                false
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn cli_requires_bench_and_explicit_threads_for_kernel_override() {
+        assert!(Cli::try_parse_from(["seine", "--bench-cpu-kernel", "scalar"]).is_err());
+        assert!(Cli::try_parse_from(["seine", "--bench", "--bench-cpu-kernel", "scalar"]).is_err());
+        let cli = Cli::try_parse_from([
+            "seine",
+            "--bench",
+            "--threads",
+            "1",
+            "--backend",
+            "cpu",
+            "--bench-cpu-kernel",
+            "scalar",
+        ])
+        .unwrap();
+        assert_eq!(cli.bench_cpu_kernel, Some(CpuKernel::Scalar));
     }
 }

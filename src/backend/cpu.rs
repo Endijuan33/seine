@@ -70,6 +70,7 @@ pub struct CpuBackendTuning {
     pub hash_flush_interval: Duration,
     pub event_dispatch_capacity: usize,
     pub page_mode: CpuPageMode,
+    pub kernel: Option<fixed_argon::CpuKernel>,
 }
 
 impl Default for CpuBackendTuning {
@@ -80,6 +81,7 @@ impl Default for CpuBackendTuning {
             hash_flush_interval: DEFAULT_HASH_FLUSH_INTERVAL,
             event_dispatch_capacity: DEFAULT_EVENT_DISPATCH_CAPACITY,
             page_mode: CpuPageMode::Auto,
+            kernel: None,
         }
     }
 }
@@ -92,6 +94,7 @@ impl CpuBackendTuning {
             hash_flush_interval: self.hash_flush_interval.max(Duration::from_millis(1)),
             event_dispatch_capacity: self.event_dispatch_capacity.max(1),
             page_mode: self.page_mode,
+            kernel: self.kernel,
         }
     }
 }
@@ -166,6 +169,7 @@ struct Shared {
     hash_flush_interval: Duration,
     event_dispatch_capacity: usize,
     page_mode: CpuPageMode,
+    kernel: fixed_argon::CpuKernel,
 }
 
 pub struct CpuBackend {
@@ -239,6 +243,9 @@ impl CpuBackend {
                 hash_flush_interval: tuning.hash_flush_interval,
                 event_dispatch_capacity: tuning.event_dispatch_capacity,
                 page_mode: tuning.page_mode,
+                kernel: tuning
+                    .kernel
+                    .unwrap_or_else(fixed_argon::CpuKernel::preferred),
             }),
             worker_handles: Mutex::new(Vec::new()),
             event_forward_handle: Mutex::new(None),
@@ -351,6 +358,9 @@ impl PowBackend for CpuBackend {
     }
 
     fn start(&self) -> Result<()> {
+        if !self.shared.kernel.is_supported() {
+            return Err(anyhow!("unsupported CPU kernel {}", self.shared.kernel));
+        }
         if self.shared.started.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -675,6 +685,9 @@ impl CpuBackend {
         warmup: bool,
         shutdown: &AtomicBool,
     ) -> Result<KernelBenchSample> {
+        if !self.shared.kernel.is_supported() {
+            return Err(anyhow!("unsupported CPU kernel {}", self.shared.kernel));
+        }
         reset_arena_telemetry(&self.shared);
         let lanes = self.threads.max(1);
         let core_ids = resolve_affinity_core_ids(self.affinity_mode);
@@ -693,7 +706,9 @@ impl CpuBackend {
                 {
                     let _ = core_affinity::set_for_current(core_id);
                 }
-                let hasher = fixed_argon::FixedArgon2id::new(POW_MEMORY_KB);
+                let hasher =
+                    fixed_argon::FixedArgon2id::with_kernel(POW_MEMORY_KB, self.shared.kernel)
+                        .expect("kernel support checked before benchmark workers start");
                 let block_count = hasher.block_count();
                 let mut arena = kernel::PowArena::new(block_count, page_mode).map_err(|err| {
                     anyhow!(
@@ -1737,5 +1752,38 @@ mod tests {
         assert!(!backend.shared.error_emitted.load(Ordering::Acquire));
         assert_eq!(backend.shared.work_generation.load(Ordering::Acquire), 0);
         assert_eq!(backend.shared.assignment_hashes.load(Ordering::Acquire), 0);
+    }
+}
+
+#[cfg(test)]
+mod kernel_selection_tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_kernel_fails_before_worker_or_arena_startup() {
+        for kernel in fixed_argon::CpuKernel::ALL
+            .into_iter()
+            .filter(|k| !k.is_supported())
+        {
+            let backend = CpuBackend::with_tuning(
+                1,
+                CpuAffinityMode::Off,
+                CpuBackendTuning {
+                    kernel: Some(kernel),
+                    ..CpuBackendTuning::default()
+                },
+            );
+            assert!(backend
+                .start()
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported CPU kernel"));
+            assert!(!backend.shared.started.load(Ordering::Relaxed));
+            assert!(backend
+                .kernel_bench(1, &AtomicBool::new(false))
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported CPU kernel"));
+        }
     }
 }
