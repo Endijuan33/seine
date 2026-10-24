@@ -109,7 +109,7 @@ def main():
         observed = json.loads((cell / 'results/binary-sha256.json').read_text())
         assert expected == observed, cell
         trials = [summarize_trial(cell / 'results' / label, experiment)
-                  for label in ('regular-t1', 'large-t1', 'large-t4')]
+                  for label in experiment.get('configs', ['regular-t1', 'large-t1', 'large-t4'])]
         summaries.append({'instance_type': cell.name, 'comparison': experiment['comparison'],
                           'trials': trials})
         for trial in trials:

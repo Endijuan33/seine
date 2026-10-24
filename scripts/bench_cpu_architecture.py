@@ -38,6 +38,8 @@ def main():
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--pairs', type=int, default=4)
     parser.add_argument('--seconds', type=int, default=12)
+    parser.add_argument('--configs', nargs='+', choices=['regular-t1', 'large-t1', 'large-t4'],
+                        default=['regular-t1', 'large-t1', 'large-t4'])
     args = parser.parse_args()
     root = args.root.resolve()
     out = root / 'results'
@@ -50,7 +52,7 @@ def main():
     comparison = 'avx2-vs-avx512' if avx512 else 'old-vs-paired-avx2'
     write_json(out / 'experiment.json', {'comparison': comparison, 'pairs': args.pairs,
                'seconds': args.seconds, 'rounds': 2, 'warmup_rounds': 1,
-               'affinity': 'os', 'autotune': False})
+               'affinity': 'os', 'autotune': False, 'configs': args.configs})
     binaries = list((root / 'bin').iterdir())
     identities = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in binaries}
     write_json(out / 'binary-sha256.json', identities)
@@ -65,7 +67,9 @@ def main():
     old_pages = int(Path('/proc/sys/vm/nr_hugepages').read_text())
     assert old_pages == 0, 'use a dedicated VM with no pre-existing page pool'
     try:
-        for mode, workers in [('regular', 1), ('large', 1), ('large', 4)]:
+        for label in args.configs:
+            mode, workers_text = label.rsplit('-t', 1)
+            workers = int(workers_text)
             if mode == 'large':
                 run(['sudo', 'sysctl', '-w', 'vm.nr_hugepages=4096'], out / 'reserve-pages.log')
                 assert int(Path('/proc/sys/vm/nr_hugepages').read_text()) == 4096
