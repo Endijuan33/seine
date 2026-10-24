@@ -11,7 +11,13 @@ const MAX_DRIFT: f64 = 0.08;
 pub(super) fn limits(cfg: &Config, owned_bytes: u64) -> (usize, usize, usize) {
     let (_, available) = cpu_autotune_capacity(cfg, owned_bytes);
     let (min, max) = worker_bounds(cfg, cpu_autotune_worker_ceiling(cfg));
-    (min, max, available.min(max))
+    (
+        min,
+        max,
+        available
+            .min(max)
+            .min(cfg.cpu_autotune_worker_slots.unwrap_or(max)),
+    )
 }
 
 fn worker_bounds(cfg: &Config, cpu_ceiling: usize) -> (usize, usize) {
@@ -68,19 +74,89 @@ fn seed_threads(
         .clamp(floor, max.min(available))
 }
 
-pub(super) fn prepare(cfg: &mut Config) {
+// Threads already running (including the API's Tokio worker pool) are charged
+// in pids.current. Reserve only later work. DNS/blocking and GPU driver threads
+// are demand-driven, so the margin is best effort; startup also handles spawn
+// failure. Keep this accounting alongside the mining startup order.
+fn startup_task_reserve(cfg: &Config) -> usize {
+    let cpu = instances(cfg);
+    let backends = cfg.backend_specs.len();
+    let common = cpu + 2 * backends + 2; // event forwarders, executors, init/cleanup, fan-in, tuner
+    let network = match cfg.mode {
+        // User AND dev sessions: two Stratum + two HTTP runtimes + fetch worker.
+        MiningMode::Pool => 5 + 3, // three DNS/blocking slots
+        MiningMode::Daemon => 2 + usize::from(cfg.sse_enabled) + 2, // prefetch, submit, SSE, DNS
+    };
+    common + network
+        + if cfg.token.is_some() { 2 } else { 0 } // JSON and SSE HTTP runtimes
+        + if should_enable_tui(cfg) { 2 } else { 0 }
+        + usize::from(cfg.api_server_enabled || cfg.service_mode) // control worker may race prepare
+        + 2 * (backends - cpu) // additional accelerator/driver startup margin
+}
+
+fn provisioned_slots(max: usize, count: usize, headroom: Option<usize>, reserve: usize) -> usize {
+    headroom
+        .map_or(max, |remaining| {
+            remaining.saturating_sub(reserve) / count.max(1)
+        })
+        .min(max)
+}
+
+pub(super) fn manual_limit(cfg: &Config, backends: &[Arc<CpuBackend>]) -> usize {
+    let running: Vec<_> = backends
+        .iter()
+        .filter(|b| b.adaptive_snapshot().running)
+        .collect();
+    let slots = running
+        .iter()
+        .map(|b| b.worker_capacity())
+        .min()
+        .unwrap_or(0);
+    let owned = running
+        .iter()
+        .map(|b| b.adaptive_snapshot().committed_bytes)
+        .sum();
+    let current = running.iter().map(|b| b.enabled_lanes()).min().unwrap_or(0);
+    let (_, available) = cpu_autotune_capacity(cfg, owned);
+    available.min(slots).max(current)
+}
+
+pub(super) fn prepare(cfg: &mut Config) -> Result<()> {
     if instances(cfg) == 0 {
-        return;
+        return Ok(());
     }
     let (memory_capacity, available) = cpu_autotune_capacity(cfg, 0);
-    let (min, max) = worker_bounds(cfg, cpu_autotune_worker_ceiling(cfg));
-    let available = available.min(max);
+    prepare_with_resources(
+        cfg,
+        cpu_autotune_worker_ceiling(cfg),
+        memory_capacity,
+        available,
+        crate::config::cpu_task_headroom(),
+    )
+}
+
+fn prepare_with_resources(
+    cfg: &mut Config,
+    cpu_ceiling: usize,
+    memory_capacity: usize,
+    available: usize,
+    headroom: Option<usize>,
+) -> Result<()> {
+    let (min, max) = worker_bounds(cfg, cpu_ceiling);
+    let slots = provisioned_slots(max, instances(cfg), headroom, startup_task_reserve(cfg));
+    if slots == 0 {
+        bail!("insufficient task/thread headroom for automatic CPU mining and its control/network threads; increase the process task limit or stop other tasks in this cgroup");
+    }
+    let available = available.min(max).min(slots);
     let seed = read_seed(cfg);
     let threads = seed_threads(seed.as_ref(), min, max, available, memory_capacity);
     // Zero is intentional here. A parked CPU backend stays connected and can
     // recover when a whole arena plus the configured reserve fits again.
     cfg.threads = threads;
-    cfg.cpu_auto_threads_cap = max;
+    cfg.cpu_autotune_worker_slots = Some(slots);
+    // This field also bounds manual controls/offline tuning; never replace its
+    // RAM ceiling with the larger parked-slot or CPU-only search maximum.
+    cfg.cpu_auto_threads_cap = memory_capacity.min(slots);
     for spec in cfg
         .backend_specs
         .iter_mut()
@@ -95,7 +171,8 @@ pub(super) fn prepare(cfg: &mut Config) {
     } else {
         "initial estimate"
     };
-    info("MINER", format!("cpu-autotune | starting with {threads} threads ({reason}); tuning while mining, capacity={max}, currently available={available}"));
+    info("MINER", format!("cpu-autotune | starting with {threads} threads ({reason}); tuning while mining, capacity={max}, worker slots={slots}, currently available={available}"));
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -659,8 +736,12 @@ impl Controller {
                     .name("cpu-autotune".into())
                     .spawn(move || {
                         let (min, max, available) = limits(&cfg, 0);
-                        let mut policy = Policy::new(&cfg, cfg.threads, min, max);
-                        policy.observe_cap(0, available);
+                        let slots = backends.iter().filter(|b| b.adaptive_snapshot().running)
+                            .map(|b| b.worker_capacity()).min().unwrap_or(0);
+                        let current = backends.iter().filter(|b| b.adaptive_snapshot().running)
+                            .map(|b| b.enabled_lanes()).min().unwrap_or(0);
+                        let mut policy = Policy::new(&cfg, current, min, max);
+                        policy.observe_cap(0, available.min(slots));
                         let mut record = read_seed(&cfg);
                         discard_cached_scores(&mut record);
                         let host = cpu_autotune_host_fingerprint();
@@ -684,13 +765,16 @@ impl Controller {
                             if snapshots.is_empty() {
                                 break;
                             }
+                            let slots = backends.iter().zip(&all_snapshots)
+                                .filter(|(_, snapshot)| snapshot.running)
+                                .map(|(backend, _)| backend.worker_capacity()).min().unwrap_or(0);
                             let actual = snapshots.iter().map(|s| s.threads).min().unwrap_or(0);
                             let owned = snapshots.iter().map(|s| s.committed_bytes).sum();
                             let count_failures =
                                 snapshots.iter().map(|s| s.allocation_failures).sum();
                             let (_, available) = cpu_autotune_capacity(&cfg, owned);
                             let cap =
-                                pressure_backoff.cap(pressure.elevated(), available, actual, max);
+                                pressure_backoff.cap(pressure.elevated(), available.min(slots), actual, max);
                             let now = started.elapsed().as_secs();
                             let (action, decision) = policy.tick_joint(
                                 &mut kernels, now, &all_snapshots, cap, count_failures > failures,
@@ -759,7 +843,7 @@ impl Controller {
                                     state.threads = policy.current * snapshots.len();
                                     if let Some(control) = &mut state.thread_control {
                                         control.current_threads = policy.current;
-                                        control.max_threads = max;
+                                        control.max_threads = cap.max(policy.current);
                                     }
                                 }
                             }
@@ -866,6 +950,134 @@ mod tests {
     use super::*;
 
     #[test]
+    fn preparation_keeps_ram_manual_limit_separate_and_rejects_exhausted_pid_budget() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_autotune_config_path =
+            std::env::temp_dir().join(format!("seine-no-seed-{}", std::process::id()));
+        let reserve = startup_task_reserve(&cfg);
+        prepare_with_resources(&mut cfg, 16, 1, 1, Some(reserve + 4)).unwrap();
+        assert_eq!(cfg.cpu_autotune_worker_slots, Some(4));
+        assert_eq!(cfg.cpu_auto_threads_cap, 1);
+        assert_eq!(cfg.threads, 1);
+        assert_eq!(cfg.backend_specs[0].cpu_threads, Some(1));
+        assert!(prepare_with_resources(&mut cfg, 16, 1, 1, Some(reserve)).is_err());
+        assert_eq!(cfg.cpu_autotune_worker_slots, Some(4), "failure is atomic");
+        prepare_with_resources(&mut cfg, 16, 16, 16, None).unwrap();
+        assert_eq!(
+            cfg.cpu_autotune_worker_slots,
+            Some(16),
+            "new session can reprovision"
+        );
+        assert_eq!(cfg.cpu_auto_threads_cap, 16);
+        assert_eq!(cfg.threads, 8);
+    }
+
+    #[test]
+    #[ignore = "requires an owned task-limited cgroup and a real 2 GiB arena; run optimized"]
+    fn pid_budget_startup_probe() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_autotune_threads = true;
+        cfg.cpu_page_mode = CpuPageMode::Regular;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        let (memory_capacity, available) = cpu_autotune_capacity(&cfg, 0);
+        assert_eq!(available, 1, "fixture must allow exactly one active arena");
+        let legacy = std::env::var_os("SEINE_PID_PROBE_LEGACY").is_some();
+        let capacity = if legacy {
+            memory_capacity
+        } else {
+            cpu_autotune_worker_ceiling(&cfg)
+        };
+        // Deliberately bypass PID preflight: this isolates the race/OS-limit
+        // fallback. Full mining needs more tasks than this backend-only fixture.
+        let backend = CpuBackend::adaptive(
+            1,
+            capacity,
+            cfg.cpu_affinity,
+            CpuBackendTuning {
+                page_mode: CpuPageMode::Regular,
+                ..CpuBackendTuning::default()
+            },
+        );
+        println!("PID_PROBE legacy={legacy} seed=1 capacity={capacity} preflight=bypassed");
+        let result = backend.start();
+        println!(
+            "PID_PROBE startup={result:?} provisioned={} stride={}",
+            backend.worker_capacity(),
+            backend.lanes()
+        );
+        backend.stop();
+        result.expect("bounded one-arena backend should start");
+    }
+
+    #[test]
+    fn pid_budget_shares_headroom_without_changing_cache_or_manual_bounds() {
+        assert_eq!(provisioned_slots(16, 2, Some(24), 8), 8);
+        assert_eq!(provisioned_slots(16, 2, Some(9), 8), 0);
+        assert_eq!(provisioned_slots(16, 1, Some(4), 8), 0);
+        assert_eq!(provisioned_slots(4, 1, Some(24), 8), 4);
+        assert_eq!(provisioned_slots(16, 2, None, 8), 16);
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_auto_threads_cap = 1; // RAM-safe manual ceiling
+        cfg.cpu_autotune_worker_slots = Some(3);
+        assert_eq!(
+            worker_bounds(&cfg, 16).1,
+            16,
+            "PID slots are not the cache maximum"
+        );
+        let cached = record(&cfg, 12);
+        assert_eq!(seed_threads(Some(&cached), 1, 16, 3, 16), 3);
+        assert_eq!(cfg.cpu_auto_threads_cap, 1);
+        assert_eq!(
+            seed_threads(Some(&cached), 1, 16, 16, 16),
+            12,
+            "next unrestricted run recovers seed"
+        );
+    }
+
+    #[test]
+    fn count_trials_never_exceed_provisioned_slots_even_with_abundant_ram() {
+        let mut p = policy(1);
+        let mut hashes = 0;
+        for now in 0..3000 {
+            hashes += p.current as u64 * 10;
+            let _ = p.tick(now, hashes, true, 2, false, p.current);
+            assert!(p.current <= 2);
+        }
+        assert_eq!(
+            p.max, 16,
+            "resource cap does not replace cache/search maximum"
+        );
+        assert_eq!(p.current, 2);
+    }
+
+    #[test]
+    fn startup_task_reserve_accounts_for_both_pool_sessions_and_existing_api_pool() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.mode = MiningMode::Pool;
+        cfg.token = None;
+        cfg.ui_mode = UiMode::Plain;
+        cfg.api_server_enabled = false;
+        cfg.service_mode = false;
+        assert_eq!(startup_task_reserve(&cfg), 13); // 5 common + 5 pool + 3 DNS
+        cfg.api_server_enabled = true;
+        assert_eq!(
+            startup_task_reserve(&cfg),
+            14,
+            "API workers already charged in pids.current"
+        );
+        cfg.token = Some("test".into());
+        assert_eq!(startup_task_reserve(&cfg), 16);
+        cfg.ui_mode = UiMode::Tui;
+        assert_eq!(startup_task_reserve(&cfg), 18);
+        cfg.backend_specs.push(cfg.backend_specs[0]);
+        assert_eq!(
+            startup_task_reserve(&cfg),
+            21,
+            "per-instance costs deducted before division"
+        );
+    }
+
+    #[test]
     #[ignore = "runs productive online tuning for up to five minutes with real 2 GiB arenas; run optimized"]
     fn productive_controller_real_smoke() {
         use crate::backend::{NonceChunk, WorkAssignment, WorkTemplate};
@@ -885,7 +1097,7 @@ mod tests {
         ));
         cfg.cpu_autotune_config_path = dir.join("tuning.json");
         let start = Instant::now();
-        prepare(&mut cfg);
+        prepare(&mut cfg).unwrap();
         assert_eq!(
             limits(&cfg, 0).2,
             2,
@@ -943,7 +1155,7 @@ mod tests {
             backend.stop();
             let mut cached = cfg.clone();
             let cached_start = Instant::now();
-            prepare(&mut cached);
+            prepare(&mut cached).unwrap();
             assert_eq!(cached.threads, record.selected_threads);
             println!("productive_controller_real_smoke elapsed_secs={elapsed:.3} completed_hashes={completed} selected_threads={} cached_prepare_secs={:.4} measurements={:?}", record.selected_threads, cached_start.elapsed().as_secs_f64(), record.measurements);
         }));
