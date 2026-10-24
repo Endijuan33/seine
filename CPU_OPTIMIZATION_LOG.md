@@ -11,6 +11,8 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 sequential Milan/Turin investigation and streaming-store candidate`
+
 - `2026-10-24 automatic joint CPU kernel and worker selection`
 - `2026-10-24 stable efficiency selections during productive rechecks`
 - `2026-10-24 productive CPU autotuning and changing resource budgets`
@@ -58,6 +60,74 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 sequential Milan/Turin investigation and streaming-store candidate
+
+- Investigated eight proposed directions in isolated experiments against
+  **785a06f**, with portable Rust 1.93.0 CPU-only builds. The full report,
+  reproducible generators, exact streaming patch, numeric comparisons and
+  integration requirements are in
+  [experiments/epyc-investigation](experiments/epyc-investigation/README.md).
+  Production allocation, automatic ISA selection and autotuning are unchanged.
+- Hosts: two-node EPYC 7R13 (c6a.8xlarge, 16 physical cores / 32 threads) for NUMA
+  and page sizes; EPYC 9R45 (c8a.8xlarge, 32 physical cores, one exposed NUMA node,
+  four L3 groups) for Zen 5 kernels. Both advertise 64 GiB. These are guests, not
+  complete physical sockets; guest page backing does not prove host backing.
+- **NUMA:** balanced pools were neutral (+0.057%). With a deliberately one-node
+  HugeTLB pool, strict local allocation plus local THP fallback improved eight
+  workers by **40.40%**, with all three pairs positive. It restored both locality
+  and memory-node distribution; this is not a pure remote-latency percentage or
+  a general EPYC gain. A balanced all-remote control lost about 7%.
+- **1 GiB pages:** +0.056% against verified 2 MiB HugeTLB at 12 workers, with mixed
+  pair signs. No useful advantage on the Milan guest.
+- **Earlier DD seed/prefetch:** 256-bit path regressed 0.88–4.96%; full-width path
+  was +0.39% at one worker and -0.64% at 24. Assembly verified earlier prefetch
+  placement. Rejected.
+- **Different DI/DD kernels:** apparent low-count improvements over uniform
+  256-bit AVX-512 lost to uniform full-width AVX-512. Reverse mixtures also lost
+  to stronger controls. Rejected tested mixtures; no per-phase policy adopted.
+- **DD prefetch hints:** T1 regressed 3–7% in both widths. NTA stayed within 0.3%
+  across eight/24-worker screens. Retain T0.
+- **Streaming stores with a cached ring:** a 64 KiB ring retains recent outputs
+  while aligned full-line non-temporal stores populate the unchanged 2 GiB
+  arena. MFENCE orders each 64-block batch and the final arena read. At exactly
+  64 blocks of reference distance, read the arena to avoid ring/output aliasing.
+  At 24 workers, three alternating pairs of two 20-second measured rounds after
+  one warmup confirmed **+27.78% versus AVX2** (35.3282 to 45.1427 completed H/s;
+  pair changes +27.34% to +28.42%) and **+25.27% versus uniform 256-bit AVX-512**
+  (36.0373 to 45.1441; +24.99% to +25.52%). Rates include final completed hashes
+  and end-fence elapsed time. The short one-worker screen regressed **3.53%**;
+  eight workers were flat (-0.20%). Retain as an experimental candidate with
+  explicit benchmark selection; no universal worker cutoff is established.
+- **Four independent row rounds:** additional YMM registers improved the weak
+  256-bit control at low counts, but lost **3.49% / 1.97%** against full-width
+  AVX-512 at one/eight workers and lost 1.24% against the 256-bit path at 24.
+  Rejected as a replacement.
+- **Hardware diagnostics:** four grouped core PMCs and DI/DD loop timings were
+  available on Turin. At 24 workers, full-width AVX-512 retired far fewer
+  instructions than AVX2 yet consumed more cycles. HugeTLB DTLB walks were few;
+  this does not establish a socket-bandwidth or clock explanation. No BIOS/NPS,
+  DIMM-channel controls, IBS, L3 or memory-controller PMUs were exposed. Physical
+  server controls remain hardware-limited; broader optional request/fill PMCs
+  were deferred before measurement to prioritize the confirmed throughput runs.
+- A final normal-loop streaming-store probe at 24 workers measured 24.06% fewer
+  cycles, 8.68% more retired instructions, and 42.70% fewer L2 data-cache store
+  requests per hash. This is one ordered diagnostic pass, consistent with less
+  cache-store pressure; it is not a socket-bandwidth measurement.
+- Correctness: kernel unit/integration checks, supported ISA outputs against
+  full-size RustCrypto, plus streaming ring/slice/rounding boundaries, three
+  inputs, dirty reuse and arena guards. Disassembly records actual instruction
+  changes. Normal production integration still needs an explicit candidate
+  identity/feature gate, live kernel-switch validation, and broader hardware
+  measurements; the architecture-dispatch session owns that follow-up.
+- Accepted backend comparisons verified arena backing/locality and retained
+  allocation, swap, OOM, steal and fence evidence. An entire NUMA pilot with an
+  incorrect startup-fallback assertion is excluded and preserved. Short screens
+  are directional; descriptive pair intervals do not quantify cross-host
+  uncertainty. Raw reports and binaries are archived under the worktree's
+  ignored `data/epyc-investigation/` with SHA-256 manifests and rental cleanup
+  records. All 136 Milan and 786 Turin archive files verified; both instances,
+  disks and security groups were deleted and their private keys removed.
 
 ## 2026-10-24 automatic joint CPU kernel and worker selection
 
