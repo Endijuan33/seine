@@ -6,7 +6,31 @@ appends the auto-generated compare link). Write for miners deciding whether to
 upgrade: lead with what they gain, keep it brief, skip internal refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
-## Unreleased
+## v0.2.21
+
+**Start mining sooner and adapt as conditions change.** Automatic CPU tuning
+starts from a compatible cached worker count or an estimate capped by available
+RAM, then compares settings while mining. Temporary CPU load no longer determines
+the worker count for the whole session. Tuning does not reconnect to the pool or
+restart GPU backends.
+
+**Recover from changing RAM availability.** Automatic CPU workers release memory
+when headroom falls and return after conditions stabilize, including pausing all
+CPU workers if no complete arena fits. Temporary RAM limits preserve the remembered
+higher worker count for later use. Allocation failures back off before retrying.
+
+**Automatic CPU kernel selection.** Mining can compare AVX2 and AVX-512 while
+continuing useful work, alongside adaptive worker-count tuning. It changes paths
+only after two confirmed gains, remembers choices for the measured worker count
+and memory backing, and keeps memory-pressure recovery active during comparisons.
+No configuration is required; the existing CPU autotuning opt-out disables it.
+Experimental kernels remain outside automatic selection.
+
+**Steadier efficiency mode.** Once a lower worker count meets the profile's
+hashrate target, it stays selected between probes instead of repeatedly climbing
+to known higher counts. New CPU capacity, RAM availability, and kernel choices
+can still trigger useful exploration. Explicit worker counts remain fixed unless
+autotuning is requested.
 
 ## v0.2.20
 

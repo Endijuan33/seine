@@ -182,6 +182,64 @@ impl Policy {
         self.next_trial = now.saturating_add(delay);
     }
 
+    fn tick_joint(
+        &mut self,
+        kernels: &mut super::adaptive_kernel::Tuner,
+        now: u64,
+        snapshots: &[crate::backend::cpu::CpuAdaptiveSnapshot],
+        cap: usize,
+        allocation_failed: bool,
+    ) -> (super::adaptive_kernel::Action, Option<Decision>) {
+        let running: Vec<_> = snapshots.iter().filter(|s| s.running).collect();
+        let actual = running.iter().map(|s| s.threads).min().unwrap_or(0);
+        let hashes = running.iter().map(|s| s.hashes).sum();
+        let ready = running.iter().all(|s| {
+            s.hashing
+                && s.warmed == s.threads
+                && s.resident_bytes == s.threads as u64 * CPU_LANE_MEMORY_BYTES
+        });
+        let safety_change = cap < actual
+            || actual != self.current
+            || allocation_failed
+            || running.len() != snapshots.len()
+            || actual == 0;
+        let action = if safety_change {
+            kernels.abort(now)
+        } else {
+            kernels.tick(now, snapshots, ready, matches!(self.phase, Phase::Baseline))
+        };
+        if action.hold_counts {
+            self.sampling = false;
+            self.idle_since = None;
+        }
+        if action.reset_scores {
+            self.kernel_changed(now);
+        }
+        let decision = if action.hold_counts && !safety_change {
+            None
+        } else {
+            self.tick(
+                now,
+                hashes,
+                ready && running.iter().all(|s| s.kernel_ready) && action.kernel.is_none(),
+                cap,
+                allocation_failed,
+                actual,
+            )
+        };
+        (action, decision)
+    }
+
+    fn kernel_changed(&mut self, now: u64) {
+        // Count samples must use one path, but the profile floor is a joint
+        // throughput frontier. Retain that peak and the discovery/retention
+        // state across confirmed path changes; resetting them can cycle between
+        // a low-count kernel and a high-count kernel under completely steady load.
+        // RAM recovery/backoff timers also remain in force.
+        self.reset(now, 0);
+        self.reference_hps = None;
+    }
+
     fn tick(
         &mut self,
         now: u64,
@@ -565,7 +623,9 @@ impl Controller {
                         let (min, max, _) = limits(&cfg, 0);
                         let mut policy = Policy::new(&cfg, cfg.threads, min, max);
                         let mut record = read_seed(&cfg);
+                        discard_cached_scores(&mut record);
                         let host = cpu_autotune_host_fingerprint();
+                        let mut kernels = super::adaptive_kernel::Tuner::new(&cfg, host.clone());
                         let started = Instant::now();
                         let mut failures = 0;
                         let mut pressure = MemoryPressure::default();
@@ -587,25 +647,31 @@ impl Controller {
                             }
                             let actual = snapshots.iter().map(|s| s.threads).min().unwrap_or(0);
                             let owned = snapshots.iter().map(|s| s.committed_bytes).sum();
-                            let hashes = snapshots.iter().map(|s| s.hashes).sum();
                             let count_failures =
                                 snapshots.iter().map(|s| s.allocation_failures).sum();
-                            let ready = snapshots.iter().all(|s| {
-                                s.hashing
-                                    && s.warmed == s.threads
-                                    && s.resident_bytes == s.threads as u64 * CPU_LANE_MEMORY_BYTES
-                            });
                             let (_, available) = cpu_autotune_capacity(&cfg, owned);
                             let cap =
                                 pressure_backoff.cap(pressure.elevated(), available, actual, max);
-                            if let Some(decision) = policy.tick(
-                                started.elapsed().as_secs(),
-                                hashes,
-                                ready,
-                                cap,
-                                count_failures > failures,
-                                actual,
-                            ) {
+                            let now = started.elapsed().as_secs();
+                            let (action, decision) = policy.tick_joint(
+                                &mut kernels, now, &all_snapshots, cap, count_failures > failures,
+                            );
+                            if let Some(kernel) = action.kernel {
+                                for (backend, snapshot) in backends.iter().zip(&all_snapshots) {
+                                    if snapshot.running {
+                                        if let Err(err) = backend.set_active_kernel(kernel) {
+                                            warn("MINER", format!("cpu-autotune | kernel switch failed: {err:#}"));
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(message) = action.message {
+                                info("MINER", format!("cpu-autotune | {message}"));
+                            }
+                            if action.reset_scores {
+                                discard_cached_scores(&mut record);
+                            }
+                            if let Some(decision) = decision {
                                 for (backend, snapshot) in backends.iter().zip(&all_snapshots) {
                                     if snapshot.running {
                                         backend.set_active_threads(decision.threads);
@@ -676,6 +742,16 @@ impl Controller {
 impl Drop for Controller {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+fn discard_cached_scores(record: &mut Option<CpuAutotuneRecord>) {
+    if let Some(record) = record {
+        // A temporarily RAM-limited run must retain the higher count as a seed,
+        // even though measurements from another path cannot be reused.
+        record.measured_hps = 0.0;
+        record.measurements.clear();
+        record.mining_measurement = false;
     }
 }
 
@@ -991,6 +1067,202 @@ mod tests {
             recovered,
             "a busy interval must not permanently cap throughput"
         );
+    }
+
+    #[test]
+    fn joint_tuner_finds_count_dependent_kernel_and_preserves_memory_safety() {
+        use crate::backend::cpu::CpuAdaptiveSnapshot;
+        use blocknet_pow_kernel::CpuKernel;
+        if !CpuKernel::Avx512.is_supported() || !CpuKernel::Avx2.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_autotune_config_path =
+            std::env::temp_dir().join(format!("seine-joint-test-{}.json", std::process::id()));
+        let path = std::path::PathBuf::from(format!(
+            "{}.kernels.json",
+            cfg.cpu_autotune_config_path.display()
+        ));
+        let _ = fs::remove_file(&path);
+        let mut kernels =
+            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut p = Policy::new(&cfg, 1, 1, 4);
+        p.profile = CpuPerformanceProfile::Throughput;
+        let mut snapshot = CpuAdaptiveSnapshot {
+            kernel: CpuKernel::Avx512,
+            kernel_generation: 1,
+            kernel_ready: true,
+            backing_bytes: [0, 0, 0, CPU_LANE_MEMORY_BYTES, 0],
+            running: true,
+            threads: 1,
+            committed_bytes: CPU_LANE_MEMORY_BYTES,
+            resident_bytes: CPU_LANE_MEMORY_BYTES,
+            hashes: 0,
+            hashing: true,
+            allocation_failures: 0,
+            warmed: 1,
+        };
+        let mut learned = Vec::new();
+        for now in 0..7200 {
+            let rates = if snapshot.kernel == CpuKernel::Avx512 {
+                [0, 110, 200, 215, 210]
+            } else {
+                [0, 100, 220, 240, 230]
+            };
+            snapshot.hashes += rates[p.current];
+            let (action, decision) = p.tick_joint(&mut kernels, now, &[snapshot], 4, false);
+            if action.hold_counts {
+                assert!(decision.is_none());
+            }
+            if let Some(kernel) = action.kernel {
+                if kernel != snapshot.kernel {
+                    snapshot.kernel_generation += 1;
+                }
+                snapshot.kernel = kernel;
+            }
+            if let Some(decision) = decision {
+                if now > 3600 && decision.learned.is_some() {
+                    learned.push((decision.threads, snapshot.kernel));
+                }
+            }
+            snapshot.threads = p.current;
+            snapshot.warmed = p.current;
+            snapshot.resident_bytes = p.current as u64 * CPU_LANE_MEMORY_BYTES;
+            snapshot.committed_bytes = snapshot.resident_bytes;
+            snapshot.backing_bytes[3] = snapshot.resident_bytes;
+        }
+        assert!(!learned.is_empty());
+        assert!(
+            learned
+                .iter()
+                .all(|&(count, kernel)| count == 3 && kernel == CpuKernel::Avx2),
+            "{learned:?}"
+        );
+        // Force a new backing context so a kernel trial is active when RAM vanishes.
+        snapshot.backing_bytes.swap(0, 3);
+        let (action, _) = p.tick_joint(&mut kernels, 7201, &[snapshot], 4, false);
+        assert!(action.hold_counts);
+        let (action, decision) = p.tick_joint(&mut kernels, 7202, &[snapshot], 0, false);
+        assert!(!action.hold_counts);
+        assert_eq!(decision.unwrap().threads, 0);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn joint_efficiency_does_not_cycle_between_count_specific_kernels() {
+        use crate::backend::cpu::CpuAdaptiveSnapshot;
+        use blocknet_pow_kernel::CpuKernel;
+        if !CpuKernel::Avx512.is_supported() || !CpuKernel::Avx2.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-joint-efficiency-{}.json",
+            std::process::id()
+        ));
+        let path = std::path::PathBuf::from(format!(
+            "{}.kernels.json",
+            cfg.cpu_autotune_config_path.display()
+        ));
+        let _ = fs::remove_file(&path);
+        let mut kernels =
+            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut p = Policy::new(&cfg, 1, 1, 8);
+        p.profile = CpuPerformanceProfile::Efficiency;
+        let mut s = CpuAdaptiveSnapshot {
+            kernel: CpuKernel::Avx512,
+            kernel_generation: 1,
+            kernel_ready: true,
+            backing_bytes: [0, 0, 0, CPU_LANE_MEMORY_BYTES, 0],
+            running: true,
+            threads: 1,
+            committed_bytes: CPU_LANE_MEMORY_BYTES,
+            resident_bytes: CPU_LANE_MEMORY_BYTES,
+            hashes: 0,
+            hashing: true,
+            allocation_failures: 0,
+            warmed: 1,
+        };
+        let mut confirmations = 0;
+        for now in 0..14_400 {
+            let rates = if s.kernel == CpuKernel::Avx512 {
+                [0, 35, 70, 105, 140, 160, 170, 175, 180]
+            } else {
+                [0, 30, 60, 90, 120, 150, 170, 190, 200]
+            };
+            s.hashes += rates[p.current];
+            let (action, decision) = p.tick_joint(&mut kernels, now, &[s], 8, false);
+            if let Some(kernel) = action.kernel {
+                if kernel != s.kernel {
+                    s.kernel_generation += 1;
+                }
+                s.kernel = kernel;
+            }
+            if let Some(d) = decision {
+                if now > 7200 && d.learned.is_some() {
+                    confirmations += 1;
+                    assert_eq!(
+                        d.threads, 5,
+                        "stable count at {now}s, kernel={}, peak={}",
+                        s.kernel, p.peak_hps
+                    );
+                    assert_eq!(s.kernel, CpuKernel::Avx512);
+                }
+            }
+            s.threads = p.current;
+            s.warmed = p.current;
+            s.resident_bytes = p.current as u64 * CPU_LANE_MEMORY_BYTES;
+            s.committed_bytes = s.resident_bytes;
+            s.backing_bytes[3] = s.resident_bytes;
+        }
+        assert!(confirmations >= 10);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn kernel_score_invalidation_retains_ram_limited_startup_hint() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_autotune_config_path =
+            std::env::temp_dir().join(format!("seine-joint-seed-test-{}.json", std::process::id()));
+        let mut old = record(&cfg, 8);
+        old.mining_measurement = true;
+        old.measured_hps = 200.0;
+        old.measurements.insert(8, sample(200.0));
+        let mut previous = Some(old);
+        discard_cached_scores(&mut previous);
+        let saved = save_observation(
+            &cfg,
+            &CpuAutotuneHostFingerprint::default(),
+            previous.as_ref(),
+            3,
+            3,
+            8,
+            &[(3, sample(100.0))],
+        )
+        .unwrap();
+        assert_eq!(saved.selected_threads, 8);
+        assert_eq!(saved.measured_hps, 0.0);
+        assert!(!saved.measurements.contains_key(&8));
+        assert!(saved.measurements.contains_key(&3));
+        let _ = fs::remove_file(cfg.cpu_autotune_config_path);
+    }
+
+    #[test]
+    fn kernel_change_preserves_joint_profile_frontier_and_memory_backoff() {
+        let mut p = policy(4);
+        p.reference_hps = Some(100.0);
+        p.peak_hps = 110.0;
+        p.ramp = false;
+        p.next_up_probe = Some(8);
+        p.allocation_retry_at = 500;
+        p.headroom_since = 123;
+        p.kernel_changed(200);
+        assert_eq!(p.reference_hps, None);
+        assert_eq!(p.peak_hps, 110.0);
+        assert!(!p.ramp);
+        assert_eq!(p.next_up_probe, None);
+        assert_eq!(p.allocation_retry_at, 500);
+        assert_eq!(p.headroom_since, 123);
     }
 
     #[test]

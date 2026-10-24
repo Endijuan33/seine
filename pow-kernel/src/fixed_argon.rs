@@ -114,6 +114,16 @@ impl FixedArgon2id {
         Ok(Self::new_for_isa(requested_memory_kib, kernel_isa(kernel)))
     }
 
+    /// Change compression paths between hashes, retaining address precomputation.
+    /// The mutable borrow prevents switching during an in-flight hash.
+    pub fn set_kernel(&mut self, kernel: CpuKernel) -> Result<()> {
+        if !kernel.is_supported() {
+            return Err(Error::UnsupportedKernel);
+        }
+        self.isa = kernel_isa(kernel);
+        Ok(())
+    }
+
     fn new_for_isa(requested_memory_kib: u32, isa: u8) -> Self {
         let lanes = ARGON2_LANES as usize;
         let min_blocks = 2 * SYNC_POINTS * lanes;
@@ -2755,6 +2765,51 @@ mod tests {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     use super::{FixedArgon2id, PowBlock};
+
+    #[test]
+    fn changing_kernels_reuses_precomputation_and_matches_reference() {
+        let memory = 32;
+        let mut fixed = FixedArgon2id::new(memory);
+        let table = fixed.data_independent_ref_indexes.as_ptr();
+        let mut arena = vec![PowBlock::default(); fixed.block_count()];
+        let reference = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(memory, 1, 1, Some(32)).unwrap(),
+        );
+        for (nonce, kernel) in crate::CpuKernel::ALL
+            .into_iter()
+            .cycle()
+            .take(15)
+            .enumerate()
+        {
+            let previous = fixed.isa_label();
+            if !kernel.is_supported() {
+                assert_eq!(
+                    fixed.set_kernel(kernel),
+                    Err(super::Error::UnsupportedKernel)
+                );
+                assert_eq!(fixed.isa_label(), previous);
+                continue;
+            }
+            fixed.set_kernel(kernel).unwrap();
+            assert_eq!(fixed.data_independent_ref_indexes.as_ptr(), table);
+            let mut expected = [0u8; 32];
+            let mut actual = [0u8; 32];
+            reference
+                .hash_password_into(&nonce.to_le_bytes(), b"kernel-switch", &mut expected)
+                .unwrap();
+            fixed
+                .hash_password_into_with_memory(
+                    &nonce.to_le_bytes(),
+                    b"kernel-switch",
+                    &mut actual,
+                    &mut arena,
+                )
+                .unwrap();
+            assert_eq!(actual, expected, "path {kernel}");
+        }
+    }
 
     #[test]
     fn fixed_kernel_matches_reference_for_small_memory_configs() {
