@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 AVX2 paired rounds and contiguous column loads/stores`
 - `Updated summary of cumulative adopted optimizations`
 - `2026-07-11 1 GiB explicit hugepages on WSL Zen 5 (adopted, pending boot pool)`
 - `2026-07-11 verifiable page modes, native Windows, and WSL HugeTLB confirmation`
@@ -43,6 +44,43 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Baseline`
 - `Benchmark protocol`
 
+## 2026-10-24 AVX2 paired rounds and contiguous column loads/stores
+
+- **Adopted**: interleave two independent AVX2 BLAMKA row/column rounds and
+  combine adjacent columns into 256-bit loads/stores with 128-bit-half
+  permutations. The data-dependent path retains column 0 before the existing
+  mid-compress prefetch, then pairs columns 1+2, 3+4, 5+6 and handles column 7
+  separately. Runtime ISA selection and the AVX-512/NEON/scalar kernels are unchanged.
+- **Host/method**: Ryzen 9 9950X3D, WSL, pinned logical CPU 0, Rust 1.93.0,
+  generic release build with fat LTO. Six order-balanced samples per variant,
+  at least six seconds each, measuring complete 2 GiB Argon2id hashes using
+  actual elapsed time. The reused arena had verified 2 GiB THP backing;
+  allocation, reference-index precomputation and warmup were outside timing.
+- **Full-hash kernel**: stock AVX2 `1.9501 H/s`, candidate `2.0644 H/s`
+  (**+5.86%**, winning all six paired rounds). Paired bootstrap 95% interval
+  was `+3.62%..+8.20%`; it describes these short local samples only. Stock
+  AVX-512 remained faster at `2.2144 H/s` and stays preferred on this host.
+- **Compression only**: `131.15 ns` to `115.12 ns` per 1 KiB block
+  (**+13.92% throughput**, five samples). This is not a full-miner gain.
+- **Correctness**: the investigation passed 640 reference comparisons across
+  eight configurations and matched full 2 GiB warmup hashes. In-repo regression
+  coverage now forces AVX2 on AVX-512 hosts and compares complete hashes with
+  RustCrypto Argon2. Direct compression tests cover both prefetch paths,
+  shared immutable inputs, varied block words and output boundary guards.
+- **Applied validation**: kernel tests pass in debug and release; kernel Clippy
+  passes with `-D warnings`. Workspace/all-target compilation and kernel/test
+  compile checks for Windows x86-64 and macOS ARM64 pass. Applied AVX2 hot
+  functions retain the measured candidate's sizes (2596/3736 bytes) and contain
+  no EVEX instructions or ZMM register operands.
+- **Evidence**: `data/isa-audit-8bn0w33f/REPORT.txt`, `hash-confirmation.jsonl`,
+  `micro-contiguous.jsonl`, `summary.json` and assembly dumps. The candidate's
+  hot functions contain no AVX-512 instructions. Nearby variants (unrolling,
+  phase fusion, pairing rows only, and 256-bit AVX-512 rotates) were screened
+  separately; only the pure-AVX2 paired/contiguous variant was adopted.
+- **Limits**: one Zen 5/WSL host and single-worker kernel measurements. Gains on
+  AVX2-only Intel/older AMD CPUs and full-backend throughput remain unmeasured.
+  The external screenshot's claimed C# advantage remains unverified.
+
 ## Updated summary of cumulative adopted optimizations
 
 ### x86_64 (AMD Ryzen 9 5900X, Zen 3)
@@ -70,6 +108,7 @@ Cumulative x86_64: from ~1.19 H/s (original) to ~2.34 H/s, **~97% total improvem
 | 48 | Compile AVX-512 x86 path into normal builds and keep runtime dispatch | +19.65% (1T kernel) | -0.28% at 16T backend (effectively flat) | Adopted |
 | 49 | `target-cpu=native` on top of the AVX-512-enabled build | +0.00% (1T kernel) | +0.71% at 16T backend | Recommended for host-local builds |
 | 51 | AVX-512 256-bit contiguous column gather/scatter + MaybeUninit q buffer | +1.5% (1T kernel) | memory-bound at 14T | Adopted |
+| 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | +5.86% (forced AVX2, 1T kernel) | Unmeasured | Adopted |
 
 Zen 5 result: AVX-512 materially reduces per-hash compute cost, but once 16 CPU
 lanes are active the backend is mostly memory/hugepage limited on this host, so
