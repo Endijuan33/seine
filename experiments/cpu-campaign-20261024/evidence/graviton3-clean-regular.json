@@ -1,6 +1,6 @@
 {
   "status": "order_limited",
-  "note": "Two alternating pairs; clean isolated baseline 359265e and candidate 8280a66 Cargo targets. Verified regular backing.",
+  "note": "Two repeated pairs; clean isolated baseline 359265e and candidate 8280a66 Cargo targets. Verified regular backing. Actual per-worker variant order did not reverse; these measurements are order-limited, not balanced confirmation.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
     "41695c16c1ff005e": {

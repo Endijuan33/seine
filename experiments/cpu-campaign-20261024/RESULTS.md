@@ -123,10 +123,11 @@ growth/switch tests, full-size ISA parity, 485 workspace tests and strict kernel
 Clippy passed. The same complete lifecycle also passed on Graviton2, including
 three workers and 6.028 GiB anonymous residency after constrained restart.
 
-Two clean alternating Ice Lake regression pairs compare the ARM-change build
-against its separately rebuilt CPU-only baseline: approximately −0.29% at one
-worker and −0.27% at twelve. This small negative is retained explicitly. Full
-reference parity and native workspace tests passed.
+Two repeated, order-limited Ice Lake regression pairs compare the ARM-change
+build against its separately rebuilt CPU-only baseline: approximately −0.29%
+at one worker and −0.27% at twelve. Each worker count kept the same variant order
+in both passes. These small negatives and that limitation are retained explicitly.
+Full reference parity and native workspace tests passed.
 
 The follow-up review found a separate startup regression in the recovery repair:
 parked OS threads can exhaust a tight PID budget. A network-free local backend

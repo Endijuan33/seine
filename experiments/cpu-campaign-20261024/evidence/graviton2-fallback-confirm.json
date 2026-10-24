@@ -1,6 +1,6 @@
 {
   "status": "order_limited",
-  "note": "Four alternating pairs per worker count, two30-second measured rounds plus warmup, separate CPU-only source targets, full2GiB reference parity. Neoverse-N1 lacks SHA3; this measures the candidate portable NEON fallback, not the SHA3 path. The same generic verifier built on Graviton3 separately passed native Graviton2 rejection and full-size dirty-reuse checks.",
+  "note": "Four repeated pairs per worker count, two30-second measured rounds plus warmup, separate CPU-only source targets, full2GiB reference parity. Neoverse-N1 lacks SHA3; this measures the candidate portable NEON fallback, not the SHA3 path. The same generic verifier built on Graviton3 separately passed native Graviton2 rejection and full-size dirty-reuse checks. Actual per-worker variant order did not reverse; these measurements are order-limited, not balanced confirmation.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
     "a3e2fd37c6ffb2e8": {

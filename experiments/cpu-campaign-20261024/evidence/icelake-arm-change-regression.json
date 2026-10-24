@@ -1,6 +1,6 @@
 {
   "status": "order_limited",
-  "note": "Two alternating same-profile baseline/candidate pairs at 1 and 12 workers, isolated Cargo targets. Candidate 2ce28ae changes ARM kernel plumbing; the separate lifecycle test exposed a pre-existing startup-memory-cap recovery bug and is not counted as passing.",
+  "note": "Two repeated same-profile baseline/candidate pairs at 1 and 12 workers, isolated Cargo targets. Candidate 2ce28ae changes ARM kernel plumbing; the separate lifecycle test exposed a pre-existing startup-memory-cap recovery bug and is not counted as passing. Actual per-worker variant order did not reverse; these measurements are order-limited, not balanced confirmation.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
     "f67f28aa297ef667": {

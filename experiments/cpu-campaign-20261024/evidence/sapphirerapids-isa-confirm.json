@@ -1,6 +1,6 @@
 {
   "status": "order_limited",
-  "note": "Four alternating pairs at1/12workers; same published v0.2.21 binary and explicit2MiB HugeTLB backing; two30-second measured rounds after warmup; completed hashes include fences.",
+  "note": "Four repeated pairs at1/12workers; same published v0.2.21 binary and explicit2MiB HugeTLB backing; two30-second measured rounds after warmup; completed hashes include fences. Actual full-width versus 256-bit order reversed, but AVX2-relative order did not; see RESULTS.md order review.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
     "85ecf0928c066a06": {
