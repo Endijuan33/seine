@@ -39,6 +39,14 @@ reference parity for all three nonces and dirty reuse. Both construction and
 runtime selection reject `neon-sha3`, leaving baseline NEON active. The real
 full-arena worker switch test passes. Performance fallback comparison is pending.
 
+## Independent review
+
+The existing research-session owner reviewed commit `079d5db` against the
+memory-recovery prerequisite and found no blocking issues. The read-only review
+covered runtime guards, private ISA state and target-feature boundaries, generic
+fallback, prefetch bounds/non-aliasing, cache support checks and automatic
+candidate limits. It did not independently rerun the hardware measurements.
+
 ## x86 regression and remaining confirmation
 
 Ice Lake ran two clean alternating pairs against the separately rebuilt
