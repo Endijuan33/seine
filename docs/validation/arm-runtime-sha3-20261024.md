@@ -78,11 +78,36 @@ kernel-crate Clippy passes.
 The kernel library also builds with pinned Rust 1.93.0 for
 `aarch64-apple-darwin` in an isolated Cargo target. This verifies compilation
 only; Apple Silicon candidate execution and performance remain untested.
-Native Graviton4 and the repaired complete lifecycle remain pending. No Apple cache-line policy change is
+Native Graviton4 and the repaired complete lifecycle passed; corrected final
+Graviton2/3 confirmation is still pending. No Apple cache-line policy change is
 made. The startup preference stays NEON everywhere; SHA3 is runtime-guarded and
 must pass the normal repeated productive comparison. Fixed-thread opt-out keeps
 the startup path. Experimental AVX-512/256 remains outside automatic candidates.
 
 Raw reports, archive hashes and normalized rounds are retained by the separate
-architecture evidence PR. The production source tree here matches campaign
-candidate `1246967` apart from documentation/comments.
+architecture evidence PR. Earlier `1246967` results predate the final PID
+hardening and x86 boundary isolation below.
+
+## Final x86 boundary isolation
+
+The final combined `636e688` build exposed a Cascade Lake regression during
+cross-architecture confirmation. Four balanced pairs at twelve workers measured
+9.303 H/s for the CPU-only v0.2.21 control and 9.036 for `636e688` (−2.60% to
+−3.34% per pair). The ARM wrapper refactor had also caused x86 fill loops to
+inline into a much larger dispatch function.
+
+`f20e7bb` adds an x86-only no-inline boundary. Actual miner disassembly restores
+the baseline's normalized dispatch/fill instruction sequences; this is not a
+whole-program equivalence claim. Four native pairs measured 9.267 H/s, with
+baseline-relative differences −0.93% to +0.004% (mean about −0.39%), consistently
+ahead of the regressed build. Full-size native reference parity passed. The
+original negative results and the residual difference remain in the evidence.
+The archive SHA256 is
+`22d2258d66fd292aaf998b86b753800bc0bc091b5eb450c1a39e4a7a545e0fdb`.
+
+The x86 attribute does not apply to ARM. Native Graviton4 full-size and three-nonce
+dirty-dispatch parity, kernel tests and strict kernel Clippy pass. Two corrected
+ARM pairs against `636e688` were near-flat: +0.003% to +0.072% at one worker and
+−0.712% to +0.142% at sixteen. Haswell AVX2 regression pairs at eleven workers
+changed −1.30% and +0.41%. The final PR runtime source matches frozen `f20e7bb`;
+remaining differences at this checkpoint are documentation and commit history.
