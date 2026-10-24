@@ -114,6 +114,7 @@ invocations with arguments, and redirected input/output do not pause.
 | Platform | CPU | GPU (NVIDIA) |
 |----------|-----|--------------|
 | Linux x86_64 | works out of the box | CUDA driver + NVRTC libs |
+| Linux ARM64 | CPU-only `seine-linux-aarch64.tar.gz` | — |
 | macOS x86_64 | works out of the box | — |
 | macOS ARM | works out of the box (Metal experimental) | — |
 | Windows x86_64 | works out of the box | CUDA driver + NVRTC libs |
