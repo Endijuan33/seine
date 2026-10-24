@@ -125,14 +125,26 @@ def owned(ident):
 
 def ssh(ident, command, timeout=60):
     _, info = owned(ident)
-    result = subprocess.run(["ssh", "-i", str(ROOT / "ssh-key"), "-o", "BatchMode=yes",
+    arguments = ["ssh", "-i", str(ROOT / "ssh-key"), "-o", "BatchMode=yes",
                              "-o", "StrictHostKeyChecking=accept-new", "-o",
                              f"UserKnownHostsFile={ROOT}/known-hosts", "-o", "ConnectTimeout=10",
-                             "ubuntu@" + info["PublicIpAddress"], command],
-                            capture_output=True, text=True, timeout=timeout)
-    if result.returncode:
+                             "ubuntu@" + info["PublicIpAddress"], command]
+    deadline = time.monotonic() + timeout
+    for attempt in range(3):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("SSH connection retry deadline exceeded")
+        result = subprocess.run(arguments, capture_output=True, text=True, timeout=remaining)
+        if not result.returncode:
+            return result.stdout
+        # Only this exact pre-connection failure proves the remote command did
+        # not start. Never replay a command after execution/connection loss.
+        preconnect_timeout = (result.returncode == 255 and not result.stdout
+            and result.stderr.strip() == f"ssh: connect to host {info['PublicIpAddress']} port 22: Connection timed out")
+        if preconnect_timeout and attempt < 2:
+            time.sleep(min(5, max(0, deadline - time.monotonic())))
+            continue
         raise RuntimeError(f"SSH exit {result.returncode}: {result.stderr[-2000:]} {result.stdout[-2000:]}")
-    return result.stdout
 
 
 def copy(ident, source, destination, download=False):
