@@ -135,8 +135,10 @@ Separate live API queries confirmed gp3 at $0.08/GB-month and in-use public IPv4
 at $0.005/hour. Each launch reserves three hours of instance/storage/address cost
 plus a $1 transfer contingency against the **$40 incremental cap**. Root disks
 are 16 GiB gp3 with deletion on termination. No extra provisioned IOPS/throughput
-are requested. The ledger deliberately retains every reservation after cleanup,
-making its total a conservative cumulative cap rather than reusable credit.
+are requested. The ledger retains every lease and its original reservation;
+only verified closed leases release unused reserved hours as described above.
+The cumulative cap includes conservative closed-lease charges and every active
+lease's full reservation.
 
 The guest schedules an absolute-deadline shutdown before installing tools. EC2
 converts that shutdown to termination independently of the controlling session.
@@ -163,6 +165,13 @@ eventual deletion of the task-owned security group and SSH keys.
   transfer contingency and preserve the $40 reservation cap.
 - `start_arm_final_confirm.py`: corrected native G2/G3 confirmation using
   transfer-frozen generic ARM binaries and fresh full-size parity.
+- `start_x86_final_confirm.py`: final frozen baseline/candidate AVX2 and full
+  AVX-512 regressions on already-screened Intel generations, with fresh parity.
+- `start_joint_confirm.py`: bounded confirmation of the separate frozen joint
+  tuning prototype. Native parity and a fixed-kernel regression gate precede
+  four fresh 900-second pool windows in control/candidate/candidate/control
+  order and the nine-phase resource lifecycle. Insufficient deadline, regression
+  or failed validation is retained; completion does not imply a performance win.
 - `prepare_payload.py`, `start_guest.py`: build a per-file SHA256 input manifest,
   verify the uploaded archive and start a bounded process on a timer-verified lease.
 - `arm_generation.sh`: native fallback/feature checks and separate-target ARM

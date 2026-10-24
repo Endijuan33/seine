@@ -31,9 +31,10 @@ on another machine. No campaign PR has been merged or released.
 | Same Cascade Lake, published AVX2 / full AVX-512 / experimental 256-bit path, 12 workers | 10.247 / 9.254 / 10.405 | Four corrected longer pairs. AVX2 beats full-width here; narrow path's small advantage does not justify promotion. |
 | Haswell / Xeon E5-2666 v3, final AVX2 regression, 1 / 11 workers | 1.175 → 1.175 / 9.722 → 9.679 | Two balanced pairs; eleven-worker differences −1.30% and +0.41%, so no repeatable loss or gain established. |
 | Zen 1 / EPYC 7571, final AVX2 regression, 1 / 16 workers | 0.901 → 0.905 / 4.594 → 4.596 | Two balanced pairs and native full-size parity; sixteen-worker differences −0.027% to +0.111%, near-flat. |
+| Zen 2 / EPYC 7R32, final AVX2 regression, 1 / 12 workers | 1.883 → 1.885 / 6.012 → 6.007 | Two balanced pairs and native full-size parity; twelve-worker differences −0.088% to −0.078%, near-flat. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Zen 2 results and final Graviton2/3 corrected confirmation remain pending.
+Final Graviton2/3 corrected confirmation remains pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -223,7 +224,8 @@ Windows execution. [Evidence](evidence/integration-check.json) retains log hashe
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
   boundary tests, real-arena worker switches and Graviton3 automatic selection
   passed. Graviton4 and complete repaired lifecycle confirmation passed; corrected
-  Graviton2/3 confirmation and the Cascade Lake regression remain draft gates.
+  Graviton2/3 confirmation remains the draft gate. The Cascade Lake regression
+  was isolated and repaired; the residual small negative remains disclosed.
 
 Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
 and candidate all-target runs produced the same 65 error-message lines (63
