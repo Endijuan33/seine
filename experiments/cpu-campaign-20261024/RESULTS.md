@@ -73,6 +73,9 @@ one logical CPU 1.832, on both SMT siblings of one physical core 2.232, and on t
 physical cores 3.599. All four direct modes passed full-size reference parity,
 three nonce pairs and dirty reuse. This rejects the experiment on this Ice Lake
 configuration; it does not prove a universal result across architectures.
+The [retained interhash evidence](evidence/interhash-rejected.json) includes all
+fourteen timed reports, completed run order, physical-core groups, full-size
+parity lines and original archive/file digests.
 
 ## Benchmark order review and corrected confirmation
 
