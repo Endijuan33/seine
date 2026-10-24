@@ -23,6 +23,7 @@ where
     let wall_start = Instant::now();
     let ready = Barrier::new(lanes + 1);
     let start = Barrier::new(lanes + 1);
+    let finished = Barrier::new(lanes);
     let started_at = OnceLock::<Instant>::new();
     let finished_at = Mutex::new(None::<Instant>);
     let error = Mutex::new(None);
@@ -30,10 +31,11 @@ where
 
     thread::scope(|scope| {
         for lane in 0..lanes {
-            let (setup, ready, start, started_at, finished_at, error, hashes) = (
+            let (setup, ready, start, finished, started_at, finished_at, error, hashes) = (
                 &setup,
                 &ready,
                 &start,
+                &finished,
                 &started_at,
                 &finished_at,
                 &error,
@@ -75,10 +77,15 @@ where
                 }
                 // Count completed hashes through the last lane's actual completion,
                 // including deadline overrun, but stop timing before its arena drops.
-                let finished = Instant::now();
-                let mut last = finished_at.lock().unwrap();
-                *last = Some(last.map_or(finished, |previous| previous.max(finished)));
+                let ended_at = Instant::now();
+                {
+                    let mut last = finished_at.lock().unwrap();
+                    *last = Some(last.map_or(ended_at, |previous| previous.max(ended_at)));
+                }
                 hashes.fetch_add(local_hashes, Ordering::Relaxed);
+                // Keep every arena resident until all lanes finish: early teardown
+                // must not compete with another lane's final measured hash.
+                finished.wait();
             });
         }
         ready.wait();
