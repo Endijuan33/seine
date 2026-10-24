@@ -23,9 +23,11 @@ on another machine. No campaign PR has been merged or released.
 | Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.617 → 1.726 / 12.512 → 13.099 | Four longer alternating pairs, full AVX-512 +6.13% to +7.97% / +4.05% to +5.27%. Also leads across the preliminary worker-count screen. |
 | Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.654 / 12.737 | Four longer pairs: full AVX-512 +4.10% to +4.62% / +2.22% to +3.10% over this path; no promotion. |
 | Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two opposite-order screens; full AVX-512 11.605 / 12.969. No material gain; no promotion. |
+| Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two opposite-order screens; full AVX-512 leads at all tested counts. |
+| Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Newer Intel, older Intel/Zen and Graviton4 results remain pending.
+Older Intel/Zen and Graviton4 candidate results remain pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -106,6 +108,11 @@ probe now passes with four provisioned slots and unchanged stride 16; the legacy
 one-slot control also passes. This probe deliberately bypasses preflight and is
 not a full pool runtime test. PR #43 remains draft while combined native pool
 startup and resource lifecycle checks run on Graviton4 and Xeon 6975P-C.
+The final combined candidate `636e688` passes all-feature/all-target Linux
+compilation and scoped Rust formatting. A separate read-only review by the
+research owner found no blocker in nonce stride, teardown/retry, PID headroom,
+manual bounds or platform-scoped resource errors; native confirmation is still
+required and the reserve is explicitly best effort against concurrent tasks.
 
 ## Reviewable changes
 
@@ -123,7 +130,9 @@ startup and resource lifecycle checks run on Graviton4 and Xeon 6975P-C.
   final combined native confirmation are in progress.
 - [PR #45](https://github.com/zpalmtree/seine/pull/45): native CPU-only Linux
   ARM release archive with kernel tests and full-size reference verification.
-  Native source build, package contents/digests and YAML checks pass; the hosted
+  Native source build, package contents/digests and YAML checks pass. The
+  Ubuntu 24.04 ARM archive requires glibc 2.39 (verified by ELF inspection),
+  documented with a source-build fallback for older systems; the hosted
   release workflow has not been run.
 - [Draft PR #44](https://github.com/zpalmtree/seine/pull/44): runtime ARM
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
