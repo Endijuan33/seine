@@ -60,9 +60,11 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   lane-specific errors, allowing every worker to reach the synchronization
   barriers. Sampling rejects the failed measurement. Normal score calculation
   and warmup policy are unchanged.
-- Regression tests cover panics during setup, warmup, and measured hashing.
-  Integrated with the v0.2.19 source and cancellation coverage, 429 CPU-only workspace tests pass, with
-  one pre-reserved 1 GiB HugeTLB test ignored. Default-feature compilation and
+- A bounded regression covers panics during setup, warmup, and measured hashing;
+  errors preserve the failing lane, phase, and panic message. The test fails
+  after five seconds if a barrier stops releasing workers. Integrated with the
+  v0.2.19 source and cancellation coverage, 428 CPU-only workspace tests pass,
+  with one pre-reserved 1 GiB HugeTLB test ignored. Default-feature compilation and
   CPU-only Clippy pass with existing warnings. Scoped Rust 1.93.0 formatting
   and `git diff --check` pass.
 - Reproduction and validation logs are retained in
