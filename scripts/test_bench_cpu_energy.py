@@ -32,6 +32,7 @@ def report():
                       "backend_runs": [backend]}]}
 
 
+@unittest.skipUnless(sys.platform == "linux", "Linux powercap paths and process groups")
 class EnergyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -206,7 +207,6 @@ class EnergyTests(unittest.TestCase):
         with self.assertRaisesRegex(energy.EnergyError, "allowed_cpus"):
             energy.compare(baseline, candidate)
 
-    @unittest.skipUnless(sys.platform == "linux", "Linux CLI and process groups")
     def test_sigterm_cleans_up_the_benchmark_process(self):
         pidfile = self.root / "child.pid"
         binary = self.root / "sleeping-miner"

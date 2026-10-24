@@ -34,7 +34,7 @@
     "completed_hashes": 3,
     "source_sha256": {
       "scripts/bench_cpu_energy.py": "dcd54bbbe62a9643df128d636381b23a38d97f949fe128d01829d951a8ae4ac3",
-      "scripts/test_bench_cpu_energy.py": "5e18b9b0991cfdc292d3d1f34de6f3301713e57aa87b4b46521170eb1319eea2"
+      "scripts/test_bench_cpu_energy.py": "519d7f6a6eed013dd60b5ac5d5925fa5f2e51d2988cecfa621b12db346816765"
     },
     "python_tests_passed": 14
   },
