@@ -141,6 +141,16 @@ eventual deletion of the task-owned security group and SSH keys.
   generation comparisons.
 - `recovery_validate.sh`: frozen repaired candidate, full native tests and
   reference parity, real two-arena growth, then the resource lifecycle.
+- `hardened_validate.sh`, `queue_hardened.py`: freeze combined candidate `636e688`,
+  wait for prior timing, then run native workspace/reference checks, full pool
+  task-budget startup and the complete resource lifecycle.
+- `pid_pool_probe.py`: full loopback pool runtime on 16 CPUs with 24 tasks and
+  one arena's RAM budget; checks actual tasks, residency, productive hashes and
+  cleanup. `pid_probe.py` separately forces a backend-only 12-task spawn race.
+- `portable_regression.sh`: transfer-frozen, same-profile x86 control/candidate
+  binaries; native full-size parity and alternating architecture regressions.
+- `summarize_matrix.py`, `summarize_lifecycle.py`: verify completion and export
+  paired gains or actual resident-arena lifecycle evidence.
 - `export_evidence.py`: normalize schema-14 rounds while retaining raw SHA256
   identities and completed-work/fence accounting.
 
@@ -170,6 +180,16 @@ eventual deletion of the task-owned security group and SSH keys.
 
 - [Arm instruction-set reference](https://documentation-service.arm.com/static/67e40f3398aa3c3b6eea6a85): XAR is an XOR followed by a per-64-bit-lane rotation and requires FEAT_SHA3.
 - [AWS Graviton technical guide](https://aws.github.io/graviton/): generation and architecture context; guest feature detection remains authoritative for execution.
+
+## Hardware identity references
+
+Guest `lscpu`, CPU flags and topology are retained with every stage. AWS
+[compute instance specifications](https://docs.aws.amazon.com/ec2/latest/instancetypes/co.html)
+and [instance FAQs](https://aws.amazon.com/ec2/faqs/) provide generation context;
+C5 can expose Skylake or Cascade Lake, so the actual guest model controls the
+label. [C8i](https://aws.amazon.com/ec2/instance-types/c8i/) uses custom Xeon 6
+processors; the tested guest reports Xeon 6975P-C. Instance labels alone never
+authorize execution of an optional ISA.
 
 ## Results
 
