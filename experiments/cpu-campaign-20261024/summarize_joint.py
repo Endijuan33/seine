@@ -78,7 +78,7 @@ def main():
                 row['elapsed_start_request_through_stopped_seconds'] for row in rows)
         comparisons = {'pairs': pairs, 'aggregate_logged_hps': aggregate,
             'aggregate_logged_rate_difference_percent': 100 * (aggregate['candidate'] / aggregate['control'] - 1),
-            'interpretation': 'Ratios compare logged completed-work rates across full cold-start windows. They include startup, trials and shutdown. Last unreported hashes can be omitted, so these are not fixed-kernel rates or a mathematical lower bound on relative gain.'}
+            'interpretation': 'Ratios compare logged completed-work rates across fresh-process, fresh-tuning-cache windows. They include startup, trials and shutdown; OS caches were not cleared. Last unreported hashes can be omitted, so these are not fixed-kernel rates or a mathematical lower bound on relative gain.'}
 
     parity = {name: read('results/' + name, False) for name in
               ['control-full-size-parity.log', 'candidate-full-size-parity.log']}
@@ -94,6 +94,7 @@ def main():
                    for row in stages],
         'source_sha256': hashes,
         'limitations': ['The guest is identified by its actual CPU model, not the C5 instance label.',
+                       'Cold start means a new process and separate tuning cache, not flushed OS/file caches.',
                        'This does not replicate the earlier Cascade Lake crossover if the model differs.',
                        'A passed execution/cleanup protocol does not establish a performance improvement.']}
     args.output.write_text(json.dumps(result, indent=2) + '\n')
