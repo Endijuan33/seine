@@ -96,7 +96,7 @@ def main():
     root = args.directory
     expected = {Path(k).name: v for k, v in json.loads((root / 'sources.json').read_text())['sha256'].items() if k.startswith('bin/')}
     summaries = []
-    for cell in sorted(root.glob('*.2xlarge')):
+    for cell in sorted(p for p in root.iterdir() if p.is_dir() and (p / 'state.json').exists()):
         if not (cell / 'results/COMPLETE').exists():
             continue
         state = json.loads((cell / 'state.json').read_text())

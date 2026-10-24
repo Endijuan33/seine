@@ -6,7 +6,7 @@ bin/verify-old-avx2, and scripts/bench_cpu_ab.sh. Both miner builds must be
 identical apart from the old versus paired AVX2 implementation. On AVX-512
 hosts this compares two paths in the current binary; on AVX2-only hosts it
 compares the old and current AVX2 implementation. Requires sudo for a temporary
-8 GiB HugeTLB pool, restored in finally. No cloud provisioning is performed.
+HugeTLB pool sized for the requested workers, restored in finally. No cloud provisioning is performed.
 """
 import argparse
 import hashlib
@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--pairs', type=int, default=4)
     parser.add_argument('--seconds', type=int, default=12)
-    parser.add_argument('--configs', nargs='+', choices=['regular-t1', 'large-t1', 'large-t4'],
+    parser.add_argument('--configs', nargs='+', choices=['regular-t1', 'large-t1', 'large-t4', 'regular-t8', 'large-t8', 'large-t12'],
                         default=['regular-t1', 'large-t1', 'large-t4'])
     args = parser.parse_args()
     root = args.root.resolve()
@@ -64,6 +64,8 @@ def main():
     for name in ('verify-current', 'verify-old-avx2'):
         run([str(root / 'bin' / name)], out / (name + '.log'), timeout=300)
     print(comparison + ': full-size correctness passed', flush=True)
+    huge_pages = max((int(c.rsplit('-t', 1)[1]) for c in args.configs
+                      if c.startswith('large-')), default=0) * 1024
     old_pages = int(Path('/proc/sys/vm/nr_hugepages').read_text())
     assert old_pages == 0, 'use a dedicated VM with no pre-existing page pool'
     try:
@@ -71,8 +73,8 @@ def main():
             mode, workers_text = label.rsplit('-t', 1)
             workers = int(workers_text)
             if mode == 'large':
-                run(['sudo', 'sysctl', '-w', 'vm.nr_hugepages=4096'], out / 'reserve-pages.log')
-                assert int(Path('/proc/sys/vm/nr_hugepages').read_text()) == 4096
+                run(['sudo', 'sysctl', '-w', f'vm.nr_hugepages={huge_pages}'], out / 'reserve-pages.log')
+                assert int(Path('/proc/sys/vm/nr_hugepages').read_text()) == huge_pages
             label = f'{mode}-t{workers}'
             before = counters()
             start = time.monotonic()
