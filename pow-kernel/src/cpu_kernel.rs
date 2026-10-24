@@ -9,7 +9,7 @@ pub enum CpuKernel {
     Avx512256,
     Neon,
     /// Runtime-guarded NEON path using SHA3 XOR/rotate and 64-byte prefetch coverage.
-    /// Benchmark-only until native architecture confirmation is complete.
+    /// Automatically compared with baseline NEON on hosts with SHA3 support.
     NeonSha3,
 }
 
