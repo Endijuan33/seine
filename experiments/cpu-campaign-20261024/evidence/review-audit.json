@@ -24,5 +24,57 @@
   "limitations": [
     "Fresh G2/G3 confirmations and final f20 Intel regressions were still pending and are outside this review snapshot.",
     "Read-only review; no new timing, resources or product edits."
-  ]
+  ],
+  "followup_provenance_review": {
+    "reviewed_at": "2026-10-24T18:24:40.039552+00:00",
+    "finding": "Inherited runtime Git labels in six historical artifacts do not uniquely identify the builds. Archived binary SHA256, build identities and compiled source fingerprints establish the intended variant/source mappings. No executable/source ambiguity found.",
+    "method": "Independent reviewer recomputed build.rs FNV source fingerprints from retained source archives, using path-component sorting and CRLF normalization; applied the prefetch patch in memory. Checked archive Git-PAX IDs, input digests, experiment hashes and build identities.",
+    "sources": [
+      {
+        "source": "359265e325d85c9c7b6e3eed7b5b126fcec63f9c",
+        "compiled_source_fingerprint": "d8248e278baf1c66"
+      },
+      {
+        "source": "9ce67f60264c40ea9411212776a35e049213fdae",
+        "compiled_source_fingerprint": "fc57519602a2bdcb"
+      },
+      {
+        "source": "8280a66053de68a3888812b68e1fd039c720aefa",
+        "compiled_source_fingerprint": "ae4e99e4b6cc7d6d"
+      },
+      {
+        "source": "312289359a062703dcf883215537ace6adb01616",
+        "compiled_source_fingerprint": "7a88eaa07c02a4e0"
+      },
+      {
+        "source": "d283877f51e90766a28057c6a43000e66fc09674",
+        "compiled_source_fingerprint": "8ca7e180722c68eb"
+      },
+      {
+        "source": "636e6887c405c41d732433b1eeb018cefcdc962d",
+        "compiled_source_fingerprint": "3a9ef806ce58c7eb"
+      },
+      {
+        "source": "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd",
+        "compiled_source_fingerprint": "f24ac20c126a52cc"
+      },
+      {
+        "source": "359265e plus arm-prefetch64.patch",
+        "patch_sha256": "52d2deeb1bdbe36c6ae7bb3ebfedc4ba4c45bc2a71c6339db724ae15f43db317",
+        "compiled_source_fingerprint": "39224e5427919a60"
+      }
+    ],
+    "affected_evidence": [
+      "graviton3-clean-confirmation.json",
+      "graviton3-clean-regular.json",
+      "graviton3-followup-screen.json",
+      "graviton2-prefetch-screen.json",
+      "icelake-clean-controls.json",
+      "graviton4-codegen-regression.json"
+    ],
+    "limitations": [
+      "Historical Graviton3 followup used shared targets and remains a screen; later clean confirmation used separate targets.",
+      "Identical source fingerprints can have different binaries when build flags differ; source fingerprint alone is not executable identity."
+    ]
+  }
 }
