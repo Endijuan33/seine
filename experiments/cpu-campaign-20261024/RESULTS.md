@@ -206,6 +206,14 @@ Windows execution. [Evidence](evidence/integration-check.json) retains log hashe
 
 ## Reviewable changes
 
+All proposed production behavior is automatic by default. ARM startup retains
+portable NEON; runtime feature detection only admits SHA3 as a challenger, and
+productive-work confirmation selects a winner. The existing
+`--disable-cpu-autotune-threads` disables both automatic count and kernel tuning.
+Explicit fixed counts retain the default ISA unless tuning is explicitly enabled.
+Resource-lifecycle acceptance includes the opt-out case. These changes do not
+introduce an offline startup benchmark or require users to select a CPU family.
+
 - [PR #40](https://github.com/zpalmtree/seine/pull/40): Windows tuning-cache
   identity includes permitted CPUs and canonical physical-core groups. Native
   mask tests and CPU-only workspace tests passed. No placement policy change.
@@ -246,6 +254,12 @@ review build passes 506 workspace tests (five ignored), full-size local parity,
 all-feature compilation and Windows test cross-compilation. Native convergence,
 productive-window comparisons and pressure/restart checks remain pending; it
 is excluded from the accepted default changes.
+
+The rejected or deferred policy changes are explicit: no new CCD preference,
+no automatic 256-bit AVX-512 path, no Intel streaming-ring default, and no
+independent-hash interleaving default. Their controls and negative results remain
+available for future work. The coordinated EPYC ring is a separate unpromoted
+candidate, described below.
 
 ## Coordinated EPYC evidence
 
