@@ -6,12 +6,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 use crossbeam_channel::{bounded, Sender, TrySendError};
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::{self, Event};
 
 use super::hashrate_tracker::HashrateTracker;
 use super::stats::{format_hashrate_ui, Stats};
 use super::tui::{DeviceHashrate, TuiRenderer, TuiState};
-use super::ui::{set_tui_state, warn};
+use super::ui::{clear_tui_state, set_tui_state, warn};
 use super::{backend_descriptions, backend_display_names, BackendSlot};
 
 const NVIDIA_CURRENT_WINDOW_SECS: f64 = 30.0;
@@ -65,7 +65,8 @@ impl TuiDisplay {
     fn new(tui_state: TuiState, shutdown: Arc<AtomicBool>) -> Result<Self> {
         let (render_signal, render_stop, render_worker) =
             spawn_tui_render_worker(Arc::clone(&tui_state), Arc::clone(&shutdown))?;
-        let (quit_watcher_stop, quit_watcher) = spawn_tui_quit_watcher(shutdown);
+        let (quit_watcher_stop, quit_watcher) =
+            spawn_tui_quit_watcher(shutdown, Arc::clone(&tui_state), render_signal.clone());
         let display = Self {
             state: tui_state,
             last_render_request: Instant::now() - TUI_RENDER_INTERVAL,
@@ -220,6 +221,7 @@ impl Drop for TuiDisplay {
         if let Some(handle) = self.quit_watcher.take() {
             let _ = handle.join();
         }
+        clear_tui_state(&self.state);
     }
 }
 
@@ -386,7 +388,11 @@ fn spawn_tui_render_worker(
     }
 }
 
-fn spawn_tui_quit_watcher(shutdown: Arc<AtomicBool>) -> (Arc<AtomicBool>, JoinHandle<()>) {
+fn spawn_tui_quit_watcher(
+    shutdown: Arc<AtomicBool>,
+    state: TuiState,
+    render_signal: Sender<RenderSignal>,
+) -> (Arc<AtomicBool>, JoinHandle<()>) {
     let stop = Arc::new(AtomicBool::new(false));
     let stop_flag = Arc::clone(&stop);
     let handle = thread::spawn(move || {
@@ -400,10 +406,12 @@ fn spawn_tui_quit_watcher(shutdown: Arc<AtomicBool>) -> (Arc<AtomicBool>, JoinHa
                 continue;
             }
             if let Ok(Event::Key(key)) = event::read() {
-                if key.code == KeyCode::Char('q')
-                    || (key.code == KeyCode::Char('c')
-                        && key.modifiers.contains(KeyModifiers::CONTROL))
-                {
+                let quit = state
+                    .lock()
+                    .map(|mut state| state.handle_key(key))
+                    .unwrap_or(false);
+                let _ = render_signal.try_send(RenderSignal::RenderNow);
+                if quit {
                     shutdown.store(true, Ordering::SeqCst);
                     break;
                 }

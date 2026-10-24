@@ -145,6 +145,7 @@ impl HashrateTracker {
     }
 
     /// Compute hashrates: current uses a rolling window, average uses active (unpaused) time.
+    #[cfg(test)]
     pub fn rates(&self) -> HashrateRates {
         self.rates_with_current_windows(&BTreeMap::new())
     }

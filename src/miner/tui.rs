@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
 use std::io::{self, Stdout};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -13,6 +15,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Terminal;
+
+use super::thread_control::{ThreadChangeRequest, ThreadControl};
 
 const LOG_CAPACITY: usize = 200;
 const BLOCK_MARKER_CAPACITY: usize = 4096;
@@ -117,6 +121,9 @@ pub struct TuiStateInner {
     pub api_url: String,
     pub pool_worker: String,
     pub threads: usize,
+    pub thread_control: Option<ThreadControl>,
+    pub thread_edit: Option<usize>,
+    pub thread_notice: Option<String>,
     pub refresh_secs: u64,
     pub sse_enabled: bool,
     pub backends_desc: String,
@@ -165,6 +172,9 @@ impl TuiStateInner {
             api_url: String::new(),
             pool_worker: String::new(),
             threads: 0,
+            thread_control: None,
+            thread_edit: None,
+            thread_notice: None,
             refresh_secs: 0,
             sse_enabled: false,
             backends_desc: String::new(),
@@ -184,6 +194,56 @@ impl TuiStateInner {
             self.log_entries.pop_front();
         }
         self.log_entries.push_back(entry);
+    }
+
+    /// Returns true only for an explicit quit. No backend work runs on the UI thread.
+    pub fn handle_key(&mut self, key: KeyEvent) -> bool {
+        if key.kind != KeyEventKind::Press {
+            return false;
+        }
+        if key.code == KeyCode::Char('q')
+            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
+        {
+            if let Some(control) = &self.thread_control {
+                control.quit_requested.store(true, Ordering::SeqCst);
+            }
+            return true;
+        }
+        let Some(control) = self.thread_control.as_ref() else {
+            return false;
+        };
+        if let Some(threads) = self.thread_edit.as_mut() {
+            match key.code {
+                KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right | KeyCode::Up => {
+                    *threads = threads.saturating_add(1).min(control.max_threads);
+                }
+                KeyCode::Char('-') | KeyCode::Left | KeyCode::Down => {
+                    *threads = threads.saturating_sub(1).max(1);
+                }
+                KeyCode::Esc => self.thread_edit = None,
+                KeyCode::Enter => {
+                    if *threads != control.current_threads {
+                        let request = ThreadChangeRequest {
+                            run_id: control.run_id,
+                            threads: *threads,
+                            quit_requested: Arc::clone(&control.quit_requested),
+                        };
+                        self.thread_notice = Some(match control.sender.try_send(request) {
+                            Ok(()) => {
+                                "Restart requested; waiting for mining to stop...".to_string()
+                            }
+                            Err(_) => "Thread change unavailable; try again.".to_string(),
+                        });
+                    }
+                    self.thread_edit = None;
+                }
+                _ => {}
+            }
+        } else if key.code == KeyCode::Char('t') {
+            self.thread_edit = Some(control.current_threads);
+            self.thread_notice = None;
+        }
+        false
     }
 
     pub fn push_block_found_tick(&mut self, tick: u64) {
@@ -249,12 +309,15 @@ impl Drop for TuiRenderer {
 }
 
 fn install_panic_hook() {
-    let original = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen);
-        original(info);
-    }));
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let original = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = disable_raw_mode();
+            let _ = execute!(io::stdout(), LeaveAlternateScreen);
+            original(info);
+        }));
+    });
 }
 
 // --- Layout & Drawing ---
@@ -272,6 +335,10 @@ const DIM_STYLE: Style = Style::new().fg(Color::Rgb(90, 90, 90));
 const BLOCK_MARKER_GLYPH: &str = "♦";
 
 fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
+    if let Some(threads) = state.thread_edit {
+        draw_thread_editor(frame, area, state, threads);
+        return;
+    }
     let wide = area.width >= 80;
     let config_two_columns = config_uses_two_columns(area.width);
 
@@ -295,6 +362,11 @@ fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner)
     };
     let header_height: u16 = 4;
 
+    if area.height < header_height + stats_height + devices_height + config_height + 4 {
+        draw_compact_dashboard(frame, area, state);
+        return;
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -313,6 +385,91 @@ fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner)
     }
     draw_config(frame, chunks[3], state);
     draw_log(frame, chunks[4], state);
+}
+
+fn thread_line(state: &TuiStateInner) -> Line<'static> {
+    let hint = if state.thread_control.is_some() {
+        "  [t] change"
+    } else {
+        ""
+    };
+    Line::from(vec![
+        Span::styled("Threads: ", LABEL_STYLE),
+        Span::styled(state.threads.to_string(), VALUE_STYLE),
+        Span::styled(hint, DIM_STYLE),
+    ])
+}
+
+fn draw_compact_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
+    let (state_display, state_color) = format_state_display(state);
+    // Essential information comes first, even in a terminal only a few rows high.
+    let mut lines = vec![
+        thread_line(state),
+        Line::from(vec![
+            Span::styled("State: ", LABEL_STYLE),
+            Span::styled(state_display, Style::default().fg(state_color)),
+        ]),
+        Line::from(format!("Current: {}", state.round_hashrate)),
+        Line::from(format!("Average: {}", state.avg_hashrate)),
+        Line::from(format!(
+            "Accepted: {}  Submitted: {}",
+            state.accepted, state.submitted
+        )),
+        Line::from(format!(
+            "{}: {}  Height: {}",
+            if state.mode == "pool" {
+                "Rejected"
+            } else {
+                "Stale"
+            },
+            state.stale_shares,
+            state.height
+        )),
+    ];
+    if let Some(notice) = &state.thread_notice {
+        lines.insert(1, Line::from(notice.clone()));
+    }
+    let summary_height = (lines.len() as u16).min(area.height);
+    frame.render_widget(
+        Paragraph::new(lines).style(VALUE_STYLE),
+        Rect {
+            height: summary_height,
+            ..area
+        },
+    );
+    let log_height = area.height.saturating_sub(summary_height);
+    if log_height >= 3 {
+        draw_log(
+            frame,
+            Rect {
+                y: area.y + summary_height,
+                height: log_height,
+                ..area
+            },
+            state,
+        );
+    }
+}
+
+fn draw_thread_editor(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    state: &TuiStateInner,
+    threads: usize,
+) {
+    let max = state
+        .thread_control
+        .as_ref()
+        .map_or(1, |control| control.max_threads);
+    let lines = vec![
+        Line::from(format!("Threads: {threads}  [-/+]")),
+        Line::from("Enter apply | Esc cancel"),
+        Line::from(format!("Per CPU backend (1..{max})")),
+        Line::from("Restarts mining and reconnects."),
+        Line::from("Session statistics reset."),
+        Line::from("Autotune stays off for this run."),
+    ];
+    frame.render_widget(Paragraph::new(lines).style(VALUE_STYLE), area);
 }
 
 fn draw_header(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
@@ -731,7 +888,14 @@ fn draw_config_runtime_panel(frame: &mut ratatui::Frame, area: Rect, state: &Tui
         Span::styled(&state.backends_desc, VALUE_STYLE),
     ]);
     let config_block = Block::default()
-        .title(Span::styled(" CONFIG ", TITLE_STYLE))
+        .title(Span::styled(
+            if state.thread_control.is_some() {
+                " CONFIG [t] threads "
+            } else {
+                " CONFIG "
+            },
+            TITLE_STYLE,
+        ))
         .borders(Borders::ALL)
         .border_style(BORDER_STYLE);
     let config = Paragraph::new(vec![line1, line2]).block(config_block);
@@ -1068,6 +1232,128 @@ fn compact_wallet_address(address: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::backend::TestBackend;
+
+    fn render_text(state: &TuiStateInner, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| draw_dashboard(frame, frame.area(), state))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn essential_stats_survive_short_narrow_and_device_heavy_layouts() {
+        let mut state = TuiStateInner::new();
+        state.threads = 7;
+        state.state = "working".into();
+        state.round_hashrate = "1.234 H/s".into();
+        state.wallet_visible = true;
+        state.mode = "pool".into();
+        state.pending_nvidia = 16;
+        for (width, height) in [
+            (40, 8),
+            (60, 12),
+            (79, 24),
+            (80, 24),
+            (100, 10),
+            (160, 12),
+            (160, 50),
+        ] {
+            let text = render_text(&state, width, height);
+            assert!(text.contains("Threads"), "{width}x{height}: {text}");
+            assert!(text.contains("working"), "{width}x{height}: {text}");
+            assert!(text.contains("1.234 H/s"), "{width}x{height}: {text}");
+        }
+        // Even an extreme resize must not panic, and the count takes priority.
+        assert!(render_text(&state, 24, 1).contains("Threads: 7"));
+        render_text(&state, 0, 0);
+    }
+
+    fn controlled_state() -> (
+        TuiStateInner,
+        crossbeam_channel::Receiver<ThreadChangeRequest>,
+    ) {
+        let (sender, receiver) = crossbeam_channel::bounded(1);
+        let mut state = TuiStateInner::new();
+        state.threads = 2;
+        state.thread_control = Some(ThreadControl {
+            run_id: 42,
+            sender,
+            current_threads: 2,
+            max_threads: 4,
+            quit_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        });
+        (state, receiver)
+    }
+
+    fn press(state: &mut TuiStateInner, code: KeyCode) -> bool {
+        state.handle_key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    #[test]
+    fn thread_editor_applies_only_on_enter_and_preserves_active_count() {
+        let (mut state, receiver) = controlled_state();
+        press(&mut state, KeyCode::Char('t'));
+        press(&mut state, KeyCode::Char('+'));
+        assert!(receiver.is_empty());
+        assert_eq!(state.threads, 2);
+        let text = render_text(&state, 40, 8);
+        assert!(text.contains("Threads: 3"));
+        assert!(text.contains("Restarts mining"));
+        press(&mut state, KeyCode::Enter);
+        let request = receiver.try_recv().unwrap();
+        assert_eq!((request.run_id, request.threads), (42, 3));
+        assert_eq!(state.threads, 2);
+        assert!(state.thread_edit.is_none());
+        press(&mut state, KeyCode::Enter);
+        assert!(receiver.is_empty());
+        assert!(press(&mut state, KeyCode::Char('q')));
+        assert!(request.quit_requested.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn thread_editor_handles_bounds_cancel_and_key_release() {
+        let (mut state, receiver) = controlled_state();
+        press(&mut state, KeyCode::Char('t'));
+        for _ in 0..10 {
+            press(&mut state, KeyCode::Char('+'));
+        }
+        assert_eq!(state.thread_edit, Some(4));
+        for _ in 0..10 {
+            press(&mut state, KeyCode::Char('-'));
+        }
+        assert_eq!(state.thread_edit, Some(1));
+        state.handle_key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ));
+        assert!(receiver.is_empty());
+        press(&mut state, KeyCode::Esc);
+        assert!(state.thread_edit.is_none());
+        assert!(receiver.is_empty());
+        press(&mut state, KeyCode::Char('t'));
+        press(&mut state, KeyCode::Enter); // unchanged
+        assert!(receiver.is_empty());
+        assert!(press(&mut state, KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn gpu_only_session_has_no_thread_control() {
+        let mut state = TuiStateInner::new();
+        press(&mut state, KeyCode::Char('t'));
+        assert!(state.thread_edit.is_none());
+        assert!(!render_text(&state, 80, 24).contains("[t]"));
+    }
 
     #[test]
     fn format_u64_adds_commas() {

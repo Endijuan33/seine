@@ -4,7 +4,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Result};
+#[cfg(any(feature = "nvidia", all(feature = "metal", target_os = "macos")))]
 use blake2::digest::{Update, VariableOutput};
+#[cfg(any(feature = "nvidia", all(feature = "metal", target_os = "macos")))]
 use blake2::Blake2bVar;
 use crossbeam_channel::Sender;
 
@@ -366,6 +368,15 @@ pub struct DynamicShareTarget {
     version: AtomicU64,
     share_binding_id: AtomicU64,
     target_words: [AtomicU64; 4],
+    // CPU workers check complete hashes; GPU workers also use this cached target.
+    #[cfg_attr(
+        not(any(
+            feature = "nvidia",
+            feature = "amd",
+            all(feature = "metal", target_os = "macos")
+        )),
+        allow(dead_code)
+    )]
     network_target: Option<[u8; 32]>,
 }
 
@@ -388,6 +399,12 @@ impl DynamicShareTarget {
         }
     }
 
+    #[cfg(any(
+        feature = "nvidia",
+        feature = "amd",
+        all(feature = "metal", target_os = "macos"),
+        test
+    ))]
     pub fn network_target(&self) -> Option<[u8; 32]> {
         self.network_target
     }
@@ -456,6 +473,11 @@ impl WorkTemplate {
             })
     }
 
+    #[cfg(any(
+        feature = "nvidia",
+        feature = "amd",
+        all(feature = "metal", target_os = "macos")
+    ))]
     pub fn network_target(&self) -> Option<[u8; 32]> {
         self.dynamic_share_target
             .as_ref()
@@ -485,6 +507,7 @@ pub struct MiningSolution {
     pub backend: &'static str,
 }
 
+#[cfg(any(feature = "nvidia", all(feature = "metal", target_os = "macos")))]
 pub fn pow_hash_from_last_block_words(last_block_words: &[u64; 128]) -> [u8; 32] {
     let mut block_bytes = [0u8; 1024];
     for (idx, word) in last_block_words.iter().enumerate() {
@@ -494,6 +517,7 @@ pub fn pow_hash_from_last_block_words(last_block_words: &[u64; 128]) -> [u8; 32]
     pow_hash_from_last_block_bytes(&block_bytes)
 }
 
+#[cfg(any(feature = "nvidia", all(feature = "metal", target_os = "macos")))]
 pub fn pow_hash_from_last_block_bytes(last_block_bytes: &[u8; 1024]) -> [u8; 32] {
     let mut hash = [0u8; 32];
     let mut digest = Blake2bVar::new(hash.len()).expect("fixed 32-byte output length");

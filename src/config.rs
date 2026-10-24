@@ -179,7 +179,6 @@ struct DaemonContext {
     source: DaemonContextSource,
     running: bool,
     manager_config_path: Option<PathBuf>,
-    pidfile_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -1744,7 +1743,7 @@ fn detect_daemon_context(preferred_network: Option<DaemonNetwork>) -> Option<Dae
         }
 
         let pid = process.pid().as_u32();
-        if let Some((network, pidfile_path)) =
+        if let Some((network, _pidfile_path)) =
             managed_dir.and_then(|config_dir| daemon_pidfile_match(config_dir, pid))
         {
             let data_dir = daemon_data_dir_from_cmdline(&cmd)
@@ -1768,7 +1767,6 @@ fn detect_daemon_context(preferred_network: Option<DaemonNetwork>) -> Option<Dae
                 manager_config_path: managed_config
                     .as_ref()
                     .map(|config| config.config_path.clone()),
-                pidfile_path: Some(pidfile_path),
             });
         }
 
@@ -1799,7 +1797,6 @@ fn detect_daemon_context(preferred_network: Option<DaemonNetwork>) -> Option<Dae
             manager_config_path: managed_config
                 .as_ref()
                 .map(|config| config.config_path.clone()),
-            pidfile_path: None,
         });
     }
 
@@ -1816,7 +1813,6 @@ fn detect_daemon_context(preferred_network: Option<DaemonNetwork>) -> Option<Dae
             source: DaemonContextSource::WrapperConfig,
             running: false,
             manager_config_path: Some(config.config_path.clone()),
-            pidfile_path: None,
         }
     })
 }
@@ -3225,7 +3221,6 @@ HugePages_Rsvd:          0
             api_addr: Some("127.0.0.1:9000".to_string()),
             source: DaemonContextSource::ProcessScan,
             running: true,
-            pidfile_path: None,
             manager_config_path: None,
         };
         assert_eq!(
@@ -3242,7 +3237,6 @@ HugePages_Rsvd:          0
             api_addr: Some("192.168.1.5:9100".to_string()),
             source: DaemonContextSource::ProcessScan,
             running: true,
-            pidfile_path: None,
             manager_config_path: None,
         };
         assert_eq!(
@@ -3259,7 +3253,6 @@ HugePages_Rsvd:          0
             api_addr: Some("not-an-endpoint".to_string()),
             source: DaemonContextSource::ProcessScan,
             running: true,
-            pidfile_path: None,
             manager_config_path: None,
         };
         assert_eq!(resolve_api_url(None, Some(&daemon)), DEFAULT_API_URL);
@@ -3340,7 +3333,6 @@ HugePages_Rsvd:          0
             api_addr: Some("127.0.0.1:8332".to_string()),
             source: DaemonContextSource::ProcessScan,
             running: true,
-            pidfile_path: None,
             manager_config_path: None,
         };
 

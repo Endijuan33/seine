@@ -89,6 +89,22 @@ These values are cached in:
 
 Full CLI reference: [`docs/MINER_FLAGS.md`](docs/MINER_FLAGS.md)
 
+### Terminal controls
+
+Press `t` in the mining dashboard to adjust threads per CPU backend. Use `+` / `-`
+or the arrow keys, then `Enter` to apply or `Esc` to cancel. Applying a change
+restarts the mining session: pool mining reconnects, all backends restart, and
+session statistics reset. The selected count disables CPU autotuning for that
+run and is not saved as a new default. The editor limits increases to the
+automatic CPU/RAM cap; use `--threads` for explicit startup overrides.
+
+Short terminal windows use a compact dashboard that keeps the CPU thread count,
+mining state, and hashrate visible. Press `q` or `Ctrl+C` to quit.
+
+On Windows, a fatal error after double-clicking `seine.exe` with no arguments
+leaves its console open until you press Enter. Launches from an existing shell,
+invocations with arguments, and redirected input/output do not pause.
+
 ## Requirements
 
 | Platform | CPU | GPU (NVIDIA) |
