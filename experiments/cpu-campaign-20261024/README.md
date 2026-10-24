@@ -162,6 +162,9 @@ eventual deletion of the task-owned security group and SSH keys.
   controls. A service-private hosts file redirects the built-in developer pool
   to the local fixture, with additional loopback-only IP restrictions.
 - `cloud.py`: launch/inspect/copy/terminate task-owned leases and record cleanup.
+  SSH retries are bounded and limited to an exact pre-connection timeout;
+  remote errors, resets, partial output and command timeouts are never replayed.
+  `test_cloud_ssh_retry.py` verifies those boundaries without contacting AWS.
 - `summarize_costs.py`: after verified final cleanup, estimate compute, root-disk
   and IPv4 costs from live prices and lease intervals; disclose the separate
   transfer contingency and preserve the $40 reservation cap.

@@ -310,6 +310,12 @@ GPU, a new PoW and energy measurements were intentionally outside this campaign.
 
 ## Resources and completion
 
+The first fresh final-regression C8i rental encountered an SSH connection timeout
+before creating its campaign directory or running a benchmark. Its instance and
+disk were verified deleted, and its charges remain in the ledger. The replacement
+uses bounded retries only for proven pre-connection timeouts; command execution
+errors are never replayed. This is an operational failure, not a benchmark result.
+
 Current resource accounting, additional hardware gaps, final PRs and verified
 cleanup will be added before the 20:27:13 UTC deadline. Every lease has an
 independent guest shutdown and EC2 terminate-on-shutdown behavior. The campaign
