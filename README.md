@@ -170,9 +170,19 @@ active throughout. Kernel windows last 30–60 seconds and require 32 hashes, wi
 a ten-minute limit for each trial. Interrupted or noisy trials retain the previous
 path. Workers switch between complete hashes without reallocating their arenas.
 
+On validated Zen 5 EPYC processors (AMD family 26, model 2), tuning also compares
+`avx512-256-stream`: a 256-bit AVX-512 kernel that keeps recent blocks cached and
+streams outputs into the normal 2 GiB arena. It requires AVX2 and AVX-512F/VL.
+Every eligible path is considered before caching the result; slower paths are
+rejected using the same repeated comparisons. No worker-count cutoff forces
+this kernel. A 24-worker EPYC 9R45 test improved 27.78% over AVX2, while the
+one-worker screen regressed 3.53%, so selection remains specific to the measured
+worker count and memory backing. Other CPU families retain their existing
+automatic candidates.
+
 Confirmed kernel choices are cached alongside the thread cache in
 `seine.cpu-autotune.json.kernels.json`, keyed by worker counts, observed page
-backing, CPU/build identity, placement and tuning settings. Known contexts reuse
+backing, CPU/build identity, eligible kernels, placement and tuning settings. Known contexts reuse
 that choice; stable contexts are reconsidered after 30 minutes. Experimental
 `avx512-256` remains benchmark-only. AVX2-only CPUs and ARM/NEON keep their existing
 paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables

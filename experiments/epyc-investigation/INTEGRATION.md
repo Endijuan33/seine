@@ -1,5 +1,12 @@
 # Streaming-ring candidate handoff
 
+Production integration now gives this implementation its own
+`avx512-256-stream` identity, leaves the original 256-bit path intact, and gates
+automatic trials on validated AMD family 26/model 2 plus ISA/OS support.
+Repeated productive comparisons decide whether to use it. The requirements
+below document the original prototype and remain relevant to future changes;
+the production tests additionally cover live switches and dirty arena reuse.
+
 `streaming-candidate.patch` is the exact kernel-only experimental patch against
 785a06f. It does not include the shared arena-audit hook used to validate page
 placement. The measured executable is identified in `frozen-kernels.json` and in
