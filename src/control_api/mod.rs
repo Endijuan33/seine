@@ -24,6 +24,7 @@ use crate::config::{
     CpuPerformanceProfile, MiningMode, UiMode, WorkAllocation,
 };
 use crate::dev_fee::{effective_pool_dev_fee_percent, DEV_ADDRESS, DEV_FEE_PERCENT};
+use crate::miner::session::SessionHistory;
 use crate::miner::thread_control::{ThreadChangeRequest, ThreadControl};
 use crate::miner::ui::{set_log_sink, UiLogEvent};
 use crate::shortname::validate_destination;
@@ -320,6 +321,7 @@ struct SupervisorState {
     stopped_at_unix_ms: Option<u64>,
     last_error: Option<String>,
     session_shutdown: Option<Arc<AtomicBool>>,
+    session_history: Option<Arc<SessionHistory>>,
     effective_config: Option<Config>,
     staged_config: Option<Config>,
     pending_wallet_password: Option<String>,
@@ -339,6 +341,7 @@ impl Default for SupervisorState {
             stopped_at_unix_ms: None,
             last_error: None,
             session_shutdown: None,
+            session_history: None,
             effective_config: None,
             staged_config: None,
             pending_wallet_password: None,
@@ -561,13 +564,14 @@ impl MinerSupervisor {
             .operations
             .lock()
             .map_err(|_| anyhow!("supervisor operation lock poisoned"))?;
-        self.start_session(patch, allow_wallet_prompt)
+        self.start_session(patch, allow_wallet_prompt, None)
     }
 
     fn start_session(
         &self,
         patch: StartRequest,
         allow_wallet_prompt: bool,
+        preserved_history: Option<Arc<SessionHistory>>,
     ) -> Result<ActionResponse> {
         if self.process_shutdown.load(Ordering::SeqCst) {
             bail!("miner is shutting down");
@@ -644,6 +648,7 @@ impl MinerSupervisor {
             }
         }
 
+        let history = preserved_history.unwrap_or_else(|| Arc::new(SessionHistory::new()));
         let run_shutdown = Arc::new(AtomicBool::new(false));
         let run_shutdown_for_worker = Arc::clone(&run_shutdown);
         let cfg_for_worker = cfg.clone();
@@ -667,7 +672,8 @@ impl MinerSupervisor {
             state.lifecycle = MinerLifecycle::Starting;
             state.run_id = state.run_id.saturating_add(1).max(1);
             let run_id = state.run_id;
-            state.started_at_unix_ms = Some(now_unix_millis());
+            state.started_at_unix_ms = Some(history.started_at_unix_ms);
+            state.session_history = Some(Arc::clone(&history));
             state.stopped_at_unix_ms = None;
             state.last_error = None;
             state.session_shutdown = Some(Arc::clone(&run_shutdown));
@@ -716,6 +722,7 @@ impl MinerSupervisor {
                         &cfg_for_worker,
                         Arc::clone(&run_shutdown_for_worker),
                         Some(thread_control),
+                        history,
                     )
                 }))
                 .unwrap_or_else(|_| Err(anyhow!("miner session panicked")));
@@ -852,13 +859,16 @@ impl MinerSupervisor {
         allow_wallet_prompt: bool,
         quit_requested: Option<&AtomicBool>,
     ) -> Result<ActionResponse> {
-        {
+        let preserved_history = {
             let mut state = self
                 .state
                 .lock()
                 .map_err(|_| anyhow!("supervisor state lock poisoned"))?;
             state.metrics.restart_requests = state.metrics.restart_requests.saturating_add(1);
-        }
+            // Only a thread adjustment continues the logical mining session.
+            // An explicit API restart still starts a fresh session.
+            quit_requested.and_then(|_| state.session_history.clone())
+        };
         let _ = self.stop_session(StopRequest {
             wait_ms: Some(15_000),
         });
@@ -870,7 +880,7 @@ impl MinerSupervisor {
                 state: self.snapshot(),
             });
         }
-        self.start_session(patch, allow_wallet_prompt)
+        self.start_session(patch, allow_wallet_prompt, preserved_history)
     }
 
     fn apply_pending_thread_change(&self) -> Result<()> {
@@ -907,7 +917,7 @@ impl MinerSupervisor {
         crate::miner::ui::info(
             "THREADS",
             format!(
-                "restarting mining with {} threads per CPU backend; session statistics reset",
+                "restarting mining with {} threads per CPU backend; session statistics preserved",
                 request.threads
             ),
         );

@@ -9,6 +9,7 @@ use crossbeam_channel::{bounded, Sender, TrySendError};
 use crossterm::event::{self, Event};
 
 use super::hashrate_tracker::HashrateTracker;
+use super::session::SessionHistory;
 use super::stats::{format_hashrate_ui, Stats};
 use super::tui::{DeviceHashrate, TuiRenderer, TuiState};
 use super::ui::{clear_tui_state, set_tui_state, warn};
@@ -44,6 +45,7 @@ pub(super) struct TuiDisplay {
     quit_watcher_stop: Arc<AtomicBool>,
     quit_watcher: Option<JoinHandle<()>>,
     hashrate_tracker: HashrateTracker,
+    history: Arc<SessionHistory>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +64,11 @@ pub(super) struct RoundUiView<'a> {
 }
 
 impl TuiDisplay {
-    fn new(tui_state: TuiState, shutdown: Arc<AtomicBool>) -> Result<Self> {
+    fn new(
+        tui_state: TuiState,
+        shutdown: Arc<AtomicBool>,
+        history: Arc<SessionHistory>,
+    ) -> Result<Self> {
         let (render_signal, render_stop, render_worker) =
             spawn_tui_render_worker(Arc::clone(&tui_state), Arc::clone(&shutdown))?;
         let (quit_watcher_stop, quit_watcher) =
@@ -76,7 +82,8 @@ impl TuiDisplay {
             render_worker: Some(render_worker),
             quit_watcher_stop,
             quit_watcher: Some(quit_watcher),
-            hashrate_tracker: HashrateTracker::new(),
+            hashrate_tracker: history.take_hashrate_tracker(),
+            history,
         };
         display.request_render();
         Ok(display)
@@ -222,15 +229,19 @@ impl Drop for TuiDisplay {
             let _ = handle.join();
         }
         clear_tui_state(&self.state);
+        let mut tracker = std::mem::replace(&mut self.hashrate_tracker, HashrateTracker::new());
+        tracker.pause_for_restart();
+        self.history.save_hashrate_tracker(tracker);
     }
 }
 
 pub(super) fn init_tui_display(
     tui_state: Option<TuiState>,
     shutdown: Arc<AtomicBool>,
+    history: Arc<SessionHistory>,
 ) -> Option<TuiDisplay> {
     let state = tui_state?;
-    match TuiDisplay::new(Arc::clone(&state), shutdown) {
+    match TuiDisplay::new(Arc::clone(&state), shutdown, history) {
         Ok(display) => {
             set_tui_state(state);
             Some(display)

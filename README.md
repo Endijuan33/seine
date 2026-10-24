@@ -93,10 +93,12 @@ Full CLI reference: [`docs/MINER_FLAGS.md`](docs/MINER_FLAGS.md)
 
 Press `+` or `-` directly in the mining dashboard to add or remove one thread
 per CPU backend. The hint appears beside the thread count; `=` also increases
-the count without requiring Shift. Each change applies immediately and restarts
-the mining session: pool mining reconnects, all backends restart, and session
-statistics reset. Further changes wait until the restart finishes. The selected
-count disables CPU autotuning for that run and is not saved as a new default.
+the count without requiring Shift. Each change applies immediately. All mining
+backends restart and pool mining reconnects, while session statistics, uptime,
+average hashrate, and dashboard history are preserved. The
+current hashrate refreshes for the new workers. Further changes are ignored
+until the restart finishes. The selected count disables CPU autotuning for that
+run and is not saved as a new default.
 Increases are limited to the automatic CPU/RAM cap; use `--threads` for explicit
 startup overrides.
 

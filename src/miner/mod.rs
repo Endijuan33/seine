@@ -11,6 +11,7 @@ mod round_control;
 mod round_driver;
 mod runtime;
 mod scheduler;
+pub(crate) mod session;
 mod solution_cache;
 mod stats;
 mod submit;
@@ -234,13 +235,19 @@ fn resolve_mining_config(
 }
 
 pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
-    run_with_thread_control(cfg, shutdown, None)
+    run_with_thread_control(
+        cfg,
+        shutdown,
+        None,
+        Arc::new(session::SessionHistory::new()),
+    )
 }
 
 pub(crate) fn run_with_thread_control(
     cfg: &Config,
     shutdown: Arc<AtomicBool>,
     thread_control: Option<thread_control::ThreadControl>,
+    history: Arc<session::SessionHistory>,
 ) -> Result<()> {
     if cfg!(debug_assertions) {
         warn(
@@ -572,6 +579,7 @@ pub(crate) fn run_with_thread_control(
         (cpu_lanes as f64 * CPU_LANE_MEMORY_BYTES as f64) / (1024.0 * 1024.0 * 1024.0);
     let tui_state = if should_enable_tui(cfg) {
         let state = build_tui_state(cfg, &backends);
+        history.attach_tui(&state);
         if let Ok(mut s) = state.lock() {
             if let Some(mut control) = thread_control {
                 let cpu_backends: Vec<_> = backends
@@ -858,6 +866,7 @@ pub(crate) fn run_with_thread_control(
                     backend_executor: &backend_executor,
                 },
                 tui_state,
+                Arc::clone(&history),
                 tip_listener.as_ref().map(mining::TipListener::signal),
                 deferred_backends,
             )
@@ -872,6 +881,7 @@ pub(crate) fn run_with_thread_control(
             },
             daemon_client.clone(),
             tui_state,
+            Arc::clone(&history),
             deferred_backends,
         ),
     };
