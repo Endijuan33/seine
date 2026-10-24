@@ -37,7 +37,7 @@ def main():
     if a.action == 'launch':
         assert not (root / 'session.json').exists()
         assert 10 <= a.minutes <= 120
-        assert a.type in ('c6a.8xlarge', 'c7a.8xlarge', 'c8a.8xlarge')
+        assert a.type in ('c6a.8xlarge', 'c6i.4xlarge', 'c7a.8xlarge', 'c8a.8xlarge')
         assert all((a.image, a.vpc, a.subnet)), 'Pass explicit owned launch infrastructure'
         key = root / 'ssh-key'
         subprocess.run(['ssh-keygen', '-t', 'ed25519', '-N', '', '-C', root.name,
