@@ -88,7 +88,8 @@ pub(super) fn cpu_worker_loop(
         let _ = core_affinity::set_for_current(core_id);
     }
 
-    let hasher = fixed_argon::FixedArgon2id::new(POW_MEMORY_KB);
+    let hasher = fixed_argon::FixedArgon2id::with_kernel(POW_MEMORY_KB, shared.kernel)
+        .expect("kernel support checked before CPU backend starts");
     let block_count = hasher.block_count();
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     let block_bytes = block_count * std::mem::size_of::<fixed_argon::PowBlock>();

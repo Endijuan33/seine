@@ -1,3 +1,4 @@
+use crate::CpuKernel;
 use std::convert::TryInto;
 use std::num::Wrapping;
 
@@ -32,6 +33,7 @@ pub enum Error {
     OutputTooShort,
     OutputTooLong,
     MemoryTooLittle,
+    UnsupportedKernel,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -48,25 +50,15 @@ const fn isa_label(isa: u8) -> &'static str {
 
 #[inline]
 fn detect_isa() -> u8 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        if std::arch::is_x86_feature_detected!("avx512f")
-            && std::arch::is_x86_feature_detected!("avx512vl")
-        {
-            ISA_AVX512
-        } else if std::arch::is_x86_feature_detected!("avx2") {
-            ISA_AVX2
-        } else {
-            ISA_SCALAR
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        ISA_NEON
-    }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    {
-        ISA_SCALAR
+    kernel_isa(CpuKernel::preferred())
+}
+
+const fn kernel_isa(kernel: CpuKernel) -> u8 {
+    match kernel {
+        CpuKernel::Scalar => ISA_SCALAR,
+        CpuKernel::Avx2 => ISA_AVX2,
+        CpuKernel::Avx512 => ISA_AVX512,
+        CpuKernel::Neon => ISA_NEON,
     }
 }
 
@@ -100,6 +92,19 @@ pub struct FixedArgon2id {
 
 impl FixedArgon2id {
     pub fn new(requested_memory_kib: u32) -> Self {
+        Self::new_for_isa(requested_memory_kib, detect_isa())
+    }
+
+    /// Select a supported path explicitly without global or environment overrides.
+    /// Unsupported paths fail before precomputation or arena allocation.
+    pub fn with_kernel(requested_memory_kib: u32, kernel: CpuKernel) -> Result<Self> {
+        if !kernel.is_supported() {
+            return Err(Error::UnsupportedKernel);
+        }
+        Ok(Self::new_for_isa(requested_memory_kib, kernel_isa(kernel)))
+    }
+
+    fn new_for_isa(requested_memory_kib: u32, isa: u8) -> Self {
         let lanes = ARGON2_LANES as usize;
         let min_blocks = 2 * SYNC_POINTS * lanes;
         let memory_blocks = requested_memory_kib.max(min_blocks as u32) as usize;
@@ -107,7 +112,6 @@ impl FixedArgon2id {
         let block_count = segment_length * lanes * SYNC_POINTS;
         let data_independent_ref_indexes =
             precompute_data_independent_ref_indexes(block_count, segment_length);
-        let isa = detect_isa();
         Self {
             requested_memory_kib,
             block_count,

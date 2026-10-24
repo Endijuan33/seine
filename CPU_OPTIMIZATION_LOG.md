@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 explicit CPU kernel benchmarks and architecture identity`
 - `2026-10-24 independent two-node Milan release validation`
 - `2026-10-24 Intel AVX2 release validation`
 - `2026-10-24 two-node EPYC placement and autotuner validation`
@@ -49,6 +50,36 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 explicit CPU kernel benchmarks and architecture identity
+
+- Added benchmark-only `--bench-cpu-kernel scalar|avx2|avx512|neon`. Selection
+  is passed per backend, requires fixed threads and CPU-only benchmarking with
+  autotuning disabled, and rejects unsupported paths before arena allocation.
+  Normal mining and autotuning retain the existing automatic ISA preference.
+- Schema-14 reports record selected/requested kernels, supported kernels and
+  guest-visible x86 vendor/family/model/stepping. CPU baseline comparisons now
+  require matching known kernel identities, including under ignore-environment.
+  Auto and explicit selection of the same kernel remain comparable. The paired
+  A/B harness supports intentional cross-kernel experiments; see
+  `docs/benchmarks.md`. No generation-specific kernel preference is introduced.
+- Validation host: Ryzen 9 9950X3D, WSL2, AuthenticAMD family 26/model 68/stepping 0.
+  CPU-only generic release build, Rust 1.93.0; executable SHA-256
+  `cfc9cda0a7ef16a1c7ba0a36f12f730b60c4fc4d2d92074bb58bfdd404668d27`.
+- All 431 workspace tests passed; the existing test requiring a reserved 1 GiB
+  HugeTLB pool was ignored. Supported explicit kernels match RustCrypto for
+  three memory sizes and three nonces each, including a non-aligned memory size.
+  Unsupported kernels fail before precomputation/allocation.
+- Full 2 GiB, one-worker, regular-page CLI smoke runs completed for automatic,
+  scalar, AVX2 and AVX-512 backend selection; AVX2 also completed kernel,
+  kernel-effective and end-to-end modes. CLI restrictions, same/different-kernel
+  baseline behavior and unchanged autotune-cache contents/mtime were checked.
+  These two-second rounds validate plumbing, not relative throughput.
+- CPU-only Clippy and default-feature compilation passed (existing Clippy
+  warnings remain). Kernel/tests cross-checks passed for Windows x86-64 GNU and
+  macOS AArch64; neither target was executed. Edited-file formatting passed.
+- Local evidence and the CLI validation runner are in ignored
+  `data/kernel-selection-validation/`. No AWS resources were provisioned.
 
 ## 2026-10-24 independent two-node Milan release validation
 
