@@ -26,6 +26,8 @@ on another machine. No campaign PR has been merged or released.
 | Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two screens (order limitation below); full AVX-512 11.605 / 12.969. No material gain; no promotion. |
 | Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two screens (order limitation below); full AVX-512 leads at all tested counts. |
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
+| Xeon 6975P-C, final `f20e7bb` versus baseline, 12 workers, full AVX-512 | 12.486 → 12.324 | Four longer corrected pairs, all negative (−0.063% to −3.719%), mean −1.304%. Earlier two short pairs also negative. Unresolved regression signal; PR #44 remains draft. |
+| Skylake / Xeon 8124M, joint tuning prototype, four 900-second fresh-process/cache ABBA windows | 6.241 → 6.152 logged H/s | Both paired differences negative (−2.006%, −0.836%); aggregate −1.424%. No promotion; subsequent lifecycle intentionally deferred. These include startup/trials/shutdown and are not fixed-kernel rates. |
 | Intel Xeon Platinum 8275CL / Cascade Lake, 12 workers, full AVX-512, baseline → combined `636e688` | 9.303 → 9.036 | Four corrected longer pairs lose 2.60–3.34%; regression retained and repaired below. |
 | Same Cascade Lake, baseline → x86-boundary fix `f20e7bb` | 9.303 → 9.267 | Four pairs: −0.93% to +0.004%; about −0.39% mean. Consistently ahead of the regressed build; no x86 speedup claim. |
 | Same Cascade Lake, published AVX2 / full AVX-512 / experimental 256-bit path, 12 workers | 10.247 / 9.254 / 10.405 | Four corrected longer pairs. AVX2 beats full-width here; narrow path's small advantage does not justify promotion. |
@@ -34,8 +36,9 @@ on another machine. No campaign PR has been merged or released.
 | Zen 2 / EPYC 7R32, final AVX2 regression, 1 / 12 workers | 1.883 → 1.885 / 6.012 → 6.007 | Two balanced pairs and native full-size parity; twelve-worker differences −0.088% to −0.078%, near-flat. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Final Graviton2/3 corrected confirmations passed; fresh final-binary Intel
-regressions are in progress.
+Final Graviton2/3 corrected confirmations passed. Fresh Xeon 6975P-C confirmation
+retains a negative final-build signal, so ARM PR #44 remains draft. Final Sapphire
+Rapids and Ice Lake checks are in progress.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -209,7 +212,15 @@ comparison measured 9.303 / 9.036 / 9.267 H/s respectively: the fix consistently
 beats the regressed build while retaining a roughly −0.39% baseline-relative mean.
 The ARM check is near-flat (sixteen-worker pairs −0.712% and +0.142%). The fix
 is now incorporated in the ARM PR. Corrected final Graviton2/3 confirmation
-passed; fresh final-binary Intel regression checks remain in progress.
+passed. Fresh final-binary Xeon 6975P-C results retain a negative signal:
+two short full-width pairs at twelve workers were −0.271% and −1.274%; four
+longer balanced pairs were −0.063%, −0.071%, −3.719% and −1.480%. The longer
+means are 12.486 versus 12.324 H/s (−1.304%). Both sides show throughput drift;
+these measurements do not establish a stable effect size or isolate the causal
+change within the combined stack. They cannot be discarded: actual order,
+executable identities, 24 GiB backing, zero errors and full-size parity passed
+independent audit. Normalized instruction equivalence did not establish runtime
+performance equivalence. **PR #44 remains draft pending investigation.**
 
 The separate combined integration branch includes PRs #40, #41, #43, #44 and
 #45 plus this candidate fix. It passes 497 workspace tests (five ignored),
@@ -249,9 +260,10 @@ introduce an offline startup benchmark or require users to select a CPU family.
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
   boundary tests, real-arena worker switches and Graviton3 automatic selection
   passed. Graviton4 and complete repaired lifecycle confirmation passed, as did
-  corrected final Graviton2/3 confirmation. Final Intel checks remain in progress.
-  The Cascade Lake regression
-  was isolated and repaired; the residual small negative remains disclosed.
+  corrected final Graviton2/3 confirmation. Fresh Xeon 6975P-C final-build checks
+  retain a negative throughput signal. This combined-stack result does not
+  isolate the causal change to #44; the draft gate remains closed. Cascade Lake's
+  earlier inlining regression was reduced, with the residual negative disclosed.
 
 Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
 and candidate all-target runs produced the same 65 error-message lines (63
@@ -266,9 +278,16 @@ joint worker-count/kernel exploration. It restores the original configuration
 for confirmation and requires a repeated outer comparison when both change.
 Review found and fixed a quarantine/survivor cancellation issue. The frozen
 review build passes 506 workspace tests (five ignored), full-size local parity,
-all-feature compilation and Windows test cross-compilation. Native convergence,
-productive-window comparisons and pressure/restart checks remain pending; it
-is excluded from the accepted default changes.
+all-feature compilation and Windows test cross-compilation. Native full-size parity and all four 900-second fresh-process/cache ABBA windows
+completed on an actual Skylake Xeon 8124M guest. The prototype's logged completed
+work was lower in both comparisons (−2.006% and −0.836%; aggregate −1.424%).
+Execution health checks passed with no swap or OOM; they do not establish a gain.
+This is not a rerun of the earlier Cascade Lake crossover because the CPU differs.
+The subsequent prototype lifecycle was intentionally interrupted to prioritize
+final Intel regressions within the deadline. Raw `FAILED / InterruptedError(15)`
+is preserved with a scope-stop explanation and successful unit/hugepage cleanup;
+it is neither a product failure nor a lifecycle pass. The prototype remains
+excluded from accepted defaults. See [joint evidence](evidence/skylake-joint-confirm.json).
 
 The rejected or deferred policy changes are explicit: no new CCD preference,
 no automatic 256-bit AVX-512 path, no Intel streaming-ring default, and no

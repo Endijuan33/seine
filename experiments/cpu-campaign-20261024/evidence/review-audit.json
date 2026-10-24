@@ -92,5 +92,22 @@
       "G2 unsupported SHA3 rejection and three dirty nonces; G3 NEON/SHA3/switchback three nonces"
     ],
     "new_timing_or_resources": false
+  },
+  "final_granite_review": {
+    "reviewed_at": "2026-10-24T19:26:50.815005+00:00",
+    "status": "evidence passed; performance gate not satisfied",
+    "reports": 24,
+    "archive_files": [
+      76,
+      26
+    ],
+    "checks": [
+      "Raw rates and SHA256 match",
+      "AB/BA/AB/BA timestamps verified",
+      "Frozen CPU-only executable identities and fingerprints match",
+      "Full-size scalar/AVX2/full512/256 parity passed",
+      "24GiB backing, zero swap/OOM/errors; max steal fraction 0.00133%"
+    ],
+    "finding": "Four longer full512 pairs all negative, mean -1.30408175%; two short full512 pairs also negative. Effect size and causal change within stack unresolved. Keep PR44 draft; do not discard negative data."
   }
 }

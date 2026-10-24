@@ -22,6 +22,7 @@ def main():
 
     outcome = read('results/outcome.json')
     cleanup = read('results/cleanup.json')
+    assert not cleanup['failures'] and cleanup['pool_zero']
     identities = read('joint-binary-identities.json')
     stages = read('results/stages.json')
     topology = json.loads(read('results/topology.log', False))
@@ -34,6 +35,7 @@ def main():
         if not (root / prefix / 'COMPLETE').exists():
             continue
         read(prefix + 'COMPLETE', False)
+        assert any(stage['name'] == label and stage.get('passed') for stage in stages)
         identity = read(prefix + 'identity.json')
         variant = 'control' if '-control-' in label else 'candidate'
         assert identity['binary_sha256'] == identities['sha256']['seine-joint-' + variant]
@@ -57,7 +59,7 @@ def main():
             'binary_sha256': identity['binary_sha256'], 'productive_window': productive,
             'vm_delta': observation['vm_delta'], 'cleanup_passed': True,
             'requested_threads_observed': sorted({s['requested_threads'] for s in samples
-                                                  if s['requested_threads'] is not None}),
+                                                  if s.get('requested_threads') is not None}) or None,
             'cached_selected_threads': selected, 'autotune_trajectory': trajectory})
 
     comparisons = None
