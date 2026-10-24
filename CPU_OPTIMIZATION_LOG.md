@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 automatic joint CPU kernel and worker selection`
 - `2026-10-24 stable efficiency selections during productive rechecks`
 - `2026-10-24 productive CPU autotuning and changing resource budgets`
 
@@ -57,6 +58,56 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 automatic joint CPU kernel and worker selection
+
+Automatic mining tuning now serializes established AVX2/AVX-512 kernel trials
+with adaptive worker-count trials. The widest supported ISA remains the startup
+fallback. Two productive A/B/A comparisons must each exceed a 2% gain plus hash
+quantization, with baseline drift capped at 5%, before promoting another path.
+Windows run 30–60 seconds and require 32 completed hashes; a trial has a ten-minute
+hard limit. Interrupted comparisons return to the prior path. ARM/NEON and
+AVX2-only hosts do not spend time testing scalar alternatives. Experimental
+`avx512-256` remains benchmark-only.
+
+Workers switch only between complete hashes, retaining their arenas, precomputed
+reference addresses, assignments, and nonce cursors. Per-worker generation
+acknowledgements include a completed hash and counter flush before measurement.
+Kernel choices and their raw sample counts/times are cached per worker-count and
+observed backing vectors, with CPU/build/topology/configuration identity. Stable
+contexts are revisited after 30 minutes. The existing CPU autotune opt-out also
+disables automatic path selection; fixed-thread and offline benchmark behavior
+remain explicit and deterministic.
+
+Integration review caught two regressions before handoff. Resetting the joint
+peak/search direction on cached path changes could cycle efficiency mode between
+low- and high-count winners; the joint profile frontier and search direction now
+survive confirmed path changes while count-specific reference samples reset.
+Clearing scores also preserves a higher cached count when current RAM limits a
+run to fewer workers. Four-hour stable-load simulations assert every later
+confirmed selection, rather than checking one endpoint.
+
+Validation on Ryzen 9 9950X3D:
+
+- Linux CPU workspace: **477 tests passed**, four resource-heavy tests excluded
+  from the normal suite. The new full-size test was then run separately.
+- Optimized one-worker **2 GiB** live AVX2 → AVX-512 → preferred-path smoke passed
+  in 10.96 s: stable arena accounting, no allocation failures, distinct sampled
+  nonces, and all three outputs matching RustCrypto. Reference allocation followed
+  worker teardown so peak arena use stayed at 2 GiB. This is correctness evidence,
+  not a throughput comparison.
+- **35 native Windows GNU tests passed**, covering adaptive policies, hash-boundary
+  switching, request guards, and reference parity. Windows all-target cross-check
+  and default-feature all-target check also passed.
+- ARM/macOS pow-kernel cross-check passed. Full macOS application cross-check was
+  unavailable because this Linux environment lacks a Darwin C cross-compiler;
+  native macOS runtime validation remains outstanding.
+- Formatting, diff checks, and Clippy completed; existing repository warnings
+  remain. No AWS instances or other external benchmark resources were created.
+
+These checks establish correctness and simulated convergence, not an all-host
+hashrate gain or global optimality. The earlier architecture matrix motivates
+count-dependent path selection; actual gains are decided on each mining host.
 
 ## 2026-10-24 stable efficiency selections during productive rechecks
 

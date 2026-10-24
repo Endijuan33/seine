@@ -8,6 +8,13 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+**Automatic CPU kernel selection.** Mining can compare AVX2 and AVX-512 while
+continuing useful work, alongside adaptive worker-count tuning. It changes paths
+only after two confirmed gains, remembers choices for the measured worker count
+and memory backing, and keeps memory-pressure recovery active during comparisons.
+No configuration is required; the existing CPU autotuning opt-out disables it.
+Experimental kernels remain outside automatic selection.
+
 ## v0.2.20
 
 **More reliable CPU thread tuning.** Fresh autotuning now warms each worker's

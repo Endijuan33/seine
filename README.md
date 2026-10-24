@@ -157,6 +157,23 @@ After exploring the peak, a lower count that meets the profile's floor stays
 selected between probes. New peak measurements can extend exploration without
 repeatedly committing higher counts that are already known to be unnecessary.
 
+On CPUs supporting both AVX2 and AVX-512, automatic mining tuning also compares
+those paths at the current worker count. Two baseline/candidate/baseline cycles
+must confirm a gain above 2% plus the hash-count uncertainty before changing the
+path. Kernel and thread-count trials run in turn; memory-pressure handling remains
+active throughout. Kernel windows last 30–60 seconds and require 32 hashes, with
+a ten-minute limit for each trial. Interrupted or noisy trials retain the previous
+path. Workers switch between complete hashes without reallocating their arenas.
+
+Confirmed kernel choices are cached alongside the thread cache in
+`seine.cpu-autotune.json.kernels.json`, keyed by worker counts, observed page
+backing, CPU/build identity, placement and tuning settings. Known contexts reuse
+that choice; stable contexts are reconsidered after 30 minutes. Experimental
+`avx512-256` remains benchmark-only. AVX2-only CPUs and ARM/NEON keep their existing
+paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables
+both automatic count and kernel tuning, and explicit fixed thread counts retain
+the default ISA unless autotuning is explicitly enabled.
+
 Available RAM is checked once per second. Workers finish their current hash before
 parking and releasing their arenas and reference tables. Linux budgets honor nested
 cgroup limits, including `memory.high`, and credit clean inactive file cache that

@@ -177,6 +177,9 @@ struct Shared {
     event_dispatch_capacity: usize,
     page_mode: CpuPageMode,
     kernel: fixed_argon::CpuKernel,
+    // Low byte identifies the path; upper bits identify this particular switch.
+    kernel_request: AtomicU64,
+    kernel_acknowledgements: Vec<AtomicU64>,
 }
 
 pub struct CpuBackend {
@@ -259,6 +262,12 @@ impl CpuBackend {
                 hash_flush_interval: tuning.hash_flush_interval,
                 event_dispatch_capacity: tuning.event_dispatch_capacity,
                 page_mode: tuning.page_mode,
+                kernel_request: AtomicU64::new(kernel_id(
+                    tuning
+                        .kernel
+                        .unwrap_or_else(fixed_argon::CpuKernel::preferred),
+                )),
+                kernel_acknowledgements: (0..lanes).map(|_| AtomicU64::new(0)).collect(),
                 kernel: tuning
                     .kernel
                     .unwrap_or_else(fixed_argon::CpuKernel::preferred),
@@ -273,6 +282,9 @@ impl CpuBackend {
             .desired_workers
             .store(self.initial_workers, Ordering::Release);
         self.shared.lifetime_hashes.store(0, Ordering::Release);
+        for ack in &self.shared.kernel_acknowledgements {
+            ack.store(0, Ordering::Release);
+        }
         self.shared.warmed_workers.store(0, Ordering::Release);
         self.shared
             .arena_committed_bytes
@@ -729,9 +741,44 @@ impl CpuBackend {
         }
     }
 
+    /// Request a switch at each worker's next hash boundary. Sampling must wait
+    /// for `kernel_ready`, which includes one completed hash on the new path.
+    pub(crate) fn set_active_kernel(&self, kernel: fixed_argon::CpuKernel) -> Result<()> {
+        if !self.shared.adaptive {
+            return Err(anyhow!("kernel switching requires an adaptive CPU backend"));
+        }
+        if !kernel.is_supported() {
+            return Err(anyhow!("unsupported CPU kernel {kernel}"));
+        }
+        self.shared
+            .kernel_request
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+                (kernel_from_request(old) != kernel)
+                    .then(|| (old.wrapping_add(256) & !255) | kernel_id(kernel))
+            })
+            .ok();
+        Ok(())
+    }
+
     pub(crate) fn adaptive_snapshot(&self) -> CpuAdaptiveSnapshot {
         let s = &self.shared;
+        let threads = s.desired_workers.load(Ordering::Acquire);
+        let request = s.kernel_request.load(Ordering::Acquire);
         CpuAdaptiveSnapshot {
+            kernel: kernel_from_request(request),
+            kernel_generation: request,
+            kernel_ready: threads > 0
+                && s.kernel_acknowledgements
+                    .iter()
+                    .take(threads)
+                    .all(|ack| ack.load(Ordering::Acquire) == request),
+            backing_bytes: [
+                s.arena_explicit_large_bytes.load(Ordering::Acquire),
+                s.arena_explicit_large_1g_bytes.load(Ordering::Acquire),
+                s.arena_transparent_huge_bytes.load(Ordering::Acquire),
+                s.arena_regular_bytes.load(Ordering::Acquire),
+                s.arena_heap_bytes.load(Ordering::Acquire),
+            ],
             running: s.started.load(Ordering::Acquire),
             threads: s.desired_workers.load(Ordering::Acquire),
             committed_bytes: s.arena_committed_bytes.load(Ordering::Acquire),
@@ -1103,6 +1150,11 @@ enum CpuWorkUpdate {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CpuAdaptiveSnapshot {
+    pub kernel: fixed_argon::CpuKernel,
+    pub kernel_generation: u64,
+    pub kernel_ready: bool,
+    /// Explicit large, 1 GiB, transparent huge, regular, and heap bytes.
+    pub backing_bytes: [u64; 5],
     pub running: bool,
     pub threads: usize,
     // Includes allocations in progress, before their backing is observable.
@@ -1112,6 +1164,18 @@ pub(crate) struct CpuAdaptiveSnapshot {
     pub hashing: bool,
     pub allocation_failures: u64,
     pub warmed: usize,
+}
+
+fn kernel_id(kernel: fixed_argon::CpuKernel) -> u64 {
+    fixed_argon::CpuKernel::ALL
+        .iter()
+        .position(|&value| value == kernel)
+        .unwrap() as u64
+        + 1
+}
+
+fn kernel_from_request(request: u64) -> fixed_argon::CpuKernel {
+    fixed_argon::CpuKernel::ALL[((request & 255) - 1) as usize]
 }
 
 fn wait_for_worker_enabled(shared: &Shared, thread_idx: usize) -> bool {
@@ -1996,6 +2060,35 @@ mod tests {
 #[cfg(test)]
 mod kernel_selection_tests {
     use super::*;
+
+    #[test]
+    fn live_kernel_requests_reject_fixed_backends_and_unsupported_paths() {
+        let fixed = CpuBackend::new(1, CpuAffinityMode::Off);
+        assert!(fixed
+            .set_active_kernel(fixed_argon::CpuKernel::preferred())
+            .is_err());
+        let adaptive =
+            CpuBackend::adaptive(1, 1, CpuAffinityMode::Off, CpuBackendTuning::default());
+        let initial = adaptive.shared.kernel_request.load(Ordering::Acquire);
+        for kernel in fixed_argon::CpuKernel::ALL
+            .into_iter()
+            .filter(|k| !k.is_supported())
+        {
+            assert!(adaptive.set_active_kernel(kernel).is_err());
+            assert_eq!(
+                adaptive.shared.kernel_request.load(Ordering::Acquire),
+                initial
+            );
+        }
+        adaptive
+            .set_active_kernel(fixed_argon::CpuKernel::preferred())
+            .unwrap();
+        assert_eq!(
+            adaptive.shared.kernel_request.load(Ordering::Acquire),
+            initial,
+            "requesting the same path must not invalidate a measurement window"
+        );
+    }
 
     #[test]
     fn unsupported_kernel_fails_before_worker_or_arena_startup() {

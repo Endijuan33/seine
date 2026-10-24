@@ -1,4 +1,5 @@
 mod adaptive_cpu;
+mod adaptive_kernel;
 mod auth;
 mod backend_control;
 mod backend_executor;
