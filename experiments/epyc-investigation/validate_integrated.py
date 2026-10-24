@@ -33,7 +33,7 @@ def check(name, args, timeout):
 check('full-size-kernels', ['./verify_cpu_kernels'], 180)
 check('full-size-switches', ['./verify_streaming_dispatch'], 180)
 check('native-tuner-tests', ['./seine-tests', 'miner::adaptive_', '--test-threads=4'], 120)
-for kernel in ['avx2', 'avx512-256']:
+for kernel in ['avx2', 'avx512', 'avx512-256']:
     out = root / ('integrated-vs-' + kernel)
     out.mkdir(exist_ok=False)
     result = paired(root, out / 'w24',
@@ -41,7 +41,8 @@ for kernel in ['avx2', 'avx512-256']:
                     {'binary': 'seine', 'kernel': 'avx512-256-stream'},
                     workers=24, pairs=2, seconds=20, rounds=1, warmup=1)
     print(kernel, json.dumps(result), flush=True)
-    assert all(delta > 10 for delta in result['paired_deltas_pct']), result
+    minimum = 2 if kernel == 'avx512' else 10
+    assert all(delta > minimum for delta in result['paired_deltas_pct']), result
 
 check('productive-selection', ['./seine-tests', '--exact',
       'miner::adaptive_kernel::tests::epyc_streaming_productive_selection',
