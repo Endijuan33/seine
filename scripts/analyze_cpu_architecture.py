@@ -17,7 +17,8 @@ def quantile(values, p):
 
 
 def summarize_trial(path, experiment):
-    rows = list(csv.DictReader((path / 'results.tsv').open(), delimiter='\t'))
+    with (path / 'results.tsv').open() as handle:
+        rows = list(csv.DictReader(handle, delimiter='\t'))
     assert len(rows) == 2 * experiment['pairs'], path
     pairs, reports = {}, []
     for row in rows:
