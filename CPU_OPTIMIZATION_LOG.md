@@ -77,9 +77,54 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   hot functions contain no AVX-512 instructions. Nearby variants (unrolling,
   phase fusion, pairing rows only, and 256-bit AVX-512 rotates) were screened
   separately; only the pure-AVX2 paired/contiguous variant was adopted.
-- **Limits**: one Zen 5/WSL host and single-worker kernel measurements. Gains on
-  AVX2-only Intel/older AMD CPUs and full-backend throughput remain unmeasured.
-  The external screenshot's claimed C# advantage remains unverified.
+- **AVX2-only cloud follow-up**: Ubuntu 24.04 on an EC2 `c6a.8xlarge`, AMD
+  EPYC 7R13 (Milan/Zen 3), 16 physical cores/32 vCPUs, 64 GiB RAM and two NUMA
+  nodes. The guest exposes AVX2 and no AVX-512. Generic Rust 1.93.0 release
+  builds with fat LTO compare baseline `b19904e` with candidate `ecf200b`;
+  the only code difference is `pow-kernel/src/fixed_argon.rs`. These builds
+  exclude the separate Linux NUMA-default changes in the main working tree.
+- **Cloud method**: persistent CPU backend, fixed 1/8/16 workers, affinity
+  `auto`, autotuning disabled, four order-balanced A/B pairs per configuration.
+  Each sample has one warmup and two 12-second measured rounds, with a
+  three-second cooldown between samples. Regular pages disable THP; large-page
+  runs require verified explicit 2 MiB HugeTLB backing for every worker.
+  The large-page pool reserves 32 GiB and is released after the tests.
+- **Build provenance**: the baseline was rebuilt in a fresh, separate target
+  directory, and the AVX2 function sizes were audited: baseline 1888/2544 bytes,
+  candidate 2596/3736 bytes. An earlier batch reused a cached candidate kernel
+  in the baseline build and was discarded; none of those timings appear below.
+  Local and guest binary SHA-256 values match and remain unchanged across runs.
+- **Cloud correctness/controls**: both builds match the RustCrypto reference
+  for a full 2 GiB hash; all three kernel tests and 18 CPU-backend tests pass
+  on the AVX2-only guest. Benchmark reports show no allocation fallback,
+  allocation failures, dropped events or assignment/control timeouts. Swap
+  and OOM counter deltas remain zero; aggregate CPU steal stays below 0.001%
+  in every trial. The longest measured round-end fence is 0.788 seconds.
+
+| Workers | Page backing | Baseline H/s | Candidate H/s | Gain | Paired bootstrap 95% interval |
+|---------|--------------|-------------:|--------------:|-----:|-----------------------------:|
+| 1 | Regular | 1.4748 | 1.5907 | +7.85% | +7.06%..+8.41% |
+| 1 | 2 MiB HugeTLB | 1.8845 | 2.1639 | +14.83% | +14.53%..+15.09% |
+| 8 | 2 MiB HugeTLB | 5.2100 | 5.3684 | +3.04% | +2.78%..+3.43% |
+| 16 | 2 MiB HugeTLB | 10.2070 | 10.4470 | +2.35% | +1.12%..+3.61% |
+
+- **Accounting/interpretation**: the table uses reported backend `avg_hps`,
+  which excludes late hashes but includes fence time. Counting all completed
+  hashes over actual measured elapsed time gives gains of +7.47%, +14.23%,
+  +2.51% and +2.22%, respectively. Every pair favors the candidate under both
+  metrics. The intervals enumerate all 256 resamples of four paired deltas;
+  they describe these short samples, not variation across machines. The
+  smaller multi-worker gains are consistent with shared-memory bandwidth
+  limiting throughput; hardware bandwidth counters were not measured.
+- **Cloud evidence**: `data/cloud-avx2-2026-10-24/comparison.json`, `sources.json`,
+  `run_cloud.py`, `analyze_cloud.py` and `results/` retain the binary identities,
+  raw reports, backing checks, test logs and analysis. The instance was
+  terminated, and its root disk and temporary security group were deleted
+  after collection; verification is recorded in `cleanup.json`.
+- **Limits**: tested on one Zen 5/WSL host and one AVX2-only Milan cloud VM.
+  Intel AVX2 performance remains unmeasured, and this does not validate the
+  separate NUMA-default changes. The external screenshot's claimed C# advantage
+  remains unverified.
 
 ## Updated summary of cumulative adopted optimizations
 
@@ -119,6 +164,12 @@ Operational note: a partial runtime HugeTLB reservation (`6136 / 16384` pages)
 raised the same host's 16T native backend from ~`7.998 H/s` to ~`8.479 H/s`
 (~**+6.0%**), which makes early hugepage reservation the highest-leverage next
 step on this machine.
+
+### x86_64 (AMD EPYC 7R13, Zen 3 / AVX2-only EC2)
+
+| Attempt | Change | Kernel delta | Backend delta | Status |
+|---------|--------|-------------|---------------|--------|
+| 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +7.85% at 1T regular; +14.83% / +3.04% / +2.35% at 1T / 8T / 16T HugeTLB | Adopted |
 
 ### AArch64 (Apple M4 Max)
 
