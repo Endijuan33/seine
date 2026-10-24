@@ -38,8 +38,8 @@ desktop comparisons explicitly require regular backing, at most eight workers
 (16 GiB arenas), plus at least 10 GiB of free host-memory headroom before launch.
 This is a shared desktop, so longer comparisons must account for host variability.
 
-The Windows tuning-cache fingerprint currently omits allowed CPU IDs. The
-campaign includes a separate correctness fix so equal-sized masks selecting
+The v0.2.21 Windows tuning-cache fingerprint omits allowed CPU IDs. Commit
+`001f1e3` adds a separately tested correctness fix so equal-sized masks selecting
 different CCDs cannot reuse each other's tuning identity. This is independent of
 any proposed change to worker placement.
 
@@ -47,7 +47,11 @@ The interhash experiment is isolated in branch
 `codex/interhash-campaign-20261024`, initially commit `8432f45`, with its feature
 disabled by default. The development/initial-screen time box is 10:44–12:14 UTC.
 Small reference tests cover slice boundaries, multiple kernels and dirty reuse;
-native full-size parity and performance remain required. Historical Zen 3
+Native Ice Lake full-size parity passed for all four modes, three nonce pairs,
+and dirty arena reuse. Two opposite-order screens rejected all paired variants
+against ordinary SMT workers on the same physical core and equal 4 GiB arenas.
+One-element interleaving beat sequential use of two arenas but still lost to
+that stronger same-core control. No default changes are proposed. Historical Zen 3
 interleaving losses are recorded in CPU journal attempt 34. Historical Apple
 attempt 31 mixes total pair throughput and per-lane rates; this campaign compares
 total completed throughput directly and reports allocated cores and RAM.
@@ -55,8 +59,9 @@ total completed throughput directly and reports allocated cores and RAM.
 ## Cloud accounting and ownership
 
 `cloud.py` uses the existing `seine-bench` profile in `us-east-1`. It checks the
-shared Standard-vCPU quota before every launch. Existing EPYC work owns all
-32 vCPUs until its cleanup notification; this campaign must not race that lease.
+shared Standard-vCPU quota before every launch. The EPYC owner verified cleanup at 11:06 UTC. This campaign then acquired
+the 32-vCPU quota for one Graviton3 and one Ice Lake guest. Later generations
+replace terminated guests; launches must not race another session.
 Only resources tagged `Experiment=cpu-campaign-20261024` are owned here.
 
 Live AWS Pricing API queries at 10:29 UTC returned:
@@ -68,6 +73,9 @@ Live AWS Pricing API queries at 10:29 UTC returned:
 | c6i.4xlarge | 0.68000 |
 | c7i.4xlarge | 0.71400 |
 | c8i.4xlarge | 0.74968 |
+
+Additional live queries at 11:44 UTC returned m6g.4xlarge at $0.616/hour
+and c4.4xlarge at $0.796/hour for older architecture/fallback coverage.
 
 Separate live API queries confirmed gp3 at $0.08/GB-month and in-use public IPv4
 at $0.005/hour. Each launch reserves three hours of instance/storage/address cost
@@ -89,15 +97,30 @@ eventual deletion of the task-owned security group and SSH keys.
   the exact baseline archive, and run native reference checks and screening.
 - `screen.py`: alternating ISA/build screening with page, error, OOM, swap and
   steal-time checks; restores the guest's initially empty HugeTLB pool.
-- `interhash_screen.py`: three alternating equal-RAM passes after full-size
-  parity; uses the separately built research-only executable.
+- `interhash_screen.py`: up to three alternating equal-RAM passes after full-size
+  parity, with an early-rejection gate after two opposite-order passes; uses the
+  separately built research-only executable.
 - `resource_lifecycle.py`: real miner process tests under bounded CPU/memory
   controls. A service-private hosts file redirects the built-in developer pool
   to the local fixture, with additional loopback-only IP restrictions.
 - `cloud.py`: launch/inspect/copy/terminate task-owned leases and record cleanup.
 
-Native Windows scripts and topology artifacts currently live with raw data and
-will be reduced to reproducible evidence before the campaign PR is finalized.
+- `matrix.py`: follow-up cross-build comparisons with completed-work accounting,
+  checked backing, immutable binary identities and bounded memory.
+- `arm_followup.sh`, `arm_combined.sh`, `intel_streaming.sh`: frozen source builds,
+  native parity, and explicit candidate comparisons. These never change shipping
+  defaults; read their pinned commit/archive identities before rerunning.
+- `collect.py`: archives completed stages between timing phases, checks the
+  downloaded archive digest, and verifies every individual file against a manifest.
+- `windows_bench.py`, `windows_matrix.py`, `windows_confirm.py`: reproduce the
+  recorded 9950X3D masks and native Windows measurements from WSL. Set
+  `SEINE_WINDOWS_BENCH_DIR` to an owned temp directory's WSL path,
+  `SEINE_WINDOWS_RELEASE_ZIP` to the verified v0.2.21 Windows release archive,
+  and `SEINE_WINDOWS_GPUQ_STATE` to the native coordinator state file's Windows
+  path. Run the helper's `setup()` once before the matrix. The matrices assume
+  the recorded native topology; verify masks before using another machine.
+  The original executed scripts are retained unchanged beside raw evidence;
+  tracked copies make only their local paths configurable.
 
 ## Primary references for ARM investigation
 

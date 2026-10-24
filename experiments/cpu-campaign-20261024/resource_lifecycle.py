@@ -13,6 +13,7 @@ import datetime
 import json
 from pathlib import Path
 import socketserver
+import re
 import subprocess
 import threading
 import time
@@ -89,21 +90,37 @@ def start(unit, binary, cache, port, cpus, high, fixed=False):
 
 
 def stop(unit):
-    subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True, timeout=30)
+    stopped = subprocess.run(["sudo", "systemctl", "stop", unit], capture_output=True, text=True, timeout=30)
+    if stopped.returncode:
+        assert "not loaded" in stopped.stderr, stopped.stderr
+    active = command(["systemctl", "show", unit, "--property=ActiveState", "--value"]).strip()
+    assert active not in ("active", "activating", "deactivating"), (unit, active)
+
+
+def completed_hashes(unit):
+    logfile = OUT / (unit + ".log")
+    text = logfile.read_text(errors="replace") if logfile.exists() else ""
+    return max([0] + [int(n) for n in re.findall(r"\bhashes=(\d+)", text)])
 
 
 def observe(unit, label, seconds, records):
     begin = time.monotonic()
+    initial_hashes = completed_hashes(unit)
     while time.monotonic() - begin < seconds:
         active = command(["systemctl", "show", unit, "--property=ActiveState", "--value"]).strip()
         assert active == "active", (unit, active)
         sample = state(unit)
         sample["phase"] = label
+        sample["completed_hashes"] = completed_hashes(unit)
         assert "oom_kill 0" in sample.get("memory.events", ""), sample
         records.append(sample)
         save(unit + "-samples.json", records)
         time.sleep(2)
-    print(datetime.datetime.now(datetime.timezone.utc).isoformat(), unit, label, "complete", flush=True)
+    final_hashes = completed_hashes(unit)
+    if label not in ("one-arena-budget", "no-arena-budget"):
+        assert final_hashes > initial_hashes, (label, "no productive progress", initial_hashes, final_hashes)
+    print(datetime.datetime.now(datetime.timezone.utc).isoformat(), unit, label,
+          "complete", "completed_hashes_delta=" + str(final_hashes - initial_hashes), flush=True)
 
 
 def main():
@@ -123,7 +140,7 @@ def main():
         units.append(unit)
         start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G")
         records = []
-        observe(unit, "initial-stable", 180, records)
+        observe(unit, "initial-stable", 240, records)
         if cache.exists():
             save("seed-before-pressure.json", json.loads(cache.read_text()))
         set_high(unit, "3G")
@@ -141,7 +158,7 @@ def main():
                  "--property=AllowedCPUs=" + a.cpus, "--property=RuntimeMaxSec=50",
                  "--property=MemoryMax=256M", "python3", "-c", code])
         observe(unit, "cpu-contention", 48, records)
-        observe(unit, "load-recovery", 150, records)
+        observe(unit, "load-recovery", 90, records)
         stop(unit)
         assert cache.exists(), "no stable observation was persisted"
         seed = json.loads(cache.read_text())

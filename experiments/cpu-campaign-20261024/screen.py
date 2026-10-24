@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import time
 
@@ -77,18 +78,25 @@ def main():
     run(["uname", "-a"], OUT / "uname.txt")
     cpus = physical_first()
     arm = platform.machine() == "aarch64"
-    variants = [("generic", "neon")] if arm else [("generic", k) for k in ("avx2", "avx512", "avx512-256")]
-    if arm and (ROOT / "bin/seine-sha3").exists():
-        variants.append(("sha3", "neon"))
     identities = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT / "bin").iterdir()}
     save(OUT / "identities.json", identities)
     for verifier in sorted((ROOT / "bin").glob("verify-*")):
         run([str(verifier)], OUT / (verifier.name + ".log"), timeout=600)
+    supported = set(re.findall(r"^(\S+): PASS", (OUT / "verify-generic.log").read_text(), re.MULTILINE))
+    variants = [("generic", "neon")] if arm else [("generic", k) for k in ("avx2", "avx512", "avx512-256") if k in supported]
+    assert variants and all(kernel in supported for _, kernel in variants)
+    if arm and (ROOT / "bin/seine-sha3").exists():
+        variants.append(("sha3", "neon"))
     print("Full-size reference parity passed for all compiled variants", flush=True)
     old_pool = int(Path("/proc/sys/vm/nr_hugepages").read_text())
     assert old_pool == 0, "dedicated guest must not have an existing HugeTLB reservation"
-    maximum = 16 if arm else 12
-    configs = [("regular", 1), ("large", 1), ("large", 4), ("large", 8), ("large", maximum)]
+    memory = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
+    assert memory['Hugepagesize'] == 2048, "this harness requires an explicit 2 MiB HugeTLB pool"
+    memory_cap = (memory['MemAvailable'] * 1024 - 5 * 1024**3) // (2 * 1024**3)
+    maximum = min(16 if arm else 12, len(cpus), memory_cap)
+    assert maximum >= 1, "insufficient memory for one arena plus headroom"
+    assert memory['MemAvailable'] * 1024 >= maximum * 2 * 1024**3 + 5 * 1024**3, "insufficient bounded-memory headroom"
+    configs = [("regular", 1)] + [("large", count) for count in sorted({1, min(4, maximum), min(8, maximum), maximum})]
     records = []
     start = time.monotonic()
     try:

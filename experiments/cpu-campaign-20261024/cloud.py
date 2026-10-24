@@ -21,7 +21,8 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 ROOT = REPO / "data/cpu-campaign-20261024"
 EXPERIMENT = "cpu-campaign-20261024"
 DEADLINE = dt.datetime(2026, 10, 24, 20, 0, tzinfo=dt.timezone.utc)
-TYPES = {"m7g.4xlarge": "arm64", "m8g.4xlarge": "arm64",
+TYPES = {"m6g.4xlarge": "arm64", "m7g.4xlarge": "arm64", "m8g.4xlarge": "arm64",
+         "c4.4xlarge": "amd64",
          "c6i.4xlarge": "amd64", "c7i.4xlarge": "amd64", "c8i.4xlarge": "amd64"}
 
 
@@ -90,7 +91,7 @@ def launch(instance_type, minutes):
     # The caller must coordinate with other sessions before this check. A quota
     # failure does not trigger retries that could race another experiment.
     limit = aws("service-quotas", "get-service-quota", "--service-code", "ec2",
-                "--quota-code", "L-1216C47")["Quota"]["Value"]
+                "--quota-code", "L-1216C47A")["Quota"]["Value"]
     running = aws("ec2", "describe-instances", "--filters",
                   "Name=instance-state-name,Values=pending,running")["Reservations"]
     standard = [i for r in running for i in r["Instances"]
@@ -114,8 +115,11 @@ def launch(instance_type, minutes):
     if not s["security_group"]:
         address = urllib.request.urlopen("https://checkip.amazonaws.com", timeout=15).read().decode().strip()
         ipaddress.IPv4Address(address)
-        tags = [{"ResourceType": "security-group", "Tags": [{"Key": "Experiment", "Value": EXPERIMENT}]}]
-        group = aws("ec2", "create-security-group", "--group-name", EXPERIMENT,
+        # This is the existing benchmark role's required resource-tag namespace.
+        tags = [{"ResourceType": "security-group", "Tags": [
+            {"Key": "Project", "Value": "seine-avx2-validation"},
+            {"Key": "Experiment", "Value": EXPERIMENT}]}]
+        group = aws("ec2", "create-security-group", "--group-name", "seine-" + EXPERIMENT,
                     "--description", "Temporary Seine CPU campaign SSH", "--vpc-id", vpc,
                     "--tag-specifications", json.dumps(tags))["GroupId"]
         s["security_group"] = group
@@ -139,7 +143,7 @@ printf '%s\\n' {shlex.quote(pubkey)} >> /home/ubuntu/.ssh/authorized_keys
 chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys
 chmod 600 /home/ubuntu/.ssh/authorized_keys
 """
-    tags = [{"Key": "Experiment", "Value": EXPERIMENT}, {"Key": "Project", "Value": "seine-cpu"},
+    tags = [{"Key": "Experiment", "Value": EXPERIMENT}, {"Key": "Project", "Value": "seine-avx2-validation"},
             {"Key": "Name", "Value": "seine-campaign-" + instance_type},
             {"Key": "ExpiresAt", "Value": end.isoformat()}]
     ami = (ROOT / (TYPES[instance_type] + "-ami.txt")).read_text().strip()
@@ -181,7 +185,14 @@ def ready(ident):
             s = state()
             record = next(x for x in s["leases"] if x["instance_id"] == ident)
             _, info = owned(ident)
+            behavior = aws("ec2", "describe-instance-attribute", "--instance-id", ident,
+                           "--attribute", "instanceInitiatedShutdownBehavior")["InstanceInitiatedShutdownBehavior"]["Value"]
+            assert behavior == "terminate", "guest shutdown would not terminate the rental"
+            scheduled = next(int(line.split("=", 1)[1]) / 1_000_000
+                             for line in text.splitlines() if line.startswith("USEC="))
+            assert now().timestamp() < scheduled <= dt.datetime.fromisoformat(record["expires_at"]).timestamp() + 5
             record.update(timer_verified=True, timer_evidence=text, ip=info["PublicIpAddress"],
+                          shutdown_behavior=behavior,
                           volume_ids=[x["Ebs"]["VolumeId"] for x in info["BlockDeviceMappings"]])
             persist(s)
             print(text)

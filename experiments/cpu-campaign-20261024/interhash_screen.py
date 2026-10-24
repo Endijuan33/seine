@@ -41,6 +41,9 @@ def main():
     pool = Path("/proc/sys/vm/nr_hugepages")
     old = int(pool.read_text())
     assert old == 0, "previous experiments must release their page pool"
+    memory = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
+    assert memory['Hugepagesize'] == 2048, "this runner requires 2 MiB HugeTLB pages"
+    assert memory['MemAvailable'] * 1024 >= 8 * 1024**3, "insufficient headroom for pair plus reference parity"
     records = []
     started = time.monotonic()
     try:
@@ -68,6 +71,19 @@ def main():
                 save(a.out / "results.json", records)
                 print(datetime.datetime.now(datetime.timezone.utc).isoformat(), label, result["completed_hps"], flush=True)
                 time.sleep(2)
+            if repeat == 1:
+                clear_losses = []
+                for completed_pass in (1, 2):
+                    rows = [r['result'] for r in records if r['repeat'] == completed_pass]
+                    controls = [r['completed_hps'] for r in rows if r['mode'] == 'sequential'
+                                or (r['mode'] == 'workers' and r['cpu1'] in groups[0])]
+                    candidates = [r['completed_hps'] for r in rows if r['mode'].startswith('pair')]
+                    clear_losses.append(max(candidates) < .95 * max(controls))
+                if all(clear_losses):
+                    save(a.out / 'EARLY-REJECTION.json', {
+                        'reason': 'Every interleaving variant trails the strongest equal-RAM same-physical-core ordinary control by over 5% in both opposite-order passes',
+                        'completed_passes': 2})
+                    break
     finally:
         run(["sudo", "sysctl", "-w", f"vm.nr_hugepages={old}"], a.out / "release.log")
         save(a.out / "results.json", records)
