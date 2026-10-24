@@ -8,6 +8,24 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+## v0.2.19
+
+**Adjust CPU threads from the dashboard.** Press `+` or `-` beside the thread
+count to add or remove one thread per CPU backend; `=` also increases the count.
+Workers restart and pool mining reconnects briefly, while session totals,
+uptime, average hashrate, logs and block markers are preserved. The current
+hashrate refreshes for the new workers. Manual changes disable CPU autotuning
+for the current run and are not saved as a new default.
+
+**Keep the essentials visible in small terminals.** A compact dashboard keeps
+the thread count, adjustment keys, mining state and hashrate visible when the
+full layout no longer fits.
+
+**Read startup errors before the Windows window closes.** When double-clicking
+`seine.exe` opens its own console and startup fails, the error stays visible
+until you press Enter. Existing terminal and scripted launches keep their usual
+exit behavior.
+
 ## v0.2.18
 
 **Faster CPU mining on AVX2 processors.** The Argon2 kernel does more work in
