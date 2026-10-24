@@ -8,6 +8,24 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+## v0.2.18
+
+**Faster CPU mining on AVX2 processors.** The Argon2 kernel does more work in
+parallel and uses fewer column loads and stores. Gains depend on the CPU,
+worker count and memory backing. Existing AVX-512 and ARM kernels keep their
+current instruction paths.
+
+**Smarter CPU placement on Linux.** Automatic worker placement spreads work
+across NUMA nodes and L3 cache groups, using physical cores before SMT siblings.
+This helps machines where OS-order placement crowds workers into only part of
+the available memory and cache resources. Cached tuning choices are refreshed
+for the new placement policy. Use `--cpu-affinity os` to restore OS-order pinning.
+
+**More RAM headroom with automatic CPU thread counts.** Sizing and autotuning
+now reserve 5% of effective RAM from their budget on all platforms. Use
+`--cpu-memory-reserve-percent 0` to remove that reserve. Explicit thread counts
+retain their existing behavior unless thread autotuning is forced.
+
 ## v0.2.17
 
 **Less pool polling and better recovery when the pool is busy.** Seine reuses
