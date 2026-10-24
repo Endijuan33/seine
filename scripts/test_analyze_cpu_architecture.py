@@ -69,6 +69,21 @@ class MatrixEvidenceTests(unittest.TestCase):
         self.change_candidate(lambda r: r['runs'][0]['backend_runs'][0].update(memory_explicit_large_bytes=0))
         with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
 
+    def test_matching_reports_with_wrong_page_mode_are_rejected(self):
+        for p in self.path.glob('*_pair*.json'):
+            report = json.loads(p.read_text())
+            report['config_fingerprint']['cpu_page_mode'] = 'regular'
+            for run in report['runs']:
+                for backend in run['backend_runs']:
+                    backend['memory_regular_workers'] = 1
+                    backend['memory_regular_bytes'] = 2 * 1024**3
+            p.write_text(json.dumps(report))
+        with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
+
+    def test_missing_measured_round_is_rejected(self):
+        self.change_candidate(lambda r: r['runs'].pop())
+        with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
+
     def test_wrong_kernel_is_rejected(self):
         self.change_candidate(lambda r: r['config_fingerprint'].update(cpu_kernel='avx2'))
         with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)

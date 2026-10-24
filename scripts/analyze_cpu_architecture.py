@@ -25,11 +25,13 @@ def summarize_trial(path, experiment):
     for row in rows:
         report = json.loads((path / Path(row['report']).name).read_text())
         assert report['rounds'] == experiment['rounds']
+        assert len(report['runs']) == experiment['rounds']
         assert report['warmup_rounds'] == experiment['warmup_rounds']
         assert report['bench_secs'] == experiment['seconds']
         assert report['environment']['build_rustflags'] == ''
         assert report['schema_version'] == 14
         assert report['cpu_threads'] == int(path.name.rsplit('-t', 1)[1])
+        assert report['config_fingerprint']['cpu_page_mode'] == path.name.rsplit('-t', 1)[0]
         assert report['config_fingerprint']['cpu_autotune_threads'] is False
         assert report['config_fingerprint']['cpu_affinity'] == 'os'
         expected = 'avx512' if experiment['comparison'] == 'avx2-vs-avx512' and row['variant'] == 'candidate' else 'avx2'
