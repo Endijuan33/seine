@@ -171,6 +171,17 @@ eventual deletion of the task-owned security group and SSH keys.
   paired gains or actual resident-arena lifecycle evidence.
 - `export_evidence.py`: normalize schema-14 rounds while retaining raw SHA256
   identities and completed-work/fence accounting.
+- `reproduce_codegen_review.py --data <retained-data-directory>`: inspect the
+  three frozen x86 miner ELFs without executing them. Reproduce instruction
+  comparisons while retaining operand structure, branch targets and explicitly
+  unverified metadata references. This does not prove throughput equivalence.
+- `joint_tuner_probe.py`, `queue_joint_probe.py`: bounded natural tuning against
+  a loopback fixture with independent service/rental deadlines, real productive
+  work checks, CPU/RAM bounds and verified cleanup. The initial queued probe was
+  cancelled before mining to prioritize the Cascade Lake regression.
+- Portable regression and ARM confirmation launchers accept an explicit frozen
+  `--bundle`; they verify its source identity and every binary digest. Earlier
+  `636e688` bundles remain immutable alongside the `f20e7bb` code-generation fix.
 
 - `intel_controls.sh`, `arm_clean_confirm.sh`: authoritative isolated-target
   controls and confirmation builds, including published-binary comparisons and

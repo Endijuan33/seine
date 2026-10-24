@@ -26,6 +26,7 @@ on another machine. No campaign PR has been merged or released.
 | Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two screens (order limitation below); full AVX-512 11.605 / 12.969. No material gain; no promotion. |
 | Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two screens (order limitation below); full AVX-512 leads at all tested counts. |
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
+| Intel Xeon Platinum 8275CL / Cascade Lake, 12 workers, full AVX-512, baseline → combined `636e688` | 9.312 → 9.024 | Two corrected-order regression pairs both lose about 3%; draft blocker under longer three-way confirmation. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
 Older Intel/Zen results and final Graviton2/3 corrected confirmation remain pending.
@@ -161,6 +162,33 @@ AVX-512 +0.53% / +0.58%. These small differences are retained without claiming
 an x86 kernel optimization. Both builds use the same CPU-only generic profile.
 All sixteen reports passed actual-order verification; a deliberately partial
 first-pass export was rejected without creating a confirmation artifact.
+
+## Cross-architecture code-generation regression investigation
+
+Cascade Lake exposed a repeatable approximately 3% full-width AVX-512 slowdown
+in the combined `636e688` candidate at twelve workers. The same frozen binaries
+were near-flat on Xeon 6975P-C. This is retained as a regression, not dismissed
+because the ARM gains are larger.
+
+Static inspection of the actual miner found that the ARM refactor's small
+wrapper caused x86 fill loops to inline into the dispatch function. The enclosing
+function grew from 1,780 to 32,130 bytes and hot-loop register allocation changed.
+That size includes alternate ISA paths which are not all executed by one hash.
+The AVX-512 compression instructions and referenced constants remained identical.
+
+An isolated four-line change, `f20e7bb`, keeps the x86 fill wrapper out of line
+without applying that attribute to ARM. The resulting dispatch and all four
+fill functions match the baseline's normalized instruction sequences and sizes.
+See [static evidence](evidence/x86-codegen-review.json). Static equivalence does
+not establish performance recovery: a longer native baseline/`636e688`/fix
+comparison and an ARM regression check are still pending. The ARM PR remains
+draft and the fix is not yet integrated there.
+
+The separate combined integration branch includes PRs #40, #41, #43, #44 and
+#45 plus this candidate fix. It passes 497 workspace tests (five ignored),
+all-feature/all-target Linux compilation, Windows GNU test cross-compilation,
+scoped formatting and strict kernel Clippy. Cross-compilation is not native
+Windows execution. [Evidence](evidence/integration-check.json) retains log hashes.
 
 ## Reviewable changes
 
