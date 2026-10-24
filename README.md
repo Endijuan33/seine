@@ -128,8 +128,10 @@ changes, including changes that leave the CPU count unchanged.
 
 On a rented EPYC 8434P, L3 spreading improved the 24-worker offline backend
 benchmark by 16.7% across three alternating pairs; the 32-worker result was
-inconclusive. See [the CPU optimization log](CPU_OPTIMIZATION_LOG.md) for the
-method and limitations. Multi-node NUMA performance remains unmeasured.
+inconclusive. On a two-node EPYC 7R13 VM, eight-worker throughput improved by
+73.2% with ordinary pages and 108.0% with 2 MiB HugeTLB; the 16-worker all-core
+control was effectively unchanged. See [the CPU optimization log](CPU_OPTIMIZATION_LOG.md)
+for the methods, topology checks, and limits of these host-specific results.
 Compare `auto` against `os` with the same thread count and verified page
 backing before attributing a hashrate change to placement. HugeTLB pools need
 sufficient pages on the nodes hosting workers; a sufficient global count alone
