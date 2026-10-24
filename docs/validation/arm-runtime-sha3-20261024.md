@@ -129,4 +129,4 @@ compiled source fingerprints and source archives establish the build identities.
 
 The [architecture evidence PR](https://github.com/zpalmtree/seine/pull/42) retains
 normalized rounds, actual order, binary/source mappings, failures, exclusions and
-archive digests. No campaign change has been merged or released.
+archive digests. This ARM candidate remains unmerged; PRs #40/#45 were merged separately and no release was published.
