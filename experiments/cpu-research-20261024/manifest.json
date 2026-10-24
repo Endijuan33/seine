@@ -1,0 +1,41 @@
+{
+  "schema": 2,
+  "binary_sha256": "cf0f4f208d48b48fb0c14dc1e29ae20cdfbdeb010103fb271614728804f70a5a",
+  "base_commit": "b63006f95384fcc1056d9df1855c37244f6c4f33",
+  "source_sha256": {
+    "pow-kernel/src/fixed_argon/research.rs": "9a064243ae9135c8d83d3134739eb984e12ed00ed6b9ab46ea7c358560a46846",
+    "pow-kernel/examples/cpu_tmto.rs": "276829b2f99351b4cc405b243f7470d38b39fd748e97a7742691808dda9d5642"
+  },
+  "runs": [
+    {
+      "nonce": 0,
+      "seconds": 5.885100767016411,
+      "file": "tmto-cost-2g-n0.json",
+      "sha256": "d53c767df31c53e69eddc2657ea3bc60a062a508c58c91beb36368343eb9eeb3"
+    },
+    {
+      "nonce": 1,
+      "seconds": 5.384761152905412,
+      "file": "tmto-cost-2g-n1.json",
+      "sha256": "82912a0ad8d4875156adf2360471634a13bc2643c5daa116fd0f9262d2ddb9e7"
+    },
+    {
+      "nonce": 2,
+      "seconds": 5.385081804939546,
+      "file": "tmto-cost-2g-n2.json",
+      "sha256": "6a35946c36e6b596baa94ce04c4b5361b67d5d29f783ae6a64d5761422cdfe36"
+    }
+  ],
+  "energy_validation": {
+    "scope": "report_parser_contract_smoke_not_energy_or_speed_measurement",
+    "report_file": "energy-report-contract-smoke.json",
+    "report_sha256": "246a6b58c89f76f8d0c2f4830b11c9dc81e975bcdb17b7578c982e0e9dd23743",
+    "binary_sha256": "ae7b958a2048f50aeb36cf2ca7ce92bb2db14d9424b6b44da6b03a97c62e4422",
+    "completed_hashes": 3,
+    "source_sha256": {
+      "scripts/bench_cpu_energy.py": "dcd54bbbe62a9643df128d636381b23a38d97f949fe128d01829d951a8ae4ac3",
+      "scripts/test_bench_cpu_energy.py": "5e18b9b0991cfdc292d3d1f34de6f3301713e57aa87b4b46521170eb1319eea2"
+    },
+    "python_tests_passed": 14
+  }
+}
