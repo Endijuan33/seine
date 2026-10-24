@@ -391,10 +391,23 @@ fn resource_spawn_error(err: &std::io::Error) -> bool {
         return true;
     }
     #[cfg(target_os = "windows")]
-    if matches!(err.raw_os_error(), Some(8 | 14 | 1450)) {
+    if err
+        .raw_os_error()
+        .is_some_and(windows_thread_resource_error)
+    {
         return true;
     }
     false
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_thread_resource_error(code: i32) -> bool {
+    // WinError.h: NOT_ENOUGH_MEMORY/OUTOFMEMORY (8/14), TOO_MANY_TCBS/
+    // MAX_THRDS_REACHED (155/164), and system/pool/working-set/pagefile/commit
+    // exhaustion (1450..=1455). Keep unrelated failures out of the retry path.
+    // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
+    // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1300-1699-
+    matches!(code, 8 | 14 | 155 | 164 | 1450..=1455)
 }
 
 impl CpuBackend {
@@ -1635,6 +1648,50 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn windows_thread_resource_codes_are_retryable() {
+        for code in [8, 14, 155, 164, 1450, 1451, 1452, 1453, 1454, 1455] {
+            assert!(
+                super::windows_thread_resource_error(code),
+                "Windows code {code}"
+            );
+            #[cfg(target_os = "windows")]
+            assert!(super::resource_spawn_error(
+                &std::io::Error::from_raw_os_error(code)
+            ));
+        }
+        // Permission/parameter errors and adjacent unrelated WinError values.
+        for code in [
+            0, 5, 6, 7, 9, 13, 15, 87, 154, 156, 163, 165, 1449, 1456, -1,
+        ] {
+            assert!(
+                !super::windows_thread_resource_error(code),
+                "Windows code {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn spawn_error_retry_excludes_non_resource_failures() {
+        use std::io::ErrorKind;
+        for kind in [ErrorKind::WouldBlock, ErrorKind::OutOfMemory] {
+            assert!(super::resource_spawn_error(&kind.into()));
+        }
+        for kind in [
+            ErrorKind::PermissionDenied,
+            ErrorKind::InvalidInput,
+            ErrorKind::Unsupported,
+            ErrorKind::Other,
+        ] {
+            assert!(!super::resource_spawn_error(&kind.into()));
+        }
+        #[cfg(not(target_os = "windows"))]
+        assert!(
+            !super::resource_spawn_error(&std::io::Error::from_raw_os_error(1455)),
+            "do not interpret another OS's raw error codes as Windows errors"
+        );
+    }
 
     #[test]
     fn adaptive_resume_reopens_accounting_without_resetting_hash_totals() {

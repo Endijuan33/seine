@@ -88,7 +88,7 @@ the saved higher count and CPU-only cache maximum survive the restriction.
 Manual TUI requests carry their live RAM/worker limit to the supervisor so its
 pre-start RAM estimate cannot widen a reduced limit or reject later recovery.
 
-Validation in this implementation worktree: 485 CPU-only tests passed, five
+Validation in this implementation worktree: 485 root-binary CPU-only tests passed, five
 hardware/resource-dependent tests ignored; Linux all-feature compile check passed.
 Windows GNU CPU-only cross-compilation, including the tests, also passed.
 Injected spawn failures exercise real small-arena workers, cleanup, manual-count
@@ -96,6 +96,16 @@ failure, recovery, park/resume, nonce uniqueness and fixed-stride coverage, plus
 cancel/fence completion. Filesystem fixtures cover nested/sibling PID usage,
 unlimited levels and invalid/missing usage. Policy/manual-control tests cover
 bounded probing, unchanged cache maxima, and stale supervisor limits.
+
+Windows portability follow-up: the spawn retry classifier also recognizes
+155/164 (thread limits) and 1451 through 1455 (pool/quota/commit exhaustion), in
+addition to 8/14/1450. Values are checked against Microsoft's
+[0–499 error codes](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-)
+and [1300–1699 error codes](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1300-1699-).
+Two additional pure tests run on Linux and cover supported Windows codes,
+non-resource failures, and keeping Windows raw-code interpretation Windows-only.
+The 485-test figure above excludes these new tests and the workspace libraries'
+seven tests; combined/native confirmation remains with the architecture campaign.
 
 Native confirmation is owned by the architecture campaign. The ignored
 `miner::adaptive_cpu::tests::pid_budget_startup_probe` keeps its existing controller
