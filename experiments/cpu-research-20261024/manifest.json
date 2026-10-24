@@ -33,10 +33,10 @@
     "binary_sha256": "ae7b958a2048f50aeb36cf2ca7ce92bb2db14d9424b6b44da6b03a97c62e4422",
     "completed_hashes": 3,
     "source_sha256": {
-      "scripts/bench_cpu_energy.py": "dcd54bbbe62a9643df128d636381b23a38d97f949fe128d01829d951a8ae4ac3",
-      "scripts/test_bench_cpu_energy.py": "519d7f6a6eed013dd60b5ac5d5925fa5f2e51d2988cecfa621b12db346816765"
+      "scripts/bench_cpu_energy.py": "aa95b8ab684f80f7569b6ca8e6aab9f4caa0e45848f9e0ad076acb726b7613ba",
+      "scripts/test_bench_cpu_energy.py": "175a91cb465ad29c67d1f2fdf25e117622f889351b497d5b766a4458bdf06d02"
     },
-    "python_tests_passed": 14
+    "python_tests_passed": 15
   },
   "integration_validation": {
     "master_commit": "0a63aec2c717d1c2209a381f738063967b342cb7",

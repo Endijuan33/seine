@@ -87,7 +87,8 @@ check the report contract; their throughput is not used as optimization evidence
 - Full 2 GiB independent reference checks passed for all three recorded nonces.
 - Strict kernel Clippy and Windows x86-64 GNU/macOS AArch64 all-target checks
   pass with the feature. Cross-compilation is not native runtime validation.
-- 14 energy-tool tests cover arithmetic, domain deduplication, report rejection,
-  simulated capture, comparison consistency and timeout/SIGTERM cleanup.
+- 15 energy-tool tests cover arithmetic, domain deduplication and coverage,
+  report rejection, simulated capture, comparison consistency and timeout/SIGTERM
+  cleanup.
 - Hardware energy measurements and production recomputation are deferred;
   production kernel dispatch and PoW parameters are unchanged by this branch.

@@ -78,6 +78,14 @@ class EnergyTests(unittest.TestCase):
             energy.select_packages(self.zones + [duplicate], None)
         self.assertEqual(energy.select_packages(self.zones + [duplicate], [self.zone]), self.zones)
 
+    def test_source_selection_cannot_silently_omit_another_socket(self):
+        other_path = self.root / "intel-rapl:1"
+        other = dict(self.zones[0], name="package-1", path=str(other_path))
+        zones = self.zones + [other]
+        with self.assertRaisesRegex(energy.EnergyError, "every available CPU package"):
+            energy.select_packages(zones, [self.zone])
+        self.assertEqual(energy.select_packages(zones, [self.zone, other_path]), zones)
+
     def test_complete_hashes_include_fence_completions(self):
         self.assertEqual(energy.validate_report(report(), 1, "regular", 1, 1, "avx2"), 12)
 

@@ -28,7 +28,8 @@ into a production electricity saving without a sustained mining measurement.
 The Linux [powercap interface](https://www.kernel.org/doc/html/latest/power/powercap/powercap.html)
 reports accumulated microjoules and a counter range. Package domains are summed;
 core/uncore child domains are excluded to avoid double counting. Duplicate
-drivers exposing the same package require explicit `--zone` selection. Raw
+drivers exposing the same package require explicit `--zone` selection, with one
+source for every available package so a second socket cannot be silently omitted. Raw
 timestamped samples are retained. A conservative `--max-domain-watts` bound
 rejects sampling gaps that could hide multiple counter wraps and increments
 inconsistent with that bound. Do not reset counters during a run; a reset whose

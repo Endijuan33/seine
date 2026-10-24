@@ -79,6 +79,9 @@ def select_packages(zones: list[dict], selected: list[Path] | None) -> list[dict
         raise EnergyError("no readable CPU package energy counters; no benchmark was started")
     if len({zone["name"] for zone in packages}) != len(packages):
         raise EnergyError("duplicate package names from multiple drivers; select one source with --zone")
+    available_names = {zone["name"] for zone in zones if zone["name"].startswith("package-")}
+    if {zone["name"] for zone in packages} != available_names:
+        raise EnergyError("select one counter source for every available CPU package")
     paths = [Path(zone["path"]) for zone in packages]
     if any(a in b.parents for a in paths for b in paths if a != b):
         raise EnergyError("selected energy domains overlap")
@@ -404,7 +407,7 @@ def parser() -> argparse.ArgumentParser:
     measure.add_argument("--max-domain-watts", type=float, default=1000,
                          help="conservative physical upper bound per package; bounds counter wraps")
     measure.add_argument("--label", default="current-settings")
-    measure.add_argument("--zone", type=Path, action="append", help="select package source when multiple drivers expose it")
+    measure.add_argument("--zone", type=Path, action="append", help="select one source for each package when multiple drivers expose it")
     comparison = commands.add_parser("compare", help="compare three or more paired worker/power measurements")
     comparison.add_argument("--baseline", type=Path, nargs="+", required=True)
     comparison.add_argument("--candidate", type=Path, nargs="+", required=True)
