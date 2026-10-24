@@ -2,6 +2,7 @@
 """Summarize a collected architecture matrix; accepts completed cells only."""
 import argparse
 import csv
+import hashlib
 import itertools
 import json
 from pathlib import Path
@@ -98,6 +99,12 @@ def main():
     for cell in sorted(root.glob('*.2xlarge')):
         if not (cell / 'results/COMPLETE').exists():
             continue
+        state = json.loads((cell / 'state.json').read_text())
+        if not state.get('results_verified'):
+            continue  # A concurrent collection may have copied COMPLETE first.
+        for line in (cell / 'RESULTS-SHA256SUMS').read_text().splitlines():
+            digest, name = line.split('  ', 1)
+            assert hashlib.sha256((cell / name).read_bytes()).hexdigest() == digest, (cell, name)
         experiment = json.loads((cell / 'results/experiment.json').read_text())
         observed = json.loads((cell / 'results/binary-sha256.json').read_text())
         assert expected == observed, cell
