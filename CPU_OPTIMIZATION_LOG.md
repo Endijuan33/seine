@@ -11,6 +11,8 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 productive CPU autotuning and changing resource budgets`
+
 - `2026-10-24 cross-generation CPU kernel matrix`
 - `2026-10-24 EPYC 9R14 256-bit AVX-512 kernel experiment`
 - `2026-10-24 explicit CPU kernel benchmarks and architecture identity`
@@ -54,6 +56,66 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 productive CPU autotuning and changing resource budgets
+
+- Automatic mining previously ran an offline startup search and kept its selected
+  count for the session. Temporary CPU load or low available RAM could therefore
+  determine the operating count long after conditions improved.
+- Mining now starts from a compatible cached count, or half the stable automatic
+  capacity, capped by current RAM. Productive baseline/candidate/baseline trials
+  measure completed hashes while the miner remains connected. Every arena warms
+  before measurement; each window takes at least 30 seconds and 20 hashes.
+  Baseline drift above 8%, sustained work loss, and RAM changes invalidate trials.
+  Balanced/efficiency floors remain 99%/75% of the tracked peak; upward changes
+  require a gain exceeding 2% plus hash-count quantization. Periodic local and
+  occasional wider probes revisit changing CPU load without a new startup sweep.
+- CPU lanes keep fixed nonce strides and individual cursors. Disabled workers
+  release their arenas and reference tables; survivors keep theirs. Zero enabled
+  workers is supported. Recovery waits for 30 seconds of headroom; failed arena
+  allocations wait five minutes and do not quarantine healthy workers. Explicit
+  CLI/API/TUI counts retain manual control unless automatic tuning is requested.
+- Budgets include allocations in progress as well as resident arenas. A real
+  two-worker pilot exposed a race where first-touch RAM was initially attributed
+  to other applications, causing the new worker to be immediately removed.
+  A blocked-allocator regression now verifies the credit before backing appears.
+  CPU/user ceilings are kept separate from RAM headroom for pressure decisions.
+- Linux reads the actual cgroup-v2 membership and inherited `memory.high` and
+  `memory.max`, crediting clean inactive file cache. The pinned sysinfo version
+  only checked the mount root. The ordinary tool process's 4 GiB `memory.high`
+  correctly permits only one 2 GiB arena after reserve/overhead. Linux PSI prefers
+  the miner's own cgroup to avoid reacting to unrelated host stalls; system PSI is
+  the fallback. Pressure and Windows low-memory notifications require three
+  consecutive samples and tight headroom before shedding workers; byte-budget
+  reductions apply immediately.
+- Schema 11 stores mining observations and the resource-limit flag. Compatible
+  schema-10 records remain startup seeds. A temporarily lower RAM ceiling retains
+  a previous higher selected count on disk. Offline kernel and live mining scores
+  remain distinct; hardware/build/topology/page-mode compatibility still applies.
+- Validation after integration with v0.2.20: CPU-only workspace suite **462 passed**,
+  three opt-in tests ignored;
+  default-feature all-target check, Windows GNU CPU-only cross-check, scoped
+  formatting and Clippy completed (existing warnings retained). Deterministic
+  simulations cover a peak changing 8→2→8 workers, noncompounding efficiency
+  selection, interrupted trials, constrained-cache preservation, and recovery.
+  Real small-arena workers cover nonce uniqueness, allocation failure, parking,
+  new work while parked, cancellation, resumed accounting, and bounded shutdown.
+- An optimized full-size backend lifecycle smoke after v0.2.20 integration
+  (at most 4 GiB of arenas) passed 1→2→0→1 resizing: startup **0.808 s**, first
+  two hashes **2.036 s**, release **0.844 s**, 12 completed hashes.
+  These are local lifecycle observations, not a
+  cross-host throughput improvement claim. Native Windows/macOS runtime testing
+  remains outstanding; the macOS cross-check lacked an Apple C toolchain/SDK.
+- Before integration, the live controller completed 445 hashes while responding to pressure and
+  discarding an unstable comparison, then confirmed two workers after 223.614 s.
+  After stopping the first backend, cached preparation reused that count in
+  **0.0112 s**. The run used a bounded scope under `agents-tool.slice` with
+  `MemoryHigh=6G`, `MemoryMax=8G`, and `CPUQuota=200%`; arenas remained at most
+  4 GiB. The integrated rerun using the shipping `auto` affinity completed
+  **192 hashes** and confirmed two workers after **94.935 s**, then reused the
+  cache in **0.0112 s**. Both full-size opt-in tests passed on the integrated code.
+- Local evidence is retained under ignored `data/adaptive-autotune-20261024/`,
+  including failed/interrupted pilots. No cloud resources or GPU jobs were used.
 
 ## 2026-10-24 cross-generation CPU kernel matrix
 

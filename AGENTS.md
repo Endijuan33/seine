@@ -59,16 +59,16 @@ This file preserves the full engineering reference for AI agents doing optimizat
 - `--cpu-hash-flush-ms` (default `50`) controls time-based hash counter flush cadence.
 - `--cpu-event-dispatch-capacity` (default `256`) controls internal CPU backend event dispatch buffering.
 - CPU thread autotuning is enabled by default when `--threads` is omitted.
-  - Results are persisted to `<seine-data-dir>/seine.cpu-autotune.json` and reused on subsequent runs.
-  - `--cpu-autotune-threads` forces autotuning even when `--threads` is set.
-  - `--disable-cpu-autotune-threads` disables autotuning.
-  - `--cpu-autotune-min-threads`, `--cpu-autotune-max-threads`, and `--cpu-autotune-secs` bound autotuner search range and base sample window (`--cpu-autotune-secs` default: `6`).
-  - For larger thread ranges, autotune ramps upward until repeated throughput drops or the memory ceiling, then samples missing neighbors around the measured peak.
-  - Final thread selection is profile-aware: `throughput` picks peak H/s, while `balanced` and `efficiency` bias toward lower thread counts when they remain close to peak throughput (reducing RAM pressure).
-  - Candidate scoring uses synchronized hashing after one warmup hash per worker; allocation, warmup, and arena teardown are excluded from H/s. Actual completion time includes the final hash overrun; logs retain total lifecycle time separately. Cache schema 10 invalidates prior lifecycle-biased scores.
-  - Candidate sampling auto-extends up to an internal cap to collect a minimum hash count on very slow lanes (reduces variance vs fixed very short windows).
-  - When balanced-profile finalists are close, the tuner remeasures them with a longer window in descending thread order before caching. This reduces short-window and ascending-ramp bias without changing the profile's memory-saving threshold.
-  - `--cpu-autotune-config` overrides the persisted autotune config path.
+  - Mining starts from a compatible cached count or half the stable automatic capacity, capped by currently available RAM. It does not run the offline kernel search before connecting.
+  - `src/miner/adaptive_cpu.rs` performs productive A/B/A trials using cumulative completed hashes. Arenas must each finish a warmup hash before measurement. Windows last `max(30, 5 * cpu_autotune_secs)` seconds and collect at least 20 hashes. Interrupted/unstable comparisons are discarded.
+  - CPU workers use a fixed nonce stride at the backend's capacity. Changing enabled workers parks/resumes existing lanes without resetting their cursors or restarting the session. Parked workers release arenas and reference tables; survivors retain theirs. Scheduling capacity (`lanes`) and enabled workers (`enabled_lanes`) are intentionally distinct.
+  - Memory budgets are refreshed once per second, crediting resident and in-progress arena allocations. Linux cgroup-v2 membership and ancestor `memory.high`/`memory.max` limits apply, with clean inactive file-cache credit. PSI uses the miner's own cgroup when available, otherwise system pressure. Three consecutive Linux PSI/Windows low-memory samples with tight headroom also shed workers. Zero enabled workers is allowed in automatic mining; recovery requires sustained headroom. Allocation failures back off rather than quarantine healthy CPU workers.
+  - Cache schema 11 records measurements and resource limitation. Schema 10 warmed records remain seeds for mining. A lower available-RAM ceiling does not discard a compatible seed or overwrite a remembered higher count. Kernel and mining scores remain distinct. Host/build/topology/page-mode compatibility still applies.
+  - `--cpu-autotune-threads` enables tuning even with `--threads`; `--disable-cpu-autotune-threads` disables it. Manual TUI counts disable automatic adjustment for that run.
+  - `--cpu-autotune-min-threads`/`--cpu-autotune-max-threads` bound performance exploration; memory safety can temporarily go below the minimum. `--cpu-autotune-config` overrides the cache path.
+  - Offline benchmarks retain the warmed kernel search: ramp/neighbor exploration, minimum-hash sample extension, and reversed-order confirmation of close balanced finalists. Allocation, warmup and teardown are excluded from kernel scores; last-hash overrun is included.
+  - Balanced/efficiency selection uses 99%/75% of the tracked peak without compounding the tolerance at each reduction. Upward mining probes require gains above a noise margin; occasional wider probes and periodic rechecks avoid permanently trusting a busy startup.
+  - See README for timing, recovery, and HugeTLB pool limitations. Tests include real worker lifecycle/nonce coverage with small arenas and an opt-in full-size arena smoke test.
 
 ### NVIDIA Backend Tuning
 
@@ -117,8 +117,8 @@ This file preserves the full engineering reference for AI agents doing optimizat
 - `--cpu-affinity` (`auto`, `os`, `pcore-only`, or `off`) controls CPU worker affinity/scheduler hints.
   - Default is `pcore-only` on macOS Apple Silicon (`auto` on other platforms).
   - Native Windows `auto` spreads workers across complete physical-core topology groups before using SMT siblings. Linux `auto` spreads workers across usable NUMA nodes and L3 groups within each node, physical cores before SMT, using allowed CPU/memory masks. Missing/inconsistent cache data retains NUMA-only placement; a single node/cache or incomplete NUMA/core topology retains OS order. `os` opts out of topology reordering while keeping pinning. Workers allocate arenas after pinning; existing memory policies and HugeTLB pool placement still apply.
-  - Automatic CPU sizing/autotuning reserves 5% of effective total RAM by default; `--cpu-memory-reserve-percent 0` restores the previous budget. Explicit counts bypass the reserve unless autotuning is forced. The minimum-one-worker rule and existing RAM checks still apply.
-  - CPU autotune schema 10 fingerprints Linux allowed CPUs and NUMA/L3 topology. L3 spreading has worker-only EPYC 8434P evidence (+16.7% at 24 workers; 32-worker result inconclusive). A two-node EPYC 7R13 VM validates worker/memory spreading and eight-worker gains (+73.2% ordinary pages, +108.0% HugeTLB), with an effectively flat all-core control. See the CPU journal for scope, variance, and autotuner repeatability results.
+  - Automatic CPU sizing/autotuning reserves 5% of effective total RAM by default; `--cpu-memory-reserve-percent 0` restores the previous budget. Explicit counts bypass the reserve unless autotuning is forced. Fixed counts retain existing RAM checks; adaptive mining can park all CPU workers.
+  - CPU autotune host identity fingerprints Linux allowed CPUs and NUMA/L3 topology. L3 spreading has worker-only EPYC 8434P evidence (+16.7% at 24 workers; 32-worker result inconclusive). A two-node EPYC 7R13 VM validates worker/memory spreading and eight-worker gains (+73.2% ordinary pages, +108.0% HugeTLB), with an effectively flat all-core control. See the CPU journal for scope, variance, and autotuner repeatability results.
   - On macOS, `core_affinity` uses Mach affinity tags rather than hard CPU IDs. `pcore-only` limits the tag set using the perflevel0 count and combines it with a high-QoS preference, but cannot guarantee P-core placement.
 - `--ui` (`auto`, `tui`, `plain`) controls rendering mode. `auto` enables TUI only when stdout/stderr are terminals.
 - A backend runtime fault quarantines only that backend; mining continues on remaining active backends when possible.

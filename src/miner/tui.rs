@@ -222,7 +222,12 @@ impl TuiStateInner {
                 }
                 control.current_threads + 1
             }
-            KeyCode::Char('-') => control.current_threads.saturating_sub(1).max(1),
+            KeyCode::Char('-') => {
+                if control.current_threads <= 1 {
+                    return false;
+                }
+                control.current_threads - 1
+            }
             _ => return false,
         };
         if threads == control.current_threads {
@@ -1300,7 +1305,7 @@ mod tests {
 
     #[test]
     fn dashboard_keys_respect_limits_and_ignore_releases() {
-        for (current, key) in [(1, '-'), (4, '+'), (6, '+')] {
+        for (current, key) in [(0, '-'), (1, '-'), (4, '+'), (6, '+')] {
             let (mut state, receiver) = controlled_state();
             state.thread_control.as_mut().unwrap().current_threads = current;
             press(&mut state, KeyCode::Char(key));

@@ -37,7 +37,7 @@ For the raw CLI output, run:
 | `--cpu-profile` | `balanced`, `throughput`, `efficiency`; default `balanced` | Profile presets for CPU defaults (threads/poll/flush/event batching). |
 | `--cpu-threads-per-instance` | comma-separated integers `>=1` | Per-CPU-backend thread counts; length must match CPU instances. |
 | `--cpu-affinity-per-instance` | comma-separated `off|auto|os|pcore-only` | Per-CPU-backend affinity; length must match CPU instances. |
-| `--cpu-memory-reserve-percent` | integer `0..99`; default `5` | Subtract this percentage of effective total RAM from the automatic CPU sizing/autotune budget. `0` opts out. Explicit thread counts bypass the reserve unless autotuning is forced; existing minimum-one-worker and RAM checks still apply. |
+| `--cpu-memory-reserve-percent` | integer `0..99`; default `5` | Subtract this percentage of effective total RAM from the automatic CPU sizing/autotune budget. `0` opts out. Explicit thread counts bypass the reserve unless autotuning is forced; fixed counts retain RAM checks; adaptive mining may pause at zero workers when RAM is insufficient. |
 | `--allow-oversubscribe` | bool flag (default `false`) | Allows start even when configured CPU lanes exceed detected RAM budget. |
 
 ## Runtime Loop, Scheduling, and Nonce Space
@@ -67,12 +67,12 @@ For the raw CLI output, run:
 | `--cpu-control-check-interval-hashes` | integer `>=1` | CPU worker control poll cadence (in hashes). |
 | `--cpu-hash-flush-ms` | integer `>=1` | CPU worker time-based hash flush interval. |
 | `--cpu-event-dispatch-capacity` | integer `>=1` | CPU backend internal event dispatch queue size. |
-| `--cpu-autotune-threads` | bool flag | Forces CPU autotune thread search at startup. |
-| `--disable-cpu-autotune-threads` | bool flag | Disables CPU thread autotune. |
-| `--cpu-autotune-min-threads` | integer `>=1`, default `1` | Lower bound for CPU autotune thread search. |
+| `--cpu-autotune-threads` | bool flag | Enables adaptive CPU tuning during mining, even when `--threads` is set; benchmark mode uses the offline kernel search. |
+| `--disable-cpu-autotune-threads` | bool flag | Disables CPU thread autotune and runtime worker adjustment. |
+| `--cpu-autotune-min-threads` | integer `>=1`, default `1` | Lower performance-search bound; memory pressure can temporarily reduce the count below it, including to zero. |
 | `--cpu-autotune-max-threads` | integer `>=1` | Upper bound for CPU autotune thread search. |
-| `--cpu-autotune-secs` | integer `>=1`, default `6` | Base sample window per CPU autotune candidate. Close balanced-profile finalists are confirmed with a longer reversed-order window before caching. |
-| `--cpu-autotune-config` | path | CPU autotune cache file (default under `--data-dir`). |
+| `--cpu-autotune-secs` | integer `>=1`, default `6` | Offline sample window. Mining uses `max(30, 5 × value)` seconds per productive A/B/A window, with at least 20 hashes; warming and interrupted windows are excluded. |
+| `--cpu-autotune-config` | path | CPU autotune cache file (default under `--data-dir`); mining reuses compatible seeds across changes in available RAM and records subsequent progress. |
 
 ## NVIDIA Backend Tuning
 

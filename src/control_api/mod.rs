@@ -1764,12 +1764,23 @@ fn apply_start_patch(cfg: &mut Config, patch: &StartRequest) -> Result<()> {
     }
     if let Some(specs) = patch.backend_specs.as_ref() {
         cfg.backend_specs = parse_backend_specs_patch(specs)?;
+        if patch.cpu_autotune_threads.is_none()
+            && cfg
+                .backend_specs
+                .iter()
+                .any(|s| s.kind == BackendKind::Cpu && s.cpu_threads.is_some())
+        {
+            cfg.cpu_autotune_threads = false;
+        }
     }
     if let Some(threads) = patch.threads {
         if threads == 0 {
             bail!("threads must be >= 1");
         }
         cfg.threads = threads;
+        if patch.cpu_autotune_threads.is_none() {
+            cfg.cpu_autotune_threads = false;
+        }
         for spec in cfg
             .backend_specs
             .iter_mut()
@@ -2235,6 +2246,25 @@ fn ui_mode_to_str(value: UiMode) -> &'static str {
 mod tests {
     use super::*;
     use anyhow::anyhow;
+
+    #[test]
+    fn api_thread_override_disables_adaptation_unless_explicitly_requested() {
+        for forced in [None, Some(true)] {
+            let mut cfg = crate::miner::tests::test_config();
+            cfg.cpu_autotune_threads = true;
+            apply_start_patch(
+                &mut cfg,
+                &StartRequest {
+                    threads: Some(2),
+                    cpu_autotune_threads: forced,
+                    ..StartRequest::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(cfg.cpu_autotune_threads, forced.unwrap_or(false));
+            assert_eq!(cfg.threads, 2);
+        }
+    }
 
     #[test]
     fn manual_threads_disable_autotune_and_preserve_other_settings() {

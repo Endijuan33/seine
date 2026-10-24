@@ -137,16 +137,48 @@ topology, retain OS CPU order.
 Use `--cpu-affinity os` to opt out of topology ordering while retaining pinning,
 or `--cpu-affinity off` to let the scheduler place workers.
 
-Automatic thread sizing and autotuning subtract 5% of effective total RAM from
-the available budget, in addition to any GPU/Metal reservation. Adjust this with
-`--cpu-memory-reserve-percent <0..99>`; `0` restores the previous memory budget.
-Explicit `--threads` / `--cpu-threads-per-instance` counts bypass this reserve
-(unless thread autotuning is explicitly requested), but retain the existing
-memory checks. The existing minimum of one worker per CPU instance still applies.
-Autotune caches are invalidated when the allowed CPU set or detected NUMA/L3 layout
-changes, including changes that leave the CPU count unchanged. Autotuning scores
-warmed hashing time, including final-hash overrun, separately from arena setup
-and teardown. Upgrading from an older sampling schema triggers a fresh tune.
+Automatic thread sizing and autotuning reserve 5% of effective total RAM, in
+addition to any GPU/Metal reservation. Adjust this with
+`--cpu-memory-reserve-percent <0..99>`; `0` disables that reserve. Explicit thread
+counts keep their existing memory checks and disable tuning unless
+`--cpu-autotune-threads` is requested.
+
+CPU autotuning during mining starts from a compatible cached count, limited by
+current RAM, or an initial estimate of half the automatic capacity. Mining begins
+without an offline thread-count sweep. The miner then compares settings using
+real mining work: baseline, candidate, and baseline again. Every arena completes
+one hash before its measurement window starts. Windows last at least 30 seconds
+(or five times `--cpu-autotune-secs`) and collect at least 20 completed hashes.
+Brief gaps between jobs remain part of measured wall time. Sustained work loss,
+changing RAM limits, or substantial baseline drift discard the comparison.
+Balanced/efficiency profiles retain their 99%/75% peak floors;
+upward changes additionally require a gain above a conservative noise margin.
+
+Available RAM is checked once per second. Workers finish their current hash before
+parking and releasing their arenas and reference tables. Linux budgets honor nested
+cgroup limits, including `memory.high`, and credit clean inactive file cache that
+can be reclaimed. Linux pressure checks prefer the miner's own cgroup so unrelated
+host stalls do not cause false reductions. Sustained memory stalls or Windows
+low-memory notifications reduce the operating count when arena headroom is also
+tight; brief reclaim spikes do not force a reduction.
+The CPU backend can pause at zero workers when no complete arena fits, then retry
+after 30 seconds of sustained headroom. Released Linux HugeTLB arenas return to the
+reserved hugepage pool; the miner does not resize that OS pool. Returning capacity
+and sustained throughput changes prompt new probes. Stable settings are revisited
+periodically; failed allocation attempts back off for five minutes.
+
+Tuning does not reconnect to the pool or restart GPU backends. Surviving CPU
+workers keep their arenas; parked lanes retain their nonce positions and resume
+within the same disjoint nonce allocation. Manual thread changes disable automatic
+adjustment for that run. The tuner preserves a previously learned higher count when
+a later run is temporarily limited by RAM. Cache schema 10 records remain usable
+as starting points; schema 11 also stores measurements and the resource-limit flag.
+Hardware, build, affinity/topology, and page-mode mismatches discard the seed.
+
+Offline `--bench` runs retain the warmed kernel autotune sweep and finalist
+confirmation. Their measurements are kept distinct from productive mining samples.
+Live tuning improves its estimate over time; it does not guarantee the global
+optimum immediately on an unfamiliar machine.
 
 On a rented EPYC 8434P, L3 spreading improved the 24-worker offline backend
 benchmark by 16.7% across three alternating pairs; the 32-worker result was
