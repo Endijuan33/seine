@@ -122,7 +122,7 @@ pub struct TuiStateInner {
     pub pool_worker: String,
     pub threads: usize,
     pub thread_control: Option<ThreadControl>,
-    pub thread_edit: Option<usize>,
+    pub thread_change_pending: bool,
     pub thread_notice: Option<String>,
     pub refresh_secs: u64,
     pub sse_enabled: bool,
@@ -173,7 +173,7 @@ impl TuiStateInner {
             pool_worker: String::new(),
             threads: 0,
             thread_control: None,
-            thread_edit: None,
+            thread_change_pending: false,
             thread_notice: None,
             refresh_secs: 0,
             sse_enabled: false,
@@ -212,37 +212,37 @@ impl TuiStateInner {
         let Some(control) = self.thread_control.as_ref() else {
             return false;
         };
-        if let Some(threads) = self.thread_edit.as_mut() {
-            match key.code {
-                KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right | KeyCode::Up => {
-                    *threads = threads.saturating_add(1).min(control.max_threads);
-                }
-                KeyCode::Char('-') | KeyCode::Left | KeyCode::Down => {
-                    *threads = threads.saturating_sub(1).max(1);
-                }
-                KeyCode::Esc => self.thread_edit = None,
-                KeyCode::Enter => {
-                    if *threads != control.current_threads {
-                        let request = ThreadChangeRequest {
-                            run_id: control.run_id,
-                            threads: *threads,
-                            quit_requested: Arc::clone(&control.quit_requested),
-                        };
-                        self.thread_notice = Some(match control.sender.try_send(request) {
-                            Ok(()) => {
-                                "Restart requested; waiting for mining to stop...".to_string()
-                            }
-                            Err(_) => "Thread change unavailable; try again.".to_string(),
-                        });
-                    }
-                    self.thread_edit = None;
-                }
-                _ => {}
-            }
-        } else if key.code == KeyCode::Char('t') {
-            self.thread_edit = Some(control.current_threads);
-            self.thread_notice = None;
+        if self.thread_change_pending {
+            return false;
         }
+        let threads = match key.code {
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                if control.current_threads >= control.max_threads {
+                    return false;
+                }
+                control.current_threads + 1
+            }
+            KeyCode::Char('-') => control.current_threads.saturating_sub(1).max(1),
+            _ => return false,
+        };
+        if threads == control.current_threads {
+            return false;
+        }
+        let request = ThreadChangeRequest {
+            run_id: control.run_id,
+            threads,
+            quit_requested: Arc::clone(&control.quit_requested),
+        };
+        self.thread_notice = Some(match control.sender.try_send(request) {
+            Ok(()) => {
+                self.thread_change_pending = true;
+                format!(
+                    "Restarting: {} -> {threads} threads...",
+                    control.current_threads
+                )
+            }
+            Err(_) => "Thread change unavailable; try again.".to_string(),
+        });
         false
     }
 
@@ -335,10 +335,6 @@ const DIM_STYLE: Style = Style::new().fg(Color::Rgb(90, 90, 90));
 const BLOCK_MARKER_GLYPH: &str = "♦";
 
 fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
-    if let Some(threads) = state.thread_edit {
-        draw_thread_editor(frame, area, state, threads);
-        return;
-    }
     let wide = area.width >= 80;
     let config_two_columns = config_uses_two_columns(area.width);
 
@@ -389,14 +385,14 @@ fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner)
 
 fn thread_line(state: &TuiStateInner) -> Line<'static> {
     let hint = if state.thread_control.is_some() {
-        "  [t] change"
+        "  [+] [-]"
     } else {
         ""
     };
     Line::from(vec![
         Span::styled("Threads: ", LABEL_STYLE),
         Span::styled(state.threads.to_string(), VALUE_STYLE),
-        Span::styled(hint, DIM_STYLE),
+        Span::styled(hint, TITLE_STYLE),
     ])
 }
 
@@ -449,27 +445,6 @@ fn draw_compact_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiSta
             state,
         );
     }
-}
-
-fn draw_thread_editor(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    state: &TuiStateInner,
-    threads: usize,
-) {
-    let max = state
-        .thread_control
-        .as_ref()
-        .map_or(1, |control| control.max_threads);
-    let lines = vec![
-        Line::from(format!("Threads: {threads}  [-/+]")),
-        Line::from("Enter apply | Esc cancel"),
-        Line::from(format!("Per CPU backend (1..{max})")),
-        Line::from("Restarts mining and reconnects."),
-        Line::from("Session statistics reset."),
-        Line::from("Autotune stays off for this run."),
-    ];
-    frame.render_widget(Paragraph::new(lines).style(VALUE_STYLE), area);
 }
 
 fn draw_header(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
@@ -881,21 +856,20 @@ fn draw_config_runtime_panel(frame: &mut ratatui::Frame, area: Rect, state: &Tui
         Span::styled("  Worker: ", LABEL_STYLE),
         Span::styled(&state.pool_worker, VALUE_STYLE),
     ]);
-    let line2 = Line::from(vec![
-        Span::styled("  Threads: ", LABEL_STYLE),
-        Span::styled(state.threads.to_string(), VALUE_STYLE),
-        Span::styled("  Backends: ", LABEL_STYLE),
-        Span::styled(&state.backends_desc, VALUE_STYLE),
-    ]);
+    let mut line2 = thread_line(state);
+    line2.spans.insert(0, Span::raw("  "));
+    if let Some(notice) = &state.thread_notice {
+        line2
+            .spans
+            .push(Span::styled(format!("  {notice}"), VALUE_STYLE));
+    } else {
+        line2.spans.push(Span::styled("  Backends: ", LABEL_STYLE));
+        line2
+            .spans
+            .push(Span::styled(state.backends_desc.clone(), VALUE_STYLE));
+    }
     let config_block = Block::default()
-        .title(Span::styled(
-            if state.thread_control.is_some() {
-                " CONFIG [t] threads "
-            } else {
-                " CONFIG "
-            },
-            TITLE_STYLE,
-        ))
+        .title(Span::styled(" CONFIG ", TITLE_STYLE))
         .borders(Borders::ALL)
         .border_style(BORDER_STYLE);
     let config = Paragraph::new(vec![line1, line2]).block(config_block);
@@ -1300,59 +1274,74 @@ mod tests {
     }
 
     #[test]
-    fn thread_editor_applies_only_on_enter_and_preserves_active_count() {
-        let (mut state, receiver) = controlled_state();
-        press(&mut state, KeyCode::Char('t'));
-        press(&mut state, KeyCode::Char('+'));
-        assert!(receiver.is_empty());
-        assert_eq!(state.threads, 2);
-        let text = render_text(&state, 40, 8);
-        assert!(text.contains("Threads: 3"));
-        assert!(text.contains("Restarts mining"));
-        press(&mut state, KeyCode::Enter);
-        let request = receiver.try_recv().unwrap();
-        assert_eq!((request.run_id, request.threads), (42, 3));
-        assert_eq!(state.threads, 2);
-        assert!(state.thread_edit.is_none());
-        press(&mut state, KeyCode::Enter);
-        assert!(receiver.is_empty());
-        assert!(press(&mut state, KeyCode::Char('q')));
-        assert!(request.quit_requested.load(Ordering::SeqCst));
+    fn dashboard_keys_request_change_immediately_and_preserve_active_count() {
+        for (key, expected) in [('+', 3), ('=', 3), ('-', 1)] {
+            let (mut state, receiver) = controlled_state();
+            for (width, height) in [(80, 12), (120, 34)] {
+                assert!(render_text(&state, width, height).contains("Threads: 2  [+] [-]"));
+            }
+            press(&mut state, KeyCode::Char(key));
+            let request = receiver.try_recv().unwrap();
+            assert_eq!((request.run_id, request.threads), (42, expected));
+            assert_eq!(state.threads, 2);
+            assert!(state.thread_change_pending);
+            for (width, height) in [(80, 12), (120, 34)] {
+                let text = render_text(&state, width, height);
+                assert!(text.contains("Restarting: 2 ->"));
+                assert!(text.contains("Threads: 2"));
+            }
+            // Do not enqueue another restart while the first is being applied.
+            press(&mut state, KeyCode::Char(key));
+            assert!(receiver.is_empty());
+            assert!(press(&mut state, KeyCode::Char('q')));
+            assert!(request.quit_requested.load(Ordering::SeqCst));
+        }
     }
 
     #[test]
-    fn thread_editor_handles_bounds_cancel_and_key_release() {
+    fn dashboard_keys_respect_limits_and_ignore_releases() {
+        for (current, key) in [(1, '-'), (4, '+'), (6, '+')] {
+            let (mut state, receiver) = controlled_state();
+            state.thread_control.as_mut().unwrap().current_threads = current;
+            press(&mut state, KeyCode::Char(key));
+            assert!(receiver.is_empty());
+            assert!(!state.thread_change_pending);
+        }
         let (mut state, receiver) = controlled_state();
-        press(&mut state, KeyCode::Char('t'));
-        for _ in 0..10 {
-            press(&mut state, KeyCode::Char('+'));
+        state.thread_control.as_mut().unwrap().current_threads = 6;
+        press(&mut state, KeyCode::Char('-'));
+        assert_eq!(receiver.try_recv().unwrap().threads, 5);
+        let (mut state, receiver) = controlled_state();
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
+            state.handle_key(KeyEvent::new_with_kind(
+                KeyCode::Char('+'),
+                KeyModifiers::NONE,
+                kind,
+            ));
         }
-        assert_eq!(state.thread_edit, Some(4));
-        for _ in 0..10 {
-            press(&mut state, KeyCode::Char('-'));
+        assert!(receiver.is_empty());
+        for code in [KeyCode::Char('t'), KeyCode::Enter, KeyCode::Esc] {
+            press(&mut state, code);
         }
-        assert_eq!(state.thread_edit, Some(1));
-        state.handle_key(KeyEvent::new_with_kind(
-            KeyCode::Enter,
-            KeyModifiers::NONE,
-            KeyEventKind::Release,
-        ));
         assert!(receiver.is_empty());
-        press(&mut state, KeyCode::Esc);
-        assert!(state.thread_edit.is_none());
-        assert!(receiver.is_empty());
-        press(&mut state, KeyCode::Char('t'));
-        press(&mut state, KeyCode::Enter); // unchanged
-        assert!(receiver.is_empty());
-        assert!(press(&mut state, KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn unavailable_thread_control_can_retry() {
+        let (mut state, receiver) = controlled_state();
+        drop(receiver);
+        press(&mut state, KeyCode::Char('+'));
+        assert!(!state.thread_change_pending);
+        assert!(render_text(&state, 80, 12).contains("Thread change unavailable"));
     }
 
     #[test]
     fn gpu_only_session_has_no_thread_control() {
         let mut state = TuiStateInner::new();
-        press(&mut state, KeyCode::Char('t'));
-        assert!(state.thread_edit.is_none());
-        assert!(!render_text(&state, 80, 24).contains("[t]"));
+        press(&mut state, KeyCode::Char('+'));
+        press(&mut state, KeyCode::Char('-'));
+        assert!(!state.thread_change_pending);
+        assert!(!render_text(&state, 80, 24).contains("[+] [-]"));
     }
 
     #[test]
