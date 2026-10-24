@@ -2,9 +2,8 @@
 > (excluding ARM and joint-tuning drafts) measured twelve-worker Ice Lake AVX2
 > differences of −2.277% and −1.930% in reversed pairs. Full AVX-512 was mixed
 > (+2.051%, −0.257%). Correctness and lifecycle results below still stand, but
-> they do not establish performance neutrality. A standalone #41 comparison is
-> being used to narrow attribution; the subset result alone does not prove a
-> causal change in #43. See the final campaign report in PR #42.
+> they do not establish performance neutrality. Standalone #41 also measured −1.011% and −0.821%; both PRs remain held.
+> The subset result alone does not isolate a causal change in #43. See the final campaign report in PR #42.
 
 # CPU memory-capacity recovery validation
 
