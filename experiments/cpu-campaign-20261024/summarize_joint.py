@@ -83,6 +83,8 @@ def main():
     parity = {name: read('results/' + name, False) for name in
               ['control-full-size-parity.log', 'candidate-full-size-parity.log']}
     result = {'status': 'research-only; not promoted', 'controller_outcome': outcome,
+        'campaign_scope_decision': read('results/CAMPAIGN-SCOPE-STOP.json')
+            if (root / 'results/CAMPAIGN-SCOPE-STOP.json').exists() else None,
         'hardware': {row['field']: row['data'] for row in topology['lscpu'] if row['field'] in
                      ['Model name:', 'CPU(s):', 'Core(s) per socket:', 'Thread(s) per core:', 'Socket(s):', 'L3 cache:']},
         'identities': identities, 'parity': parity,
