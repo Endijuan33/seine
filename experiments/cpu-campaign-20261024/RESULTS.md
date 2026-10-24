@@ -16,6 +16,7 @@ on another machine. No campaign PR has been merged or released.
 | Graviton3 / Neoverse-V1, 1 worker, 2 MiB HugeTLB, NEON → runtime SHA3 + 64-byte prefetch | 0.820 → 1.228 | Four clean alternating pairs, +49.63% to +49.82%. Candidate eligible for automatic productive-work confirmation. |
 | Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four pairs, +44.61% to +46.18%. Both sides rebuilt in separate Cargo targets. |
 | Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two alternating pairs each, +37.09% to +37.48% / +32.69% to +33.14%. |
+| Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer alternating pairs: +3.60% to +3.67% / +4.38% to +4.55%. This is the fallback path, not SHA3 execution. |
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two opposite-order screening passes; full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
@@ -23,7 +24,7 @@ on another machine. No campaign PR has been merged or released.
 | Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.661 / 12.388 | Slower than full AVX-512; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Later-generation Intel, older Intel/Zen and Graviton2/4 results remain pending.
+Newer Intel, older Intel/Zen and Graviton4 results remain pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -89,6 +90,16 @@ Two clean alternating Ice Lake regression pairs compare the ARM-change build
 against its separately rebuilt CPU-only baseline: approximately −0.29% at one
 worker and −0.27% at twelve. This small negative is retained explicitly. Full
 reference parity and native workspace tests passed.
+
+The follow-up review found a separate startup regression in the recovery repair:
+parked OS threads can exhaust a tight PID budget. A network-free local backend
+probe with explicit 16-CPU affinity, `pids.max=12` and `memory.high=3G` starts
+with the legacy one-slot capacity, but the new sixteen-slot capacity fails at
+worker 9 with EAGAIN. Both use one enabled arena. Owned test units were cleaned
+up. The [reproducer patch](pid-startup-probe.patch), [controller](pid_probe.py)
+and [evidence](evidence/pid-startup-regression.json) are retained. The existing
+autotune owner is implementing focused hardening in a separate worktree; PR #43
+remains draft until this is resolved and validated.
 
 ## Reviewable changes
 
