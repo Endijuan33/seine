@@ -18,9 +18,12 @@ def main():
     parser.add_argument("directory", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--pattern", default="r*.json")
-    parser.add_argument("--status", choices=["screen", "confirmation", "excluded"], required=True)
+    parser.add_argument("--status", choices=["screen", "confirmation", "order_limited", "excluded"], required=True)
     parser.add_argument("--note", required=True)
     args = parser.parse_args()
+    if args.status == 'confirmation':
+        order = json.loads((args.directory / 'order-verification.json').read_text())
+        assert order['per_worker_order_reversed_each_pass'], 'confirmation requires actual order verification'
     contexts = {}
     reports = []
     for path in sorted(args.directory.glob(args.pattern)):

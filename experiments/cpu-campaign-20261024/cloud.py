@@ -263,8 +263,15 @@ def cleanup():
         aws("ec2", "delete-security-group", "--group-id", s["security_group"])
         s["security_group_deleted"] = s["security_group"]
         s["security_group"] = None
+        persist(s)
+    groups = aws("ec2", "describe-security-groups", "--filters",
+                 "Name=tag:Experiment,Values=" + EXPERIMENT)["SecurityGroups"]
+    assert not groups, "campaign security group still exists"
     for filename in ["ssh-key", "ssh-key.pub", "known-hosts", "known-hosts.old"]:
         (ROOT / filename).unlink(missing_ok=True)
+        assert not (ROOT / filename).exists()
+    s["security_group_absence_verified"] = True
+    s["local_ssh_material_removed"] = True
     s["cleanup_verified_at"] = now().isoformat()
     persist(s)
     print(json.dumps(s))

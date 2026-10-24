@@ -1,5 +1,5 @@
 {
-  "status": "confirmation",
+  "status": "order_limited",
   "note": "Four alternating pairs at1/12workers; same published v0.2.21 binary and explicit2MiB HugeTLB backing; two30-second measured rounds after warmup; completed hashes include fences.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
@@ -2801,5 +2801,6 @@
         }
       ]
     }
-  ]
+  ],
+  "order_limitation": "Early controller rotated variants using position in the reversed outer configuration loop. Per-configuration baseline/candidate order therefore did not always reverse. Retain measurements with this limitation; new confirmation uses stable configuration indices and verifies actual completed order. Native Windows four-pair confirmation and interhash direct reversal are unaffected."
 }

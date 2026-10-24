@@ -32,6 +32,7 @@ def main():
     assert len({v[0] for v in variants}) == len(variants)
     assert len(variants) >= 2 and a.pairs >= 2 and a.seconds >= 10 and a.rounds >= 1
     cpus = physical_first()
+    assert len(set(a.workers)) == len(a.workers), 'duplicate worker configuration'
     assert min(a.workers) >= 1 and max(a.workers) <= min(16, len(cpus))
     # Just-finished compiler processes can briefly retain memory. Wait only for
     # the fixed headroom contract; do not lower it or forcibly drop OS caches.
@@ -64,7 +65,10 @@ def main():
         assert int(pool.read_text()) == pages
         for repeat in range(a.pairs):
             workers_order = a.workers if repeat % 2 == 0 else list(reversed(a.workers))
-            for index, workers in enumerate(workers_order):
+            for workers in workers_order:
+                # Rotation belongs to the configuration, not its position in
+                # the reversed outer loop; otherwise two reversals cancel.
+                index = a.workers.index(workers)
                 order = variants[index % len(variants):] + variants[:index % len(variants)]
                 if repeat % 2:
                     order = list(reversed(order))
@@ -99,6 +103,16 @@ def main():
         save(a.out / 'results.json', records)
     for label, binary, _ in variants:
         assert hashlib.sha256(binary.read_bytes()).hexdigest() == identities[label]['sha256']
+    for workers in a.workers:
+        previous = None
+        for repeat in range(1, a.pairs + 1):
+            actual = [r['variant'] for r in records if r['workers'] == workers and r['repeat'] == repeat]
+            assert len(actual) == len(variants)
+            if previous is not None:
+                assert actual == list(reversed(previous)), (workers, repeat, actual, previous)
+            previous = actual
+    save(a.out / 'order-verification.json', {'per_worker_order_reversed_each_pass': True,
+        'source': 'actual completed record sequence', 'workers': a.workers, 'passes': a.pairs})
     (a.out / 'COMPLETE').write_text('Alternating measurements and health checks completed.\n')
 
 

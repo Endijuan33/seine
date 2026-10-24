@@ -1,5 +1,5 @@
 {
-  "status": "confirmation",
+  "status": "order_limited",
   "note": "Two alternating pairs; clean isolated baseline 359265e and candidate 8280a66 Cargo targets. Verified regular backing.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
@@ -1135,5 +1135,6 @@
         }
       ]
     }
-  ]
+  ],
+  "order_limitation": "Early controller rotated variants using position in the reversed outer configuration loop. Per-configuration baseline/candidate order therefore did not always reverse. Retain measurements with this limitation; new confirmation uses stable configuration indices and verifies actual completed order. Native Windows four-pair confirmation and interhash direct reversal are unaffected."
 }

@@ -102,7 +102,8 @@ def main():
     try:
         for repeat in range(2):
             ordered = configs if repeat == 0 else list(reversed(configs))
-            for index, (mode, workers) in enumerate(ordered):
+            for mode, workers in ordered:
+                index = configs.index((mode, workers))
                 pages = maximum * 1024 if mode == "large" else 0
                 run(["sudo", "sysctl", "-w", f"vm.nr_hugepages={pages}"], OUT / "pool-last.log")
                 assert int(Path("/proc/sys/vm/nr_hugepages").read_text()) == pages

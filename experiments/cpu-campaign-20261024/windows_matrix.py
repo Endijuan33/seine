@@ -21,7 +21,8 @@ def check(r,threads,kernel):
  return sum(x['hashes'] for x in r['runs'])/sum(x['actual_elapsed_secs'] for x in r['runs'])
 try:
  for repeat in range(2):
-  for i,(case,cpus,threads) in enumerate(cases if repeat==0 else list(reversed(cases))):
+  for case,cpus,threads in (cases if repeat==0 else list(reversed(cases))):
+   i=cases.index((case,cpus,threads))
    order=paths[i%3:]+paths[:i%3]
    if repeat:order=list(reversed(order))
    for kernel in order:

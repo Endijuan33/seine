@@ -13,17 +13,17 @@ on another machine. No campaign PR has been merged or released.
 | Same Ryzen, 8 workers spread across both CCDs | 7.224 → 7.528 | Four pairs, +0.53% to +6.65%; retain automatic per-machine selection. |
 | Same Ryzen, 4 physical cores → four SMT threads on two physical cores | 6.482 → 6.174 | Four pairs, every SMT arrangement slower (−3.11% to −6.18%); supports physical-first placement. |
 | Same Ryzen, CCD/cache placement | Inconclusive | Four-pair CCD/spreading comparisons do not justify a new default. The 1-worker CCD series includes a −36.77% reversal; retained rather than discarded. |
-| Graviton3 / Neoverse-V1, 1 worker, 2 MiB HugeTLB, NEON → runtime SHA3 + 64-byte prefetch | 0.820 → 1.228 | Four clean alternating pairs, +49.63% to +49.82%. Candidate eligible for automatic productive-work confirmation. |
-| Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four pairs, +44.61% to +46.18%. Both sides rebuilt in separate Cargo targets. |
-| Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two alternating pairs each, +37.09% to +37.48% / +32.69% to +33.14%. |
-| Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer alternating pairs: +3.60% to +3.67% / +4.38% to +4.55%. This is the fallback path, not SHA3 execution. |
-| Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two opposite-order screening passes; full AVX-512 remains the stronger shipping path here. |
+| Graviton3 / Neoverse-V1, 1 worker, 2 MiB HugeTLB, NEON → runtime SHA3 + 64-byte prefetch | 0.820 → 1.228 | Four repeated pairs, +49.63% to +49.82%; ordering limitation found, corrected confirmation pending. |
+| Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four repeated pairs, +44.61% to +46.18%; isolated targets, but per-worker order limited. Corrected confirmation pending. |
+| Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two repeated pairs each, +37.09% to +37.48% / +32.69% to +33.14%; order limited. |
+| Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer repeated pairs: +3.60% to +3.67% / +4.38% to +4.55%; order limited, corrected confirmation pending. This is the fallback path, not SHA3 execution. |
+| Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two screening passes (order limitation below); full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
-| Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.617 → 1.726 / 12.512 → 13.099 | Four longer alternating pairs, full AVX-512 +6.13% to +7.97% / +4.05% to +5.27%. Also leads across the preliminary worker-count screen. |
+| Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.617 → 1.726 / 12.512 → 13.099 | Four longer repeated pairs (AVX2-relative order limited), full AVX-512 +6.13% to +7.97% / +4.05% to +5.27%. Also leads across the preliminary worker-count screen. |
 | Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.654 / 12.737 | Four longer pairs: full AVX-512 +4.10% to +4.62% / +2.22% to +3.10% over this path; no promotion. |
-| Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two opposite-order screens; full AVX-512 11.605 / 12.969. No material gain; no promotion. |
-| Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two opposite-order screens; full AVX-512 leads at all tested counts. |
+| Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two screens (order limitation below); full AVX-512 11.605 / 12.969. No material gain; no promotion. |
+| Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two screens (order limitation below); full AVX-512 leads at all tested counts. |
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
@@ -66,6 +66,25 @@ one logical CPU 1.832, on both SMT siblings of one physical core 2.232, and on t
 physical cores 3.599. All four direct modes passed full-size reference parity,
 three nonce pairs and dirty reuse. This rejects the experiment on this Ice Lake
 configuration; it does not prove a universal result across architectures.
+
+## Benchmark order review and corrected confirmation
+
+At 15:48 UTC, controller review found that variant rotation used the index in
+an already-reversed worker/configuration loop. Reversing both loops can cancel:
+the two-variant/two-worker ARM matrices always ran baseline first at one worker
+and candidate first at sixteen. Therefore their repeated gains do not yet meet
+the intended per-worker order-reversal requirement. Raw results remain intact;
+normalized evidence is labelled `order_limited`, and corrected native Graviton2,
+Graviton3 and Graviton4 confirmation is required before making the ARM PR ready.
+
+The fix rotates by each configuration's stable original index and asserts the
+actual completed variant sequence reverses on every pass. The in-progress
+Graviton4 matrix was interrupted, archived and replaced. Final x86 regressions
+and subsequent architecture screens use the corrected controller. Earlier Intel
+screens retain the limitation; Sapphire Rapids full-width versus 256-bit relative
+order did reverse, but its comparison against AVX2 did not. The separate native
+Windows four-pair controller and direct interhash reversal are unaffected.
+No code candidate or individual sample was altered to obtain a better result.
 
 ## Resource lifecycle findings
 

@@ -1,5 +1,5 @@
 {
-  "status": "confirmation",
+  "status": "order_limited",
   "note": "Two alternating same-profile baseline/candidate pairs at 1 and 12 workers, isolated Cargo targets. Candidate 2ce28ae changes ARM kernel plumbing; the separate lifecycle test exposed a pre-existing startup-memory-cap recovery bug and is not counted as passing.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
@@ -1141,5 +1141,6 @@
         }
       ]
     }
-  ]
+  ],
+  "order_limitation": "Early controller rotated variants using position in the reversed outer configuration loop. Per-configuration baseline/candidate order therefore did not always reverse. Retain measurements with this limitation; new confirmation uses stable configuration indices and verifies actual completed order. Native Windows four-pair confirmation and interhash direct reversal are unaffected."
 }

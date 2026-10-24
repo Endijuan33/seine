@@ -1,5 +1,5 @@
 {
-  "status": "confirmation",
+  "status": "order_limited",
   "note": "Four alternating pairs per worker count, two30-second measured rounds plus warmup, separate CPU-only source targets, full2GiB reference parity. Neoverse-N1 lacks SHA3; this measures the candidate portable NEON fallback, not the SHA3 path. The same generic verifier built on Graviton3 separately passed native Graviton2 rejection and full-size dirty-reuse checks.",
   "rate_definition": "sum(completed hashes) / sum(actual elapsed including fence)",
   "contexts": {
@@ -1861,5 +1861,6 @@
         }
       ]
     }
-  ]
+  ],
+  "order_limitation": "Early controller rotated variants using position in the reversed outer configuration loop. Per-configuration baseline/candidate order therefore did not always reverse. Retain measurements with this limitation; new confirmation uses stable configuration indices and verifies actual completed order. Native Windows four-pair confirmation and interhash direct reversal are unaffected."
 }

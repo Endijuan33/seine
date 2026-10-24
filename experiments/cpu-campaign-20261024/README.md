@@ -37,6 +37,16 @@ ISA screen and separately built interhash runner are unaffected. Fresh controls
 and candidates use separate target directories, full-size checks, and symbol
 provenance. ARM final confirmations also rebuild both sides in separate targets.
 
+**Order correction (15:48 UTC):** early matrix/screen scripts used an index in
+an already-reversed outer configuration loop, which could cancel the intended
+per-configuration variant reversal. Original executed scripts and data are
+preserved; affected normalized evidence is explicitly order-limited. Current
+controllers rotate by stable configuration index, and `matrix.py` checks actual
+completed order before writing `COMPLETE`. `test_matrix_order.py` exercises the
+real controller without launching processes or touching OS settings. Native
+Windows four-pair confirmation and direct interhash reversal were unaffected.
+Corrected ARM confirmation is required before the ARM PR becomes ready.
+
 ## Initial observations
 
 Native Windows reports two L3 groups on this 9950X3D: 96 MiB on logical CPUs
@@ -135,6 +145,11 @@ eventual deletion of the task-owned security group and SSH keys.
   controls. A service-private hosts file redirects the built-in developer pool
   to the local fixture, with additional loopback-only IP restrictions.
 - `cloud.py`: launch/inspect/copy/terminate task-owned leases and record cleanup.
+- `summarize_costs.py`: after verified final cleanup, estimate compute, root-disk
+  and IPv4 costs from live prices and lease intervals; disclose the separate
+  transfer contingency and preserve the $40 reservation cap.
+- `start_arm_final_confirm.py`: corrected native G2/G3 confirmation using
+  transfer-frozen generic ARM binaries and fresh full-size parity.
 - `prepare_payload.py`, `start_guest.py`: build a per-file SHA256 input manifest,
   verify the uploaded archive and start a bounded process on a timer-verified lease.
 - `arm_generation.sh`: native fallback/feature checks and separate-target ARM
