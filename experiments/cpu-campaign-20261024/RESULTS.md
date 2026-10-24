@@ -17,7 +17,7 @@ on another machine. No campaign PR has been merged or released.
 | Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four repeated pairs, +44.61% to +46.18%; isolated targets, but per-worker order limited. Corrected confirmation pending. |
 | Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two repeated pairs each, +37.09% to +37.48% / +32.69% to +33.14%; order limited. |
 | Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer repeated pairs: +3.60% to +3.67% / +4.38% to +4.55%; order limited, corrected confirmation pending. This is the fallback path, not SHA3 execution. |
-| Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Final hardened lifecycle/regression follows. |
+| Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Final636native lifecycle passed; f20x86-boundary change is near-flat on ARM (two pairs,16-worker mean−0.29%). |
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two screening passes (order limitation below); full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
@@ -131,13 +131,13 @@ bounds parked slots, adaptive resource-related spawn failures clean up and retry
 with fewer workers, and manual counts retain RAM-safe limits. The same real OS
 probe now passes with four provisioned slots and unchanged stride 16; the legacy
 one-slot control also passes. This probe deliberately bypasses preflight and is
-not a full pool runtime test. PR #43 remains draft while combined native pool
-startup and resource lifecycle checks run on Graviton4 and Xeon 6975P-C.
+not a full pool runtime test. PR #43 is ready for review after combined native pool
+startup and resource lifecycle checks passed on Graviton4 and Xeon 6975P-C.
 The final combined candidate `636e688` passes all-feature/all-target Linux
 compilation and scoped Rust formatting. A separate read-only review by the
 research owner found no blocker in nonce stride, teardown/retry, PID headroom,
-manual bounds or platform-scoped resource errors; native confirmation is still
-required and the reserve is explicitly best effort against concurrent tasks.
+manual bounds or platform-scoped resource errors. Native confirmation passed;
+the reserve remains explicitly best effort against concurrent tasks.
 
 The first full-pool limit of 24 tasks was insufficient even for v0.2.21: its
 existing sysinfo/Rayon pool creates sixteen threads during startup discovery,
@@ -154,7 +154,9 @@ parity, both explicit real-arena tests and strict kernel Clippy on Xeon 6975P-C.
 Its complete nine-phase lifecycle passed, including restart growth to three
 workers / 6.028 GiB anonymous residency, no OOM/quarantine and opt-out. The
 40-task full-pool check provisioned nine CPU slots, observed at most 35 tasks
-and 84 completed hashes before clean shutdown.
+and 84 completed hashes before clean shutdown. Graviton4 also passed all nine
+phases, with three workers /6.02784GiB after restart and no OOM/quarantine. Its
+40-task check observed nine slots,35tasks and54completedhashes.
 
 Corrected-order final x86 regression pairs at one/twelve workers show AVX2 mean
 changes of +0.26% / −0.48% (the latter pairs range −1.13% to +0.16%) and full
@@ -200,10 +202,10 @@ Windows execution. [Evidence](evidence/integration-check.json) retains log hashe
   contexts do not inherit an old 30-minute delay. CPU-only workspace tests and
   independent review by the autotune owner passed. Stable below-threshold
   results retain their existing policy.
-- [Draft PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
+- [PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
   worker capacity after temporary RAM limits, stacked on #41. Native fixed
-  lifecycle passed on Sapphire Rapids and Graviton2. PID-limit hardening and
-  final combined native confirmation are in progress.
+  lifecycle passed on Sapphire Rapids and Graviton2. Final PID-safe combined
+  native confirmation passed on Graviton4 and Xeon 6975P-C.
 - [PR #45](https://github.com/zpalmtree/seine/pull/45): native CPU-only Linux
   ARM release archive with kernel tests and full-size reference verification.
   Native source build, package contents/digests and YAML checks pass. The
@@ -213,7 +215,8 @@ Windows execution. [Evidence](evidence/integration-check.json) retains log hashe
 - [Draft PR #44](https://github.com/zpalmtree/seine/pull/44): runtime ARM
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
   boundary tests, real-arena worker switches and Graviton3 automatic selection
-  passed. Graviton4 and complete repaired lifecycle confirmation remain pending.
+  passed. Graviton4 and complete repaired lifecycle confirmation passed; corrected
+  Graviton2/3 confirmation and the Cascade Lake regression remain draft gates.
 
 Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
 and candidate all-target runs produced the same 65 error-message lines (63
