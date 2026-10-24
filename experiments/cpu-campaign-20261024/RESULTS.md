@@ -44,7 +44,9 @@ The [evidence directory](evidence/) keeps normalized per-round hash counts,
 actual elapsed/fence times, page backing, error counters, build fingerprints and
 raw-report SHA256 values. Windows result manifests additionally retain each
 logical CPU mask, comparison role and pair order. Original reports and complete
-SHA-verified cloud archives remain in ignored campaign data. The
+SHA-verified cloud archives remain in ignored campaign data; the public
+[archive index](evidence/archive-index.json) records their digests and verification.
+The
 [controllers](README.md#scripts) reproduce the configurations.
 
 Native Windows tests used the published MSVC release. WSL's synthetic single-L3

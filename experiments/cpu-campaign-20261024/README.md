@@ -45,7 +45,9 @@ rebuilt baseline: Cargo had reused an experimental library from the shared targe
 Its immutable archive is retained with an exclusion sidecar. The published-binary
 ISA screen and separately built interhash runner are unaffected. Fresh controls
 and candidates use separate target directories, full-size checks, and symbol
-provenance. ARM final confirmations also rebuild both sides in separate targets.
+provenance. Frozen ARM controls and candidates were built in separate targets
+before transfer; final native confirmations verify their digests and reference
+parity without rebuilding them on each guest.
 
 **Order correction (15:48 UTC):** early matrix/screen scripts used an index in
 an already-reversed outer configuration loop, which could cancel the intended
