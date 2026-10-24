@@ -21,6 +21,9 @@ use crate::config::{CpuAffinityMode, CpuPageMode};
 mod events;
 #[path = "cpu/kernel.rs"]
 mod kernel;
+#[cfg(target_os = "linux")]
+#[path = "cpu/topology.rs"]
+mod topology;
 
 const DEFAULT_HASH_BATCH_SIZE: u64 = 64;
 const DEFAULT_CONTROL_CHECK_INTERVAL_HASHES: u64 = 1;
@@ -788,10 +791,25 @@ fn resolve_affinity_core_ids(mode: CpuAffinityMode) -> Option<Vec<core_affinity:
         return None;
     }
     let core_ids = core_affinity::get_core_ids().filter(|ids| !ids.is_empty())?;
+    if mode == CpuAffinityMode::Os {
+        return Some(core_ids);
+    }
     // Native Windows exposes reliable processor-core masks and benefits materially from
-    // spreading memory-hard workers across physical cores before SMT siblings. Linux keeps
-    // the OS/core_affinity order: WSL topology experiments were unstable and transparent
-    // huge-page coverage dominated the measured affinity delta.
+    // spreading memory-hard workers across physical cores before SMT siblings.
+    // Linux spreads across NUMA nodes and L3 groups with complete, usable topology;
+    // a single node/cache or incomplete topology retains OS order.
+    #[cfg(target_os = "linux")]
+    let core_ids = {
+        let available = core_ids.iter().map(|cpu| cpu.id).collect();
+        topology::detect(&available)
+            .and_then(|topology| topology.ordered_cpus())
+            .map(|ids| {
+                ids.into_iter()
+                    .map(|id| core_affinity::CoreId { id })
+                    .collect()
+            })
+            .unwrap_or(core_ids)
+    };
     #[cfg(target_os = "windows")]
     let core_ids = order_core_ids_physical_first(core_ids);
     #[cfg(target_os = "macos")]
@@ -812,6 +830,21 @@ fn resolve_affinity_core_ids(mode: CpuAffinityMode) -> Option<Vec<core_affinity:
     } else {
         Some(core_ids)
     }
+}
+
+pub(crate) fn affinity_topology_fingerprint() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        let available = core_affinity::get_core_ids()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|cpu| cpu.id)
+            .collect();
+        // Cache identity must change on cpuset/NUMA/L3 changes even at equal CPU counts.
+        format!("{available:?}:{:?}", topology::detect(&available))
+    }
+    #[cfg(not(target_os = "linux"))]
+    String::new()
 }
 
 /// Orders native Windows logical CPUs so one hardware thread from every physical core is used

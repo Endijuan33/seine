@@ -11,6 +11,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 automatic Linux L3 placement: worker-only EPYC validation`
+- `2026-10-24 EPYC 8534P hourly rental: cache placement, threads, and page backing`
+- `2026-10-23 Linux NUMA defaults and automatic RAM headroom`
 - `2026-10-24 AVX2 paired rounds and contiguous column loads/stores`
 - `Updated summary of cumulative adopted optimizations`
 - `2026-07-11 1 GiB explicit hugepages on WSL Zen 5 (adopted, pending boot pool)`
@@ -43,6 +46,130 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 automatic Linux L3 placement: worker-only EPYC validation
+
+- Linux `--cpu-affinity auto` now interleaves physical cores across L3 sharing
+  groups within each NUMA node, retaining node balance before cache balance and
+  all eligible physical cores before SMT siblings. `--cpu-affinity os` preserves
+  the OS-order pinning opt-out; `off` still leaves placement to the scheduler.
+- Discovery uses sysfs unified level-3 sharing masks, intersected with allowed
+  CPUs. It validates symmetric membership and consistent SMT siblings instead
+  of assuming cache IDs or index numbers are globally meaningful. Missing or
+  inconsistent cache data retains NUMA-only placement. Incomplete NUMA/core
+  data or a single node/cache retains OS order. Workers still pin before arena
+  allocation; helper-thread affinity and memory policies are unchanged.
+- Autotune schema 9 invalidates old placement measurements and fingerprints
+  cache sharing domains as well as allowed CPUs and NUMA/core topology.
+  Benchmark policy metadata identifies the NUMA/L3 strategy. Thread counts
+  remain adaptive; this does not impose an EPYC-specific count or page policy.
+- Local validation: 416 CPU-binary tests passed, one pre-reserved 1 GiB HugeTLB
+  test ignored. CPU-only Clippy and default-feature compilation passed with
+  existing warnings. Edited Rust files pass pinned-toolchain formatting;
+  `git diff --check` passes. Topology coverage includes restricted CPU masks,
+  one-node cache spreading, uneven NUMA/cache groups, SMT, shared caches across
+  NUMA nodes, malformed/incomplete sysfs, and the original 64-core EPYC layout.
+- Native validation artifacts, frozen source/binary, and exact scripts are in
+  `data/epyc-l3-validation-20261024/`. This uses a second rental because the
+  original 64-core offer was out of stock: AMD EPYC 8434P, 48 cores / 96 threads,
+  384 GB advertised RAM (377 GiB visible), one NUMA node, eight L3 groups.
+  The identical portable CPU-only binary is used for `os` and `auto`, SHA-256
+  `b174c46e833c3e401dc602c7769f24da1149377dc56ef8c2b3e5113c4dca7332`.
+- Live inspection verified 32 automatic workers occupy all eight L3 groups,
+  four per group. OS order occupies six groups (6/6/6/6/6/2). Helper threads
+  retain CPUs 0-95 in both variants. At 24 workers, `auto` uses three per group
+  versus six per group in four groups for `os`. At 48 workers, both policies
+  use every physical core, six per group. RAID resync was paused throughout
+  all comparisons and restored afterward. Every measured arena reported
+  ordinary pages, with zero allocation failures.
+- Measurements used alternating A/B order, two measured rounds plus one warmup
+  per invocation, and five-second cooldowns. The 24/32-worker comparisons used
+  three pairs of 30-second rounds; the 48-worker control used two pairs of
+  20-second rounds. These are offline backend measurements, not pool hashrate.
+
+| Workers | OS-order mean H/s | Automatic mean H/s | Counted delta | Interpretation |
+|---|---:|---:|---:|---|
+| 24 | 18.376 | 21.449 | +16.72% | Consistent gain in all three pairs |
+| 32 | 21.745 | 22.052 | +1.41% | Small, variable; inconclusive |
+| 48 | 19.715 | 21.325 | +8.17% | Slow first baseline; not a reliable gain |
+
+- **Adopted**: automatic L3 spreading with the existing `os` opt-out. The
+  strongest implementation evidence is 24 workers: paired gains of 16.01%,
+  17.44%, and 16.73%. Including all completed hashes instead of only hashes
+  counted within the deadline also improves, 19.157 to 22.230 H/s (+16.04%).
+- At 32 workers, paired deltas were +2.62%, +2.09%, and -0.59%; both variants
+  slowed in the third pair. At 48 workers, the first baseline was 17.985 H/s
+  versus 21.445 in the second; the second pair was essentially tied (+0.008%).
+  A background snapshot found no large competing userspace workload and the
+  mirror remained paused, but this does not establish the source of variance.
+  Do not advertise the 48-worker mean as an affinity gain or compare its shorter
+  deadline-counted windows directly with the 24/32-worker runs.
+- This validates the worker-only implementation on a second EPYC model, not a
+  universal percentage gain. Multi-node NUMA throughput remains unmeasured.
+  All 37 downloaded result files passed their remote SHA-256 manifest. The
+  hourly server was deleted after about 42 minutes, its dedicated SSH key was
+  removed, and the task browser tab was closed; no rental was retained.
+
+## 2026-10-24 EPYC 8534P hourly rental: cache placement, threads, and page backing
+
+- Host: Scaleway EM-I620E-NVMe, AMD EPYC 8534P, 64 cores / 128 threads,
+  576 GB advertised RAM (566 GiB visible), Ubuntu 26.04.1, kernel 7.0.0-38.
+  Linux exposed **one NUMA node** and eight L3 sharing groups. This rental
+  therefore does **not** validate the new multi-node NUMA default.
+- CPU-only portable release binary, Rust 1.93.0, base `b19904e` plus the NUMA/RAM
+  changes; SHA-256
+  `f7f4fffa7e1835381f26bea0b0bd5286d8f07b58cf3656b1913dff6715dbd33b`.
+  Source patch, new topology module, provenance, and binary are retained in
+  `data/epyc-rental-8le6c9cd/`; raw reports are under `results/`.
+- Main comparisons used three alternating A/B pairs, 30-second backend rounds,
+  two measured rounds plus one warmup, five-second cooldowns, explicit thread
+  counts, and disabled autotuning. Page backing was verified for every run.
+  Rates below are benchmark deadline-counted H/s including the end fence;
+  they are not pool mining measurements.
+
+| Comparison | Baseline mean H/s | Candidate mean H/s | Candidate delta |
+|---|---:|---:|---:|
+| 64 vs 32 workers, 2 MiB HugeTLB | 16.209 | 17.429 | +7.53% (unstable baseline) |
+| Ordinary vs 2 MiB pages, 32 workers | 17.614 | 17.412 | -1.14% |
+| Compact vs cache-spread placement, 32 workers, ordinary pages | 17.614 | 20.842 | +18.32% |
+
+- The 64-worker runs ranged from 14.372 to 18.766 H/s, so their average is not
+  sufficient evidence for a universal 32-worker limit. The fresh OS was also
+  synchronizing its RAID mirror; this was recorded, paused for both later
+  comparisons, and resumed afterward. Its contribution to the variance was
+  not established. The short 16/32/64/128 sweep is directional only.
+- Cache-spread used `taskset` with CPUs `0,2,4,...,62`: four physical cores in
+  each of eight L3 groups, instead of CPUs `0-31` occupying four groups.
+  Both variants used 32 workers and 64 GiB of arena memory. Live per-thread
+  affinity inspection confirmed the spread. Candidate runs were 21.467,
+  20.410, and 20.649 H/s; baselines were 17.645, 17.609, and 17.590 H/s.
+  Counting all completed hashes including late hashes also improved, from
+  18.650 to 21.878 H/s (+17.31%). The taskset mask restricts the whole process,
+  including helper threads, so a worker-only implementation needs its own A/B.
+- No page-policy or single-node affinity default was changed from this test.
+  The next supported experiment is automatic L3-group spreading with an OS-order
+  opt-out, followed by a native-host A/B of that implementation. Do not hard-code
+  this machine's CPU IDs on other hosts or claim a multi-node speedup.
+- All downloaded result files passed their remote SHA-256 manifest. The hourly
+  server was deleted after about 51 minutes; no benchmark resource was retained.
+
+## 2026-10-23 Linux NUMA defaults and automatic RAM headroom
+
+- Default Linux `auto` placement now interleaves physical cores across usable NUMA
+  nodes before SMT siblings, respecting allowed CPU/memory masks. Single-node,
+  memoryless/restricted-local-memory, and incomplete/inconsistent topologies
+  retain OS order. Arena allocation already occurs after worker pinning.
+- `--cpu-affinity os` restores OS ordering with pinning; `off` disables pinning.
+- Automatic sizing/autotuning subtracts 5% of effective total RAM from available
+  memory; `--cpu-memory-reserve-percent 0` opts out. Explicit worker counts retain
+  existing semantics, and the existing minimum-one-worker rule still applies.
+- Autotune schema 8 includes allowed CPUs and detected NUMA layout in cache
+  identity. Benchmark reports distinguish the new placement policy from OS order.
+- Synthetic tests cover node spreading, SMT ordering, sparse/asymmetric CPU sets,
+  memory restrictions, inconsistent/missing topology, and RAM budget arithmetic.
+- No EPYC speedup is claimed: representative native Linux multi-node A/B runs
+  with controlled HugeTLB backing remain necessary. This does not supersede the
+  earlier WSL results; single-node WSL placement remains unchanged.
 
 ## 2026-10-24 AVX2 paired rounds and contiguous column loads/stores
 

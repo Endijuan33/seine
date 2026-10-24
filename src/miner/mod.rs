@@ -57,7 +57,7 @@ use ui::{info, warn};
 const TEMPLATE_RETRY_DELAY: Duration = Duration::from_secs(2);
 const MIN_EVENT_WAIT: Duration = Duration::from_millis(1);
 const BACKEND_EVENT_SOURCE_CAPACITY_MAX: usize = 256;
-const CPU_AUTOTUNE_RECORD_SCHEMA_VERSION: u32 = 7;
+const CPU_AUTOTUNE_RECORD_SCHEMA_VERSION: u32 = 9;
 const CPU_AUTOTUNE_RECORD_MAX_AGE_SECS: u64 = 14 * 24 * 60 * 60;
 const CPU_AUTOTUNE_LINEAR_SCAN_MAX_CANDIDATES: usize = 8;
 const CPU_AUTOTUNE_FINAL_SWEEP_RADIUS: usize = 2;
@@ -174,6 +174,7 @@ struct CpuAutotuneHostFingerprint {
     kernel_version: Option<String>,
     runtime_environment: String,
     build_fingerprint: String,
+    affinity_topology: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1822,6 +1823,7 @@ fn cpu_profile_label(profile: CpuPerformanceProfile) -> &'static str {
 
 fn cpu_affinity_label(affinity: crate::config::CpuAffinityMode) -> &'static str {
     match affinity {
+        crate::config::CpuAffinityMode::Os => "os",
         crate::config::CpuAffinityMode::Off => "off",
         crate::config::CpuAffinityMode::Auto => "auto",
         crate::config::CpuAffinityMode::PcoreOnly => "pcore-only",
@@ -1844,6 +1846,7 @@ fn cpu_autotune_host_fingerprint() -> CpuAutotuneHostFingerprint {
         kernel_version: crate::runtime_identity::runtime_kernel_version(),
         runtime_environment: crate::runtime_identity::runtime_environment(),
         build_fingerprint: crate::runtime_identity::build_fingerprint(),
+        affinity_topology: crate::backend::cpu::affinity_topology_fingerprint(),
     }
 }
 

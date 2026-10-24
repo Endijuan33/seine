@@ -1927,10 +1927,11 @@ fn parse_cpu_profile(value: &str) -> Result<CpuPerformanceProfile> {
 
 fn parse_cpu_affinity(value: &str) -> Result<CpuAffinityMode> {
     match value.trim().to_ascii_lowercase().as_str() {
+        "os" => Ok(CpuAffinityMode::Os),
         "off" => Ok(CpuAffinityMode::Off),
         "auto" => Ok(CpuAffinityMode::Auto),
         "pcore-only" => Ok(CpuAffinityMode::PcoreOnly),
-        other => bail!("invalid cpu_affinity '{other}' (expected: off|auto|pcore-only)"),
+        other => bail!("invalid cpu_affinity '{other}' (expected: off|auto|os|pcore-only)"),
     }
 }
 
@@ -1978,6 +1979,7 @@ fn cpu_profile_to_str(value: CpuPerformanceProfile) -> &'static str {
 
 fn cpu_affinity_to_str(value: CpuAffinityMode) -> &'static str {
     match value {
+        CpuAffinityMode::Os => "os",
         CpuAffinityMode::Off => "off",
         CpuAffinityMode::Auto => "auto",
         CpuAffinityMode::PcoreOnly => "pcore-only",
