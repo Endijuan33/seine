@@ -2879,6 +2879,18 @@ struct MemoryBudgetBytes {
     effective_available: u64,
 }
 
+/// Maximum parked worker slots from CPU availability and instance count only.
+/// Dynamic RAM limits govern active arenas, never the fixed nonce-lane stride.
+pub(crate) fn cpu_autotune_worker_ceiling(cfg: &Config) -> usize {
+    let instances = cfg
+        .backend_specs
+        .iter()
+        .filter(|s| s.kind == BackendKind::Cpu)
+        .count()
+        .max(1);
+    (cpu_parallelism_cap(cfg.cpu_affinity) / instances).max(1)
+}
+
 /// Total capacity is stable across temporary RAM use; available capacity includes
 /// only arenas this miner already owns, so they are not subtracted twice.
 pub(crate) fn cpu_autotune_capacity(cfg: &Config, owned_bytes: u64) -> (usize, usize) {
