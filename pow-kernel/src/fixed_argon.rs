@@ -2901,6 +2901,15 @@ mod tests {
         assert_fixed_kernel_matches_reference(Some(super::ISA_AVX2));
     }
 
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn fixed_neon_sha3_matches_reference_at_segment_boundaries() {
+        if !crate::CpuKernel::NeonSha3.is_supported() {
+            return;
+        }
+        assert_fixed_kernel_matches_reference(Some(super::ISA_NEON_SHA3));
+    }
+
     fn assert_fixed_kernel_matches_reference(isa: Option<u8>) {
         let memory_kib_values = [8u32, 32u32, 65u32, 4096u32];
         let salts = [
