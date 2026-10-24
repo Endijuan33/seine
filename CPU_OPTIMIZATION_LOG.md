@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 CPU sampler panic handling`
 - `2026-10-24 CPU autotuner warmed sampling and lifecycle timing`
 - `2026-10-24 independent two-node Milan release validation`
 - `2026-10-24 Intel AVX2 release validation`
@@ -50,6 +51,26 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 CPU sampler panic handling
+
+- Review of the warmed sampler (`f35e6c1`) found that a lane panic during
+  measured hashing strands its peers at the finish barrier. An injected panic
+  reproduced the hang; a five-second process timeout was required to stop it.
+- Setup/warmup and measured hash actions now convert unwinding panics into
+  lane-specific errors, allowing every worker to reach the synchronization
+  barriers. Sampling rejects the failed measurement. Normal score calculation
+  and warmup policy are unchanged.
+- A bounded regression covers panics during setup, warmup, and measured hashing;
+  errors preserve the failing lane, phase, and panic message. The test fails
+  after five seconds if a barrier stops releasing workers. Integrated with the
+  v0.2.19 source and cancellation coverage, 428 CPU-only workspace tests pass,
+  with one pre-reserved 1 GiB HugeTLB test ignored. Default-feature compilation and
+  CPU-only Clippy pass with existing warnings. Scoped Rust 1.93.0 formatting
+  and `git diff --check` pass.
+- Reproduction and validation logs are retained in
+  `data/sampler-review/` in the sampler review worktree. This is failure-path
+  validation; the warmed sampler's performance comparison is recorded separately.
 
 ## 2026-10-24 CPU autotuner warmed sampling and lifecycle timing
 

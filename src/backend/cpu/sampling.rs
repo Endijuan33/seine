@@ -47,7 +47,7 @@ where
                 let mut worker = if shutdown.load(Ordering::Relaxed) {
                     None
                 } else {
-                    match catch_worker_panic(|| {
+                    match catch_worker_panic(lane, "setup/warmup", || {
                         setup(lane).and_then(|mut hash| {
                             if warmup && !shutdown.load(Ordering::Relaxed) {
                                 hash()?;
@@ -71,7 +71,7 @@ where
                 let mut local_hashes = 0u64;
                 if let Some(hash) = worker.as_mut() {
                     while Instant::now() < stop_at && !shutdown.load(Ordering::Relaxed) {
-                        if let Err(err) = catch_worker_panic(&mut *hash) {
+                        if let Err(err) = catch_worker_panic(lane, "hash", &mut *hash) {
                             *error.lock().unwrap() = Some(err);
                             break;
                         }
@@ -114,9 +114,15 @@ where
 
 // A panic before either rendezvous must become an error so the remaining
 // lanes can leave their barriers. The normal hashing path is unchanged.
-fn catch_worker_panic<T>(work: impl FnOnce() -> Result<T>) -> Result<T> {
-    catch_unwind(AssertUnwindSafe(work))
-        .unwrap_or_else(|_| Err(anyhow!("CPU sample worker panicked")))
+fn catch_worker_panic<T>(lane: usize, phase: &str, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    catch_unwind(AssertUnwindSafe(work)).unwrap_or_else(|payload| {
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic payload");
+        Err(anyhow!("cpu lane {lane}: {phase} panicked ({message})"))
+    })
 }
 
 #[cfg(test)]
@@ -124,6 +130,21 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::mpsc;
+
+    fn sample_without_hanging(
+        action: impl FnOnce() -> Result<KernelBenchSample> + Send + 'static,
+    ) -> Result<KernelBenchSample> {
+        let (sender, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let _ = sender.send(action());
+        });
+        let result = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("sample failed to release every lane");
+        worker.join().expect("sample controller panicked");
+        result
+    }
 
     #[test]
     fn warmup_and_lifecycle_are_excluded_but_last_hash_overrun_is_timed() {
@@ -225,29 +246,34 @@ mod tests {
     #[test]
     fn worker_panics_release_setup_and_finish_barriers() {
         for phase in 0..3 {
-            let result = sample(
-                3,
-                Duration::from_millis(10),
-                true,
-                &AtomicBool::new(false),
-                |lane| {
-                    assert!(!(lane == 1 && phase == 0), "setup panic");
-                    let mut calls = 0;
-                    Ok(move || {
-                        calls += 1;
-                        assert!(
-                            !(lane == 1
-                                && ((phase == 1 && calls == 1) || (phase == 2 && calls == 2))),
-                            "hash panic"
-                        );
-                        Ok(())
-                    })
-                },
-            );
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("CPU sample worker panicked"));
+            let result = sample_without_hanging(move || {
+                sample(
+                    3,
+                    Duration::from_secs(1),
+                    true,
+                    &AtomicBool::new(false),
+                    |lane| {
+                        assert!(!(lane == 1 && phase == 0), "setup panic");
+                        let mut calls = 0;
+                        Ok(move || {
+                            calls += 1;
+                            assert!(
+                                !(lane == 1
+                                    && ((phase == 1 && calls == 1) || (phase == 2 && calls == 2))),
+                                "hash panic"
+                            );
+                            Ok(())
+                        })
+                    },
+                )
+            });
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("cpu lane 1:"));
+            assert!(error.contains(if phase == 0 {
+                "setup panic"
+            } else {
+                "hash panic"
+            }));
         }
     }
 
