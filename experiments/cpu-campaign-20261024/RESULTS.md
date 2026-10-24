@@ -114,6 +114,15 @@ research owner found no blocker in nonce stride, teardown/retry, PID headroom,
 manual bounds or platform-scoped resource errors; native confirmation is still
 required and the reserve is explicitly best effort against concurrent tasks.
 
+The first full-pool limit of 24 tasks was insufficient even for v0.2.21: its
+existing sysinfo/Rayon pool creates sixteen threads during startup discovery,
+and the baseline then fails spawning the pool client. The candidate instead
+reports insufficient headroom before provisioning. Both failed runs are retained;
+the revised full-pool acceptance budget is 40 tasks, still below the combined
+CPU-sized parked pool plus runtime requirement. No Rayon environment override
+is used and product source remains frozen. Reducing startup's persistent Rayon
+thread footprint is a separate future optimization.
+
 ## Reviewable changes
 
 - [PR #40](https://github.com/zpalmtree/seine/pull/40): Windows tuning-cache

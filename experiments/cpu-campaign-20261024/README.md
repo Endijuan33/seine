@@ -144,7 +144,7 @@ eventual deletion of the task-owned security group and SSH keys.
 - `hardened_validate.sh`, `queue_hardened.py`: freeze combined candidate `636e688`,
   wait for prior timing, then run native workspace/reference checks, full pool
   task-budget startup and the complete resource lifecycle.
-- `pid_pool_probe.py`: full loopback pool runtime on 16 CPUs with 24 tasks and
+- `pid_pool_probe.py`: full loopback pool runtime on 16 CPUs with 40 tasks and
   one arena's RAM budget; checks actual tasks, residency, productive hashes and
   cleanup. `pid_probe.py` separately forces a backend-only 12-task spawn race.
 - `portable_regression.sh`: transfer-frozen, same-profile x86 control/candidate

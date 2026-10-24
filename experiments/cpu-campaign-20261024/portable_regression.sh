@@ -13,7 +13,7 @@ from pathlib import Path
 import subprocess
 from screen import physical_first
 memory = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
-maximum = min(12, len(physical_first()), (memory['MemAvailable'] * 1024 - 5 * 1024**3) // (2 * 1024**3))
+maximum = min(16, len(physical_first()), (memory['MemAvailable'] * 1024 - 5 * 1024**3) // (2 * 1024**3))
 assert maximum >= 1
 text=Path('results/portable-regression-build/candidate-full-size-parity.log').read_text()
 kernels=[kernel for kernel in ['avx2','avx512'] if kernel + ': PASS' in text]
