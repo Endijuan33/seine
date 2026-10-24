@@ -37,5 +37,61 @@
       "scripts/test_bench_cpu_energy.py": "5e18b9b0991cfdc292d3d1f34de6f3301713e57aa87b4b46521170eb1319eea2"
     },
     "python_tests_passed": 14
+  },
+  "integration_validation": {
+    "master_commit": "0a63aec2c717d1c2209a381f738063967b342cb7",
+    "rust_toolchain": "1.93.0",
+    "research_kernel_tests_passed": 11,
+    "default_kernel_tests_passed": 7,
+    "strict_kernel_clippy": "passed",
+    "cross_checks": [
+      "x86_64-pc-windows-gnu",
+      "aarch64-apple-darwin"
+    ],
+    "release_parser_smoke": {
+      "scope": "report_parser_contract_smoke_not_energy_or_speed_measurement",
+      "command": [
+        "/home/zp/Code/blocknet/seine-autotune-review/data/releases/v0.2.21/linux/seine",
+        "--bench",
+        "--bench-kind",
+        "end-to-end",
+        "--backend",
+        "cpu",
+        "--threads",
+        "1",
+        "--disable-cpu-autotune-threads",
+        "--cpu-page-mode",
+        "regular",
+        "--bench-cpu-kernel",
+        "avx2",
+        "--bench-secs",
+        "2",
+        "--bench-rounds",
+        "1",
+        "--bench-warmup-rounds",
+        "0",
+        "--bench-output",
+        "/home/zp/Code/blocknet/seine-cpu-research/data/cpu-research-20261024/release-0.2.21-contract/bench.json",
+        "--data-dir",
+        "/home/zp/Code/blocknet/seine-cpu-research/data/cpu-research-20261024/release-0.2.21-contract/config",
+        "--ui",
+        "plain"
+      ],
+      "binary_sha256": "e2574ed0867d8f645b6f4b39daeac7fdb047a957d048b7c7c85a91d82754d908",
+      "report_sha256": "01498238531c40f9b83895300ff1c7393d2200a475fc2eb224a677687f103ef3",
+      "completed_hashes": 4,
+      "vmstat_before": {
+        "pswpin": 34117127,
+        "pswpout": 153866048,
+        "oom_kill": 18
+      },
+      "vmstat_after": {
+        "pswpin": 34117127,
+        "pswpout": 153866048,
+        "oom_kill": 18
+      },
+      "report_file": "energy-report-contract-v0.2.21.json",
+      "seine_version": "0.2.21"
+    }
   }
 }

@@ -71,15 +71,19 @@ explicitly deferred hardware energy measurements. Synthetic counter tests
 validate arithmetic and process handling; they are not hardware measurements.
 A real v0.2.20 one-worker, regular-page, full-size
 [end-to-end report](energy-report-contract-smoke.json) validated the report
-parser, including the completed hash produced during its fence. This short run
-checks the report contract; its throughput is not used as optimization evidence.
+parser, including the completed hash produced during its fence. The same check
+passed with the published [v0.2.21 binary](energy-report-contract-v0.2.21.json)
+after integration with the automatic kernel tuner: four completed hashes,
+including one during the fence, with no swap or OOM activity. These short runs
+check the report contract; their throughput is not used as optimization evidence.
 
 ## Validation
 
-- 10 kernel tests pass with `cpu-research`, including independent hash equality
+- After integration with v0.2.21/master `0a63aec`, 11 kernel tests pass with
+  `cpu-research`, including independent hash equality
   across supported kernels, non-aligned memory sizes, bounded reconstruction,
   live-block accounting, and prefix consistency of online retention.
-- All six default-feature kernel tests pass with research disabled.
+- All seven default-feature kernel tests pass with research disabled.
 - Full 2 GiB independent reference checks passed for all three recorded nonces.
 - Strict kernel Clippy and Windows x86-64 GNU/macOS AArch64 all-target checks
   pass with the feature. Cross-compilation is not native runtime validation.
