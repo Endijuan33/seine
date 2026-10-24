@@ -12,6 +12,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 ## Newest-first index
 
 - `2026-10-24 Intel AVX2 release validation`
+- `2026-10-24 two-node EPYC placement and autotuner validation`
 - `2026-10-24 automatic Linux L3 placement: worker-only EPYC validation`
 - `2026-10-24 EPYC 8534P hourly rental: cache placement, threads, and page backing`
 - `2026-10-23 Linux NUMA defaults and automatic RAM headroom`
@@ -92,6 +93,91 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   scripts. The instance is terminated and its disk and temporary security
   group are deleted; `cleanup.json` records verification.
 
+## 2026-10-24 two-node EPYC placement and autotuner validation
+
+- Host: EC2 `c6a.8xlarge` Spot instance, AMD EPYC 7R13, 16 physical cores /
+  32 vCPUs, 64 GiB RAM, Ubuntu 24.04. Linux exposes two NUMA nodes with eight
+  physical cores each: node 0 CPUs `0-7,16-23`, node 1 `8-15,24-31`. Each node
+  is also one L3 sharing group. These results validate the exposed VM topology;
+  they do not establish a universal bare-metal speedup or isolate cache effects
+  from memory bandwidth.
+- Tested source `e00089c` has the same tree as merge `8e96bba` (PR #29).
+  Portable Rust 1.93.0 CPU-only release binary SHA-256:
+  `c20fc2a248c205ab591ad8b56998fb993e0b78030d7bada72ed5b380562c9610`.
+  Both variants use that identical binary, differing only in affinity policy:
+  `--cpu-affinity os` versus `auto`. Artifacts and exact runner/analyzer scripts are retained in
+  `data/numa-autotune-20261024/`.
+- Fixed-count comparisons use two measured 20-second backend rounds plus one
+  warmup, three alternating pairs at eight workers, two pairs at 16 workers,
+  and three-second cooldowns. Ordinary pages disable THP. Huge-page runs require
+  verified explicit 2 MiB backing; 16 GiB is reserved on each node beforehand.
+  This is offline backend throughput, not pool mining hashrate.
+
+| Workers | Backing | OS-order mean H/s | Automatic mean H/s | Counted delta |
+|---|---|---:|---:|---:|
+| 8 | Ordinary pages | 5.790 | 10.031 | +73.25% |
+| 8 | 2 MiB HugeTLB | 5.635 | 11.720 | +107.98% |
+| 16 | 2 MiB HugeTLB | 11.177 | 11.211 | +0.30% (effectively unchanged) |
+
+- All three eight-worker pairs favor `auto` in each page mode. Counting all
+  completed hashes over actual elapsed time also improves: +68.68% with
+  ordinary pages and +101.14% with HugeTLB. The smaller all-core delta is not
+  evidence of a meaningful gain when both policies already use every core.
+- Live inspection verifies eight OS-order workers occupy node 0, with nearly
+  all 16 GiB of arenas on that node. Automatic placement uses four workers per
+  node and approximately 8 GiB of arenas on each. Helper threads retain the
+  full CPU mask. Per-process NUMA maps, `numastat`, worker affinity, and backing
+  telemetry are retained alongside the raw reports.
+- Fresh autotuner checks use the default balanced profile, ordinary pages,
+  automatic affinity, default six-second sampling, no explicit thread count,
+  and separate empty caches. Explicit huge pages are released first. The
+  default 5% RAM reserve yields a cap of 28 workers on this guest; each selected
+  count is then evaluated with one warmup and two 20-second backend rounds.
+
+| Fresh cache | Selected workers | Arena GiB | Short-sample H/s | Warm counted H/s | Warm completed H/s |
+|---|---:|---:|---:|---:|---:|
+| 1 | 12 | 24 | 9.271 | 11.351 | 11.931 |
+| 2 | 10 | 20 | 8.950 | 10.944 | 11.428 |
+| 3 | 12 | 24 | 9.391 | 11.405 | 11.983 |
+
+- All caches use schema 9 with a nonempty topology fingerprint and match the
+  benchmark worker count. A subsequent cache hit reuses 12 workers without a
+  search and measures 11.306 counted H/s. Thread selection is not fully stable:
+  one fresh run chooses 10 workers, below the other runs' warm throughput.
+- A separate three-pair alternating comparison holds automatic affinity and
+  ordinary pages constant and compares explicit 10 versus 12 workers. It uses
+  the same 20-second rounds, warmup, and cooldown protocol as above. Twelve
+  workers average 11.050 versus 10.582 counted H/s (+4.42%); paired gains are
+  +4.67%, +4.06%, and +4.54%. All-completed throughput improves 5.06%. This
+  confirms a measurable opportunity missed by that fresh tune, beyond the
+  balanced profile's 1% near-peak target; it does not justify hard-coding 12
+  workers for other machines.
+- Follow-up: investigate short-sample scoring and search repeatability. Source
+  inspection shows autotune's outer wall timer includes kernel benchmark
+  setup/teardown, while the hashing deadline starts after arena allocation.
+  This is a possible source of ranking bias, not an established cause from
+  these measurements. No autotuner sampling or selection code was changed by
+  this validation; the existing longer finalist remeasurements do not guarantee
+  steady-state optimal selection.
+- All fixed-count, fresh-tune, and cache-hit reports verify expected page
+  backing and zero allocation failures, dropped events, or assignment/control
+  timeouts. Main-run host counters show no swap/OOM activity and negligible CPU
+  steal (under 0.001%). The cache-hit process emitted a slow-stop/detach warning
+  after producing its report, exited successfully, and was confirmed gone
+  before the separate thread-count comparison. Measurement fences completed.
+- The merged source passed 407 CPU-binary tests (one pre-reserved 1 GiB HugeTLB
+  test ignored), default-feature compilation, CPU-only Clippy with existing
+  warnings, scoped formatting, and diff checks. The earlier 416-test count
+  included unrelated work present on the original development branch.
+- All 118 final result files passed the downloaded SHA-256 manifest, including
+  raw reports, live placement snapshots, and runner logs. HugeTLB reservations
+  were returned to zero and no Seine process remained before shutdown. The
+  rental was terminated after approximately 39 minutes; its root disk and
+  dedicated security group were deleted, its one-time Spot request cancelled,
+  and its dedicated local SSH private key removed. No benchmark VM is retained.
+  Observed Spot compute pricing was $0.5276/hour (about $0.35 for this run,
+  before storage/network charges); the request ceiling was $0.60/hour.
+
 ## 2026-10-24 automatic Linux L3 placement: worker-only EPYC validation
 
 - Linux `--cpu-affinity auto` now interleaves physical cores across L3 sharing
@@ -150,7 +236,8 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   Do not advertise the 48-worker mean as an affinity gain or compare its shorter
   deadline-counted windows directly with the 24/32-worker runs.
 - This validates the worker-only implementation on a second EPYC model, not a
-  universal percentage gain. Multi-node NUMA throughput remains unmeasured.
+  universal percentage gain. Multi-node NUMA throughput was unmeasured at this
+  stage; the newer two-node validation above supplies that evidence.
   All 37 downloaded result files passed their remote SHA-256 manifest. The
   hourly server was deleted after about 42 minutes, its dedicated SSH key was
   removed, and the task browser tab was closed; no rental was retained.
