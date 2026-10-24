@@ -15,9 +15,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('architecture', choices=['arm64', 'amd64'])
     args = parser.parse_args()
-    sources = {name: DATA / name for name in ['baseline.tar.gz', 'neon-auto.tar.gz']}
+    sources = {name: DATA / name for name in ['baseline.tar.gz', 'neon-auto.tar.gz', 'cpu-recovery.tar.gz']}
     for name in ['bootstrap.sh', 'screen.py', 'matrix.py', 'resource_lifecycle.py',
-                 'arm_generation.sh', 'arm-prefetch64.patch', 'cpu_functional_validate.sh']:
+                 'arm_generation.sh', 'arm-prefetch64.patch', 'cpu_functional_validate.sh', 'recovery_validate.sh']:
         sources[name] = HERE / name
     if args.architecture == 'amd64':
         binary = DATA / 'published-linux-seine'

@@ -11,7 +11,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('instance')
     parser.add_argument('--functional', action='store_true', help='run x86 candidate tests/lifecycle after screening')
+    parser.add_argument('--recovery', action='store_true', help='run fixed-candidate native recovery validation after timing')
     args = parser.parse_args()
+    assert not (args.functional and args.recovery), 'choose one lifecycle candidate'
     record, info = cloud.owned(args.instance)
     assert record['timer_verified'] and info['State']['Name'] == 'running'
     architecture = cloud.TYPES[record['type']]
@@ -26,7 +28,8 @@ def main():
     script = ('set -euo pipefail\ncd /home/ubuntu/campaign\n'
               'sha256sum --check INPUT-SHA256SUMS\n'
               'SEINE_SKIP_GLOBAL_SHA3=1 bash bootstrap.sh\n' +
-              ('bash arm_generation.sh\n' if arm else ('bash cpu_functional_validate.sh\n' if args.functional else '')))
+              ('bash arm_generation.sh\n' if arm else ('bash cpu_functional_validate.sh\n' if args.functional else '')) +
+              ('bash recovery_validate.sh\n' if args.recovery else ''))
     command = "python3 - <<'REMOTE'\n" + '''import json, subprocess, tarfile
 from pathlib import Path
 root=Path('/home/ubuntu/campaign')

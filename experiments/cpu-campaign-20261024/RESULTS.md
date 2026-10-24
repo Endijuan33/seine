@@ -96,9 +96,13 @@ reference parity and native workspace tests passed.
   contexts do not inherit an old 30-minute delay. CPU-only workspace tests and
   independent review by the autotune owner passed. Stable below-threshold
   results retain their existing policy.
-- ARM runtime SHA3/prefetch candidate: native full-size parity, small boundary
-  tests and real-arena worker switches passed. Automatic selection and resource
-  lifecycle confirmation are in progress; review PR pending.
+- [Draft PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
+  worker capacity after temporary RAM limits, stacked on #41. Native fixed
+  lifecycle confirmation is running.
+- [Draft PR #44](https://github.com/zpalmtree/seine/pull/44): runtime ARM
+  SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
+  boundary tests, real-arena worker switches and Graviton3 automatic selection
+  passed. Graviton4 and complete repaired lifecycle confirmation remain pending.
 
 Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
 and candidate all-target runs produced the same 65 error-message lines (63

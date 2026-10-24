@@ -113,6 +113,14 @@ eventual deletion of the task-owned security group and SSH keys.
   controls. A service-private hosts file redirects the built-in developer pool
   to the local fixture, with additional loopback-only IP restrictions.
 - `cloud.py`: launch/inspect/copy/terminate task-owned leases and record cleanup.
+- `prepare_payload.py`, `start_guest.py`: build a per-file SHA256 input manifest,
+  verify the uploaded archive and start a bounded process on a timer-verified lease.
+- `arm_generation.sh`: native fallback/feature checks and separate-target ARM
+  generation comparisons.
+- `recovery_validate.sh`: frozen repaired candidate, full native tests and
+  reference parity, real two-arena growth, then the resource lifecycle.
+- `export_evidence.py`: normalize schema-14 rounds while retaining raw SHA256
+  identities and completed-work/fence accounting.
 
 - `intel_controls.sh`, `arm_clean_confirm.sh`: authoritative isolated-target
   controls and confirmation builds, including published-binary comparisons and
