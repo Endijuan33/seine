@@ -1,6 +1,7 @@
 mod address;
 mod backend;
 mod config;
+mod console_exit;
 mod control_api;
 mod daemon_api;
 mod dev_fee;
@@ -22,6 +23,7 @@ use config::Config;
 fn main() {
     if let Err(err) = run() {
         eprintln!("fatal: {err:#}");
+        console_exit::pause_after_error();
         std::process::exit(1);
     }
 }
@@ -42,6 +44,10 @@ fn run() -> Result<()> {
 
     if cfg.api_server_enabled || cfg.service_mode {
         return control_api::run(cfg, shutdown);
+    }
+
+    if !cfg.bench && miner::should_enable_tui(&cfg) {
+        return control_api::run_interactive(cfg, shutdown);
     }
 
     miner::run(&cfg, shutdown)

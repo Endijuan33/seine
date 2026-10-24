@@ -697,6 +697,7 @@ pub(super) fn run_pool_mining_loop(
     runtime_backends: MiningRuntimeBackends<'_>,
     local_daemon_client: Option<ApiClient>,
     tui_state: Option<TuiState>,
+    history: Arc<super::session::SessionHistory>,
     deferred_backends: Option<(Receiver<super::BackendSlot>, u64)>,
 ) -> Result<()> {
     let MiningRuntimeBackends {
@@ -711,14 +712,14 @@ pub(super) fn run_pool_mining_loop(
 
     let (user_connection, dev_connection) = build_pool_connection_configs(cfg)?;
 
-    let stats = Stats::new();
+    let stats = &history.stats;
     let mut last_stats_print = Instant::now();
     let mut backend_weights = seed_backend_weights(backends);
     stats.register_expected_backends(&super::backend_instance_labels(backends));
     let mut work_id_cursor = 1u64;
     let mut epoch = 0u64;
     let mut last_hash_poll = Instant::now();
-    let mut tui = init_tui_display(tui_state, Arc::clone(&shutdown));
+    let mut tui = init_tui_display(tui_state, Arc::clone(&shutdown), Arc::clone(&history));
     let dev_fee_percent = effective_pool_dev_fee_percent(&user_connection.pool_url);
     if (dev_fee_percent - DEV_FEE_PERCENT).abs() > f64::EPSILON {
         success(
