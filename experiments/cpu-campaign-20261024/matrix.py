@@ -22,6 +22,8 @@ def main():
     p.add_argument("--page", choices=["regular", "large"], default="large")
     p.add_argument("--deadline-seconds", type=int, default=5400)
     a = p.parse_args()
+    if Path(str(a.out) + ".defer").exists():
+        raise SystemExit("Phase deferred by its explicit .defer marker before allocation")
     variants = []
     for item in a.variant:
         label, binary, kernel = item.split(":", 2)

@@ -28,6 +28,15 @@ shipping control without hiding worker-count regressions. Failed samples and
 losing experiments are retained as evidence. Nothing experimental enters default
 dispatch solely because the hardware advertises an ISA.
 
+**Build isolation:** never share a Cargo target directory between source revisions
+or feature profiles in performance comparisons. The first Ice Lake streaming
+follow-up was excluded after `nm` found `fill_streaming_ring` in its purported
+rebuilt baseline: Cargo had reused an experimental library from the shared target.
+Its immutable archive is retained with an exclusion sidecar. The published-binary
+ISA screen and separately built interhash runner are unaffected. Fresh controls
+and candidates use separate target directories, full-size checks, and symbol
+provenance. ARM final confirmations also rebuild both sides in separate targets.
+
 ## Initial observations
 
 Native Windows reports two L3 groups on this 9950X3D: 96 MiB on logical CPUs
@@ -105,6 +114,9 @@ eventual deletion of the task-owned security group and SSH keys.
   to the local fixture, with additional loopback-only IP restrictions.
 - `cloud.py`: launch/inspect/copy/terminate task-owned leases and record cleanup.
 
+- `intel_controls.sh`, `arm_clean_confirm.sh`: authoritative isolated-target
+  controls and confirmation builds, including published-binary comparisons and
+  regular-page ARM checks.
 - `matrix.py`: follow-up cross-build comparisons with completed-work accounting,
   checked backing, immutable binary identities and bounded memory.
 - `arm_followup.sh`, `arm_combined.sh`, `intel_streaming.sh`: frozen source builds,

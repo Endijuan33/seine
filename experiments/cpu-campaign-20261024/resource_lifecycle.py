@@ -56,10 +56,17 @@ def save(name, obj):
 
 
 def state(unit):
-    path = command(["systemctl", "show", unit, "--property=ControlGroup", "--value"]).strip()
+    properties = dict(line.split("=", 1) for line in command([
+        "systemctl", "show", unit, "--property=ControlGroup", "--property=MainPID"]).splitlines())
+    path = properties["ControlGroup"]
     group = Path("/sys/fs/cgroup") / path.lstrip("/")
-    result = {"time": time.time(), "cgroup": path}
-    for name in ("memory.current", "memory.peak", "memory.high", "memory.max", "memory.events", "memory.pressure", "cpu.stat"):
+    result = {"time": time.time(), "cgroup": path, "pid": int(properties["MainPID"])}
+    rollup = Path("/proc") / properties["MainPID"] / "smaps_rollup"
+    if rollup.exists():
+        result["smaps_rollup"] = {line.split(":")[0]: line.split(":", 1)[1].strip()
+                                  for line in rollup.read_text().splitlines() if ":" in line
+                                  and line.split(":")[0] in ("Rss", "Anonymous", "AnonHugePages", "Private_Hugetlb", "Shared_Hugetlb")}
+    for name in ("memory.current", "memory.peak", "memory.high", "memory.max", "memory.events", "memory.pressure", "cpu.stat", "cpu.pressure"):
         file = group / name
         if file.exists():
             result[name] = file.read_text().strip()
@@ -70,9 +77,9 @@ def set_high(unit, value):
     command(["sudo", "systemctl", "set-property", "--runtime", unit, "MemoryHigh=" + value])
 
 
-def start(unit, binary, cache, port, cpus, high, fixed=False):
+def start(unit, binary, cache, port, cpus, high, fixed=False, page="auto"):
     args = [str(binary), "--mode", "pool", "--pool-url", f"127.0.0.1:{port}", "--address", "@campaign",
-            "--pool-worker", "offline-cpu-campaign", "--backend", "cpu", "--cpu-page-mode", "regular",
+            "--pool-worker", "offline-cpu-campaign", "--backend", "cpu", "--cpu-page-mode", page,
             "--cpu-affinity", "auto", "--cpu-autotune-config", str(cache), "--data-dir", str(OUT / "config"),
             "--ui", "plain", "--stats-secs", "5"]
     if fixed:
@@ -127,7 +134,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--binary", type=Path, required=True)
     p.add_argument("--cpus", default="0-3")
+    p.add_argument("--page", choices=["auto", "regular"], default="auto")
     a = p.parse_args()
+    assert int(Path("/proc/sys/vm/nr_hugepages").read_text()) == 0, "release benchmark pools before pressure tests"
     OUT.mkdir(parents=True, exist_ok=False)
     (OUT / "hosts").write_text("127.0.0.1 localhost bntpool.com\n::1 localhost\n")
     cache = OUT / "tuning.json"
@@ -138,7 +147,7 @@ def main():
     try:
         unit = "seine-campaign-lifecycle-first.service"
         units.append(unit)
-        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G")
+        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G", page=a.page)
         records = []
         observe(unit, "initial-stable", 240, records)
         if cache.exists():
@@ -160,6 +169,11 @@ def main():
         observe(unit, "cpu-contention", 48, records)
         observe(unit, "load-recovery", 90, records)
         stop(unit)
+        high_events = [int(re.search(r"^high (\d+)$", sample["memory.events"], re.MULTILINE).group(1)) for sample in records]
+        assert max(high_events) > min(high_events), "memory.high did not produce actual reclaim pressure"
+        contention = [sample for sample in records if sample["phase"] == "cpu-contention"]
+        cpu_pressure = [int(re.search(r"^some .*total=(\d+)", sample["cpu.pressure"], re.MULTILINE).group(1)) for sample in contention]
+        assert max(cpu_pressure) > min(cpu_pressure), "CPU load did not produce scheduling pressure"
         assert cache.exists(), "no stable observation was persisted"
         seed = json.loads(cache.read_text())
         save("seed-before-restart.json", seed)
@@ -170,7 +184,7 @@ def main():
         # A true new process reuses the previous cache under a temporary budget.
         unit = "seine-campaign-lifecycle-restart.service"
         units.append(unit)
-        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "3G")
+        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "3G", page=a.page)
         records = []
         observe(unit, "constrained-restart", 35, records)
         constrained = json.loads(cache.read_text())
@@ -184,7 +198,7 @@ def main():
         assert "quarantined" not in text.lower()
         unit = "seine-campaign-lifecycle-optout.service"
         units.append(unit)
-        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G", fixed=True)
+        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G", fixed=True, page=a.page)
         observe(unit, "explicit-optout", 35, [])
         stop(unit)
         assert "cpu-autotune |" not in (OUT / (unit + ".log")).read_text(), "explicit opt-out ignored"
