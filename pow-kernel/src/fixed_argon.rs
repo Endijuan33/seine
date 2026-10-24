@@ -232,7 +232,7 @@ impl FixedArgon2id {
                 for pre in 0..DI_PREFETCH_DISTANCE {
                     let idx = first_block + pre;
                     if idx < self.segment_length {
-                        prefetch_pow_block(
+                        prefetch_pow_block::<ISA>(
                             &memory_blocks[self.data_independent_ref_indexes[ref_base + idx]],
                         );
                     }
@@ -241,7 +241,7 @@ impl FixedArgon2id {
                     let ref_index = self.data_independent_ref_indexes[ref_base + block];
                     let ahead = block + DI_PREFETCH_DISTANCE;
                     if ahead < self.segment_length {
-                        prefetch_pow_block(
+                        prefetch_pow_block::<ISA>(
                             &memory_blocks[self.data_independent_ref_indexes[ref_base + ahead]],
                         );
                     }
@@ -496,9 +496,10 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
 /// hardware prefetcher doesn't have to ramp up from scratch.
 ///
 /// - x86_64: all 16 cache lines at 64-byte stride (full 1024-byte block).
-/// - AArch64: all 8 cache lines at 128-byte stride (full 1024-byte block).
+/// - AArch64 baseline: retain eight hints at the original 128-byte stride.
+/// - NEON SHA3 candidate: sixteen hints cover every 64-byte server cache line.
 #[inline(always)]
-fn prefetch_pow_block(block: &PowBlock) {
+fn prefetch_pow_block<const ISA: u8>(block: &PowBlock) {
     #[cfg(target_arch = "x86_64")]
     {
         unsafe {
@@ -526,6 +527,32 @@ fn prefetch_pow_block(block: &PowBlock) {
     {
         unsafe {
             let ptr = block as *const PowBlock as *const u8;
+            if ISA == ISA_NEON_SHA3 {
+                // Keep the historical Apple-oriented stride in the baseline.
+                // The candidate covers the 64-byte lines on tested Gravitons;
+                // automatic A/B selection can retain baseline on other CPUs.
+                std::arch::asm!(
+                    "prfm pldl1keep, [{ptr}]",
+                    "prfm pldl1keep, [{ptr}, #64]",
+                    "prfm pldl1keep, [{ptr}, #128]",
+                    "prfm pldl1keep, [{ptr}, #192]",
+                    "prfm pldl1keep, [{ptr}, #256]",
+                    "prfm pldl1keep, [{ptr}, #320]",
+                    "prfm pldl1keep, [{ptr}, #384]",
+                    "prfm pldl1keep, [{ptr}, #448]",
+                    "prfm pldl1keep, [{ptr}, #512]",
+                    "prfm pldl1keep, [{ptr}, #576]",
+                    "prfm pldl1keep, [{ptr}, #640]",
+                    "prfm pldl1keep, [{ptr}, #704]",
+                    "prfm pldl1keep, [{ptr}, #768]",
+                    "prfm pldl1keep, [{ptr}, #832]",
+                    "prfm pldl1keep, [{ptr}, #896]",
+                    "prfm pldl1keep, [{ptr}, #960]",
+                    ptr = in(reg) ptr,
+                    options(nostack, preserves_flags),
+                );
+                return;
+            }
             std::arch::asm!(
                 "prfm pldl1keep, [{ptr}]",
                 "prfm pldl1keep, [{ptr}, #128]",
@@ -1313,7 +1340,7 @@ unsafe fn compress_avx2_into_mid_prefetch(
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
-        prefetch_pow_block(&*memory_blocks_base.add(next_ref));
+        prefetch_pow_block::<ISA_AVX2>(&*memory_blocks_base.add(next_ref));
     }
 
     // Phase 3b: Pair adjacent columns 1+2, 3+4, and 5+6 after the prefetch.
@@ -1757,7 +1784,7 @@ unsafe fn compress_avx512_into_mid_prefetch(
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
-        prefetch_pow_block(&*memory_blocks_base.add(next_ref));
+        prefetch_pow_block::<ISA_AVX512>(&*memory_blocks_base.add(next_ref));
     }
 
     // Phase 3b: Column pairs 1-3 (columns 2-7).
@@ -2478,7 +2505,11 @@ unsafe fn compress_neon_into_mid_prefetch<const SHA3: bool>(
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
-        prefetch_pow_block(&*memory_blocks_base.add(next_ref));
+        if SHA3 {
+            prefetch_pow_block::<ISA_NEON_SHA3>(&*memory_blocks_base.add(next_ref));
+        } else {
+            prefetch_pow_block::<ISA_NEON>(&*memory_blocks_base.add(next_ref));
+        }
     }
 
     // Remaining column rounds (idx=1..8): process in pairs (1,2), (3,4), (5,6),
