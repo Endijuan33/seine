@@ -16,7 +16,7 @@ on another machine. No campaign PR has been merged or released.
 | Graviton3 / Neoverse-V1, 1 worker, 2 MiB HugeTLB, NEON → runtime SHA3 + 64-byte prefetch | 0.820 → 1.228 | Four repeated pairs, +49.63% to +49.82%; ordering limitation found, corrected confirmation pending. |
 | Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four repeated pairs, +44.61% to +46.18%; isolated targets, but per-worker order limited. Corrected confirmation pending. |
 | Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two repeated pairs each, +37.09% to +37.48% / +32.69% to +33.14%; order limited. |
-| Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer repeated pairs: +3.60% to +3.67% / +4.38% to +4.55%; order limited, corrected confirmation pending. This is the fallback path, not SHA3 execution. |
+| Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → final `f20e7bb` portable NEON | 0.680 → 0.707 / 10.609 → 11.047 | Four corrected alternating pairs: +3.81% to +3.95% / +3.83% to +4.55%. Full-size dirty-reuse parity and unsupported SHA3 rejection passed. This is the fallback path, not SHA3 execution. |
 | Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Final636native lifecycle passed; f20x86-boundary change is near-flat on ARM (two pairs,16-worker mean−0.29%). |
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two screening passes (order limitation below); full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
@@ -34,7 +34,7 @@ on another machine. No campaign PR has been merged or released.
 | Zen 2 / EPYC 7R32, final AVX2 regression, 1 / 12 workers | 1.883 → 1.885 / 6.012 → 6.007 | Two balanced pairs and native full-size parity; twelve-worker differences −0.088% to −0.078%, near-flat. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Final Graviton2/3 corrected confirmation remains pending.
+Final Graviton3 corrected confirmation remains pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -89,9 +89,10 @@ the intended per-worker order-reversal requirement. Raw results remain intact;
 normalized evidence is labelled `order_limited`, and corrected native Graviton2,
 Graviton3 and Graviton4 confirmation is required before making the ARM PR ready.
 
-Graviton4 completed the corrected four-pass protocol with gains in every pair;
-its original interrupted/order-limited run remains archived. Graviton2/3
-corrected final-binary confirmations remain pending.
+Graviton4 and fresh Graviton2 completed the corrected four-pass protocol with
+gains in every pair; their original interrupted/order-limited runs remain archived.
+Graviton2 used the final frozen `f20e7bb` binary. Graviton3 corrected final-binary
+confirmation remains pending.
 
 The fix rotates by each configuration's stable original index and asserts the
 actual completed variant sequence reverses on every pass. The in-progress
@@ -198,7 +199,7 @@ comparison measured 9.303 / 9.036 / 9.267 H/s respectively: the fix consistently
 beats the regressed build while retaining a roughly −0.39% baseline-relative mean.
 The ARM check is near-flat (sixteen-worker pairs −0.712% and +0.142%). The fix
 is now incorporated in the ARM PR, which remains draft pending corrected final
-Graviton2/3 confirmation.
+Graviton3 confirmation.
 
 The separate combined integration branch includes PRs #40, #41, #43, #44 and
 #45 plus this candidate fix. It passes 497 workspace tests (five ignored),
@@ -238,7 +239,7 @@ introduce an offline startup benchmark or require users to select a CPU family.
   SHA3/prefetch candidate, stacked on #43. Native full-size parity, small
   boundary tests, real-arena worker switches and Graviton3 automatic selection
   passed. Graviton4 and complete repaired lifecycle confirmation passed; corrected
-  Graviton2/3 confirmation remains the draft gate. The Cascade Lake regression
+  Graviton3 confirmation remains the draft gate. The Cascade Lake regression
   was isolated and repaired; the residual small negative remains disclosed.
 
 Strict workspace/binary Clippy is not clean at baseline. On Ice Lake, baseline
