@@ -23,11 +23,20 @@ A short withdrawn headroom spike does not interrupt a comparison.
 - Combined strict all-target Clippy: 124 existing diagnostics across binary and
   binary-test targets; none in the three changed implementation files. This
   is not reported as a clean workspace lint run.
-- Native fixed-candidate resource lifecycle: pending. Acceptance requires
-  full-size reference parity, real two-arena growth and kernel switches,
-  productive work under CPU/memory pressure, constrained restart then actual
-  resident anonymous memory of at least 4 GiB after recovery, preserved cache
-  hints, and a fixed-thread opt-out run.
+- Native Sapphire Rapids / Xeon Platinum 8488C on combined candidate `1246967`:
+  **485 workspace tests passed**, four ignored; scalar/AVX2/AVX-512/256 full
+  2 GiB reference parity passed; both ignored real-arena growth/switch tests
+  passed; strict kernel Clippy passed.
+- The complete native Sapphire Rapids lifecycle passed CPU contention, actual
+  `memory.high` reclaim pressure, zero-worker parking, productive recovery,
+  constrained restart, preserved cache hints, and fixed-two-worker opt-out.
+  The restarted process grew from one to two and then three workers; anonymous
+  residency reached **6.028 GiB**, proving real arena growth. No OOM kills or
+  backend quarantine occurred. All four owned service units were inactive and
+  the HugeTLB pool was zero before subsequent timing.
+- The native recovery archive SHA256 is
+  `76dca6714fd3b7ebf8131673c9f28e3b5ca9712917cc234f633c619111678cd2`;
+  all 24 archived files were individually verified. ARM native repeat pending.
 
 Original failed lifecycle archives and their interpretations are retained in
 the architecture campaign. The failure is not hidden by extending its timeout.
