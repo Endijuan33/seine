@@ -6,24 +6,26 @@ automatic trials on validated AMD family 26/model 2 plus ISA/OS support.
 Repeated productive comparisons decide whether to use it. The requirements
 below document the original prototype and remain relevant to future changes;
 the production tests additionally cover live switches and dirty arena reuse.
+See [integrated validation](INTEGRATED_VALIDATION.md) for the final builds,
+native comparisons and productive-selection evidence.
 
 `streaming-candidate.patch` is the exact kernel-only experimental patch against
 785a06f. It does not include the shared arena-audit hook used to validate page
 placement. The measured executable is identified in `frozen-kernels.json` and in
 each paired protocol. `streaming_ring.rs` and `prepare_kernel.py` explain and
-regenerate the implementation. Production source files remain unchanged.
+regenerate the implementation. At that research checkpoint, production source
+files were unchanged.
 
-The prototype uses explicit benchmark selection of `avx512-256`; it replaces
-that implementation only in its isolated executable. Integration should give
-the candidate an unambiguous identity and an experimental feature gate so the
-original 256-bit path remains independently measurable. It requires AVX2,
+The archived prototype used explicit benchmark selection of `avx512-256` and
+replaced that implementation only in its isolated executable. Production uses
+the distinct identity above and an architecture eligibility gate, preserving
+the original 256-bit path for independent measurement. It requires AVX2,
 AVX-512F and AVX-512VL. Do not enable the path on ISA support alone before
 correctness and performance validation on the intended architecture.
 
 The useful outcome is at 24 workers on the measured EPYC 9R45 guest. It regresses
-at one worker and is flat at eight. Automatic kernel/worker tuning belongs to
-the architecture-dispatch owner; there is no supported universal worker cutoff
-or blanket replacement. Any cache fingerprint must distinguish implementations.
+at one worker and is flat at eight. Productive kernel/worker tuning decides whether to retain it; there is no
+supported universal worker cutoff or blanket replacement. Any cache fingerprint must distinguish implementations.
 
 Memory and correctness requirements:
 
@@ -41,9 +43,9 @@ Memory and correctness requirements:
 - Existing validation includes all supported kernel outputs against RustCrypto
   at 2 GiB; three additional full-size streaming inputs with repeated dirty reuse;
   small ring/slice/rounding boundaries; and sentinel blocks around the arena.
-  Production integration should additionally exercise both directions of live
-  kernel switching on one persistent arena, nonce continuity, cancellation and
-  normal backend error/accounting behavior.
+  Production validation additionally exercises both directions of live kernel
+  switching on one persistent arena, nonce continuity and worker teardown; the
+  backend suite retains cancellation and error/accounting coverage.
 
 Long backend confirmation retains counted hashes, late hashes, elapsed time,
 the end fence, allocation backing and per-run health counters in the raw reports.

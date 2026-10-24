@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 streaming-store kernel integration on validated EPYC`
 - `2026-10-24 sequential Milan/Turin investigation and streaming-store candidate`
 
 - `2026-10-24 automatic joint CPU kernel and worker selection`
@@ -60,6 +61,38 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 streaming-store kernel integration on validated EPYC
+
+- Adopted the distinct `avx512-256-stream` implementation: a 64 KiB recent-block
+  ring with non-temporal arena stores, preserving the full 2 GiB arena and PoW.
+  Automatic trials require AMD family 26/model 2 and independent ISA/OS checks.
+  The existing fallback and opt-out remain. No fixed worker threshold forces it.
+- Kernel tuning now visits every eligible challenger, retains a confirmed
+  incumbent, and caches only a completed sweep for the exact count/backing.
+  Schema 2 includes the candidate set; noisy/interrupted trials do not cache a
+  loss. This includes the retry semantics from PR #41, with the complete final
+  candidate independently checked on Intel in both feature profiles.
+- Native EPYC 9R45, 24 workers / 48 GiB explicit 2 MiB pages, portable default
+  release binary: streaming measured **+29.80% versus AVX2** (34.4705→44.7420
+  H/s), **+32.32% versus full-width AVX-512** (33.8080→44.7359), and **+27.37%
+  versus uniform 256-bit AVX-512** (35.1175→44.7295). Both orders were positive
+  for each control. These are within-host results, not universal EPYC gains.
+- Productive native tuning confirmed AVX2 first, then streaming in two A/B/A
+  comparisons, cached it for the measured context, completed 14,096 hashes,
+  and released all worker arenas. Full 2 GiB parity, 21 switches, 34 native
+  tuner/coordinator tests and 488 local CPU/workspace tests passed.
+- Intel Ice Lake 12-worker controls: CPU-only AVX2 +0.43%, full-width +0.08%;
+  default-profile controls showed no repeatable loss but up to 10% variation
+  between legs, so no Intel speedup or tight regression bound is claimed there. Cross-platform checks, formatting,
+  strict kernel Clippy and workspace Clippy with existing warnings passed.
+- All 148 native archive files verified; both instances, disks, security groups
+  and private keys were deleted. Conservative compute estimate: $0.7009,
+  excluding storage/IP/transfer. Source/binary identities, every pair, exact
+  productive transcript, limitations and cleanup receipts are in the
+  [integrated validation report](experiments/epyc-investigation/INTEGRATED_VALIDATION.md)
+  and its numeric evidence. The original low-count streaming regression remains
+  relevant; automatic selection still requires measured gains for each context.
 
 ## 2026-10-24 sequential Milan/Turin investigation and streaming-store candidate
 
@@ -908,6 +941,12 @@ step on this machine.
 | Attempt | Change | Kernel delta | Backend delta | Status |
 |---------|--------|-------------|---------------|--------|
 | 2026-10-24 | AVX2 paired rounds + contiguous column loads/stores | Unmeasured | +7.85% at 1T regular; +14.83% / +3.04% / +2.35% at 1T / 8T / 16T HugeTLB | Adopted |
+
+### x86_64 (AMD EPYC 9R45, Zen 5 / EC2)
+
+| Attempt | Change | Kernel delta | Backend delta | Status |
+|---------|--------|-------------|---------------|--------|
+| 2026-10-24 | Streaming-store recent-block ring and complete kernel sweeps | Count-dependent | +32.32% vs full-width AVX-512 at 24 workers, +29.80% vs AVX2 | Adopted via measured selection on family 26/model 2 |
 
 ### x86_64 (Intel Xeon E5-2686 v4, Broadwell / AVX2-only EC2)
 
