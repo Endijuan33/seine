@@ -941,6 +941,12 @@ pub trait PowBackend: Send + Sync {
 
     fn lanes(&self) -> usize;
 
+    /// Workers currently enabled; a resource-paused backend can report zero
+    /// while retaining a nonzero scheduling capacity.
+    fn enabled_lanes(&self) -> usize {
+        self.lanes()
+    }
+
     /// Total device memory in bytes (e.g. GPU VRAM), if known.
     fn device_memory_bytes(&self) -> Option<u64> {
         None

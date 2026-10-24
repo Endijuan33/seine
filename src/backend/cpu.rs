@@ -125,6 +125,12 @@ struct ControlState {
 
 struct Shared {
     started: AtomicBool,
+    adaptive: bool,
+    desired_workers: AtomicUsize,
+    lifetime_hashes: AtomicU64,
+    warmed_workers: AtomicUsize,
+    worker_allocation_failures: AtomicU64,
+    arena_committed_bytes: AtomicU64,
     instance_id: AtomicU64,
     solution_state: AtomicU64,
     error_emitted: AtomicBool,
@@ -140,6 +146,7 @@ struct Shared {
     ready_lock: Mutex<()>,
     ready_cv: Condvar,
     hash_slots: Vec<PaddedAtomicU64>,
+    finished_generations: Vec<AtomicU64>,
     assignment_hashes: AtomicU64,
     assignment_generation: AtomicU64,
     assignment_reported_generation: AtomicU64,
@@ -170,6 +177,7 @@ struct Shared {
 
 pub struct CpuBackend {
     threads: usize,
+    initial_workers: usize,
     affinity_mode: CpuAffinityMode,
     shared: Arc<Shared>,
     worker_handles: Mutex<Vec<JoinHandle<()>>>,
@@ -191,9 +199,16 @@ impl CpuBackend {
         let lanes = threads.max(1);
         Self {
             threads,
+            initial_workers: lanes,
             affinity_mode,
             shared: Arc::new(Shared {
                 started: AtomicBool::new(false),
+                adaptive: false,
+                desired_workers: AtomicUsize::new(lanes),
+                lifetime_hashes: AtomicU64::new(0),
+                warmed_workers: AtomicUsize::new(0),
+                worker_allocation_failures: AtomicU64::new(0),
+                arena_committed_bytes: AtomicU64::new(0),
                 instance_id: AtomicU64::new(0),
                 solution_state: AtomicU64::new(0),
                 error_emitted: AtomicBool::new(false),
@@ -213,6 +228,7 @@ impl CpuBackend {
                 ready_lock: Mutex::new(()),
                 ready_cv: Condvar::new(),
                 hash_slots: (0..lanes).map(|_| PaddedAtomicU64::new(0)).collect(),
+                finished_generations: (0..lanes).map(|_| AtomicU64::new(0)).collect(),
                 assignment_hashes: AtomicU64::new(0),
                 assignment_generation: AtomicU64::new(0),
                 assignment_reported_generation: AtomicU64::new(0),
@@ -246,6 +262,17 @@ impl CpuBackend {
     }
 
     fn reset_runtime_state(&self) {
+        self.shared
+            .desired_workers
+            .store(self.initial_workers, Ordering::Release);
+        self.shared.lifetime_hashes.store(0, Ordering::Release);
+        self.shared.warmed_workers.store(0, Ordering::Release);
+        self.shared
+            .arena_committed_bytes
+            .store(0, Ordering::Release);
+        self.shared
+            .worker_allocation_failures
+            .store(0, Ordering::Release);
         self.shared.solution_state.store(0, Ordering::Release);
         self.shared.error_emitted.store(false, Ordering::Release);
         self.shared.work_generation.store(0, Ordering::Release);
@@ -274,6 +301,9 @@ impl CpuBackend {
         self.shared.dropped_events.store(0, Ordering::Release);
         reset_arena_telemetry(&self.shared);
         reset_hash_slots(&self.shared.hash_slots);
+        for generation in &self.shared.finished_generations {
+            generation.store(0, Ordering::Release);
+        }
         if let Ok(mut started_at) = self.shared.assignment_started_at.lock() {
             *started_at = None;
         }
@@ -338,6 +368,10 @@ impl PowBackend for CpuBackend {
 
     fn lanes(&self) -> usize {
         self.threads.max(1)
+    }
+
+    fn enabled_lanes(&self) -> usize {
+        self.shared.desired_workers.load(Ordering::Acquire)
     }
 
     fn set_instance_id(&self, id: BackendInstanceId) {
@@ -472,7 +506,7 @@ impl PowBackend for CpuBackend {
         self.shared.solution_state.store(work_id, Ordering::Release);
         self.shared.error_emitted.store(false, Ordering::Release);
 
-        let generation = {
+        {
             let mut control = self
                 .shared
                 .work_control
@@ -480,13 +514,12 @@ impl PowBackend for CpuBackend {
                 .map_err(|_| anyhow!("CPU control lock poisoned"))?;
             control.generation = control.generation.wrapping_add(1).max(1);
             control.work = Some(work);
-            control.generation
-        };
-
-        self.shared
-            .work_generation
-            .store(generation, Ordering::Release);
-        start_assignment(&self.shared, generation);
+            let generation = control.generation;
+            start_assignment(&self.shared, generation);
+            self.shared
+                .work_generation
+                .store(generation, Ordering::Release);
+        }
         self.shared.work_cv.notify_all();
         Ok(())
     }
@@ -659,6 +692,51 @@ impl BenchBackend for CpuBackend {
 }
 
 impl CpuBackend {
+    /// Allocate only the initial workers' arenas. Parked lanes retain their
+    /// nonce cursors, and keep a fixed stride when the active count changes.
+    pub(crate) fn adaptive(
+        initial: usize,
+        capacity: usize,
+        affinity: CpuAffinityMode,
+        tuning: CpuBackendTuning,
+    ) -> Self {
+        let mut backend = Self::with_tuning(capacity.max(1), affinity, tuning);
+        backend.initial_workers = initial.min(capacity);
+        let shared = Arc::get_mut(&mut backend.shared).expect("new CPU backend is unshared");
+        shared.adaptive = true;
+        shared
+            .desired_workers
+            .store(backend.initial_workers, Ordering::Relaxed);
+        backend
+    }
+
+    pub(crate) fn set_active_threads(&self, count: usize) {
+        if let Ok(_control) = self.shared.work_control.lock() {
+            self.shared
+                .desired_workers
+                .store(count.min(self.threads), Ordering::Release);
+            self.shared.work_cv.notify_all();
+        }
+    }
+
+    pub(crate) fn adaptive_snapshot(&self) -> CpuAdaptiveSnapshot {
+        let s = &self.shared;
+        CpuAdaptiveSnapshot {
+            running: s.started.load(Ordering::Acquire),
+            threads: s.desired_workers.load(Ordering::Acquire),
+            committed_bytes: s.arena_committed_bytes.load(Ordering::Acquire),
+            resident_bytes: s.arena_explicit_large_bytes.load(Ordering::Acquire)
+                + s.arena_explicit_large_1g_bytes.load(Ordering::Acquire)
+                + s.arena_transparent_huge_bytes.load(Ordering::Acquire)
+                + s.arena_regular_bytes.load(Ordering::Acquire)
+                + s.arena_heap_bytes.load(Ordering::Acquire),
+            hashes: s.lifetime_hashes.load(Ordering::Acquire),
+            hashing: s.active_workers.load(Ordering::Acquire) > 0,
+            allocation_failures: s.worker_allocation_failures.load(Ordering::Acquire),
+            warmed: s.warmed_workers.load(Ordering::Acquire),
+        }
+    }
+
     /// Warm every arena before scoring steady-state hashing. Keep lifecycle wall
     /// time available for diagnostics, without penalizing larger arena counts.
     pub(crate) fn autotune_sample(
@@ -971,7 +1049,8 @@ fn lane_quota_for_chunk(nonce_count: u64, lane_idx: u64, lane_stride: u64) -> u6
 fn wait_for_work_update(
     shared: &Shared,
     seen_generation: u64,
-) -> Result<Option<(u64, Arc<WorkAssignment>)>> {
+    thread_idx: usize,
+) -> Result<CpuWorkUpdate> {
     let mut control = shared
         .work_control
         .lock()
@@ -980,13 +1059,16 @@ fn wait_for_work_update(
 
     loop {
         if control.shutdown {
-            return Ok(None);
+            return Ok(CpuWorkUpdate::Shutdown);
+        }
+        if thread_idx >= shared.desired_workers.load(Ordering::Acquire) {
+            return Ok(CpuWorkUpdate::Park);
         }
 
         if control.generation != observed_generation {
             let generation = control.generation;
             if let Some(work) = control.work.clone() {
-                return Ok(Some((generation, work)));
+                return Ok(CpuWorkUpdate::Work(generation, work));
             }
             observed_generation = generation;
         }
@@ -996,6 +1078,38 @@ fn wait_for_work_update(
             .wait(control)
             .map_err(|_| anyhow!("CPU control lock poisoned"))?;
     }
+}
+
+enum CpuWorkUpdate {
+    Work(u64, Arc<WorkAssignment>),
+    Park,
+    Shutdown,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CpuAdaptiveSnapshot {
+    pub running: bool,
+    pub threads: usize,
+    // Includes allocations in progress, before their backing is observable.
+    pub committed_bytes: u64,
+    pub resident_bytes: u64,
+    pub hashes: u64,
+    pub hashing: bool,
+    pub allocation_failures: u64,
+    pub warmed: usize,
+}
+
+fn wait_for_worker_enabled(shared: &Shared, thread_idx: usize) -> bool {
+    let Ok(mut control) = shared.work_control.lock() else {
+        return false;
+    };
+    while !control.shutdown && thread_idx >= shared.desired_workers.load(Ordering::Acquire) {
+        let Ok(next) = shared.work_cv.wait(control) else {
+            return false;
+        };
+        control = next;
+    }
+    !control.shutdown
 }
 
 fn request_work_pause(shared: &Shared) -> Result<()> {
@@ -1165,15 +1279,30 @@ fn has_pending_work(shared: &Shared) -> bool {
     shared
         .work_control
         .lock()
-        .map(|control| control.work.is_some() && !control.shutdown)
+        .map(|control| {
+            if control.work.is_none() || control.shutdown {
+                return false;
+            }
+            let desired = shared.desired_workers.load(Ordering::Acquire);
+            !shared.adaptive
+                || desired == 0
+                || shared
+                    .finished_generations
+                    .iter()
+                    .take(desired)
+                    .any(|finished| finished.load(Ordering::Acquire) != control.generation)
+        })
         .unwrap_or(false)
 }
 fn start_assignment(shared: &Shared, generation: u64) {
+    // Runtime callers hold work_control so the assignment and its published
+    // generation become visible together, even on a resize notification.
+    let _idle_guard = shared.idle_lock.lock().ok();
     let idle = shared.active_workers.load(Ordering::Acquire) == 0;
     if idle {
         // When a reassignment happens while workers are still draining, resetting counters here
         // can drop or misattribute tail hashes. Finalize/reset only after lanes are quiesced.
-        maybe_finalize_assignment(shared);
+        finalize_assignment_counters(shared);
         shared.assignment_hashes.store(0, Ordering::Release);
         if let Ok(mut started_at) = shared.assignment_started_at.lock() {
             *started_at = Some(Instant::now());
@@ -1189,6 +1318,28 @@ fn start_assignment(shared: &Shared, generation: u64) {
 }
 
 fn maybe_finalize_assignment(shared: &Shared) {
+    let mut control = shared.work_control.lock().ok();
+    let _idle_guard = shared.idle_lock.lock().ok();
+    if shared.active_workers.load(Ordering::Acquire) != 0 {
+        return;
+    }
+    finalize_assignment_counters(shared);
+    clear_completed_fixed_work(shared, control.as_deref_mut());
+}
+
+fn clear_completed_fixed_work(shared: &Shared, control: Option<&mut ControlState>) {
+    // Adaptive lanes may be parked with unfinished nonce quotas. Their pending
+    // state is derived from enabled lanes' finished generations instead.
+    if !shared.adaptive {
+        if let Some(control) = control {
+            if control.generation == shared.assignment_generation.load(Ordering::Acquire) {
+                control.work = None;
+            }
+        }
+    }
+}
+
+fn finalize_assignment_counters(shared: &Shared) {
     let generation = shared.assignment_generation.load(Ordering::Acquire);
     if generation == 0 {
         return;
@@ -1220,11 +1371,6 @@ fn maybe_finalize_assignment(shared: &Shared) {
                         .completed_assignment_micros
                         .fetch_add(micros, Ordering::AcqRel);
                 }
-                if let Ok(mut control) = shared.work_control.lock() {
-                    if control.generation == generation {
-                        control.work = None;
-                    }
-                }
                 return;
             }
             Err(current) => seen = current,
@@ -1236,18 +1382,63 @@ fn mark_worker_active(shared: &Shared, worker_active: &mut bool) {
     if *worker_active {
         return;
     }
-    shared.active_workers.fetch_add(1, Ordering::AcqRel);
+    let _idle_guard = shared.idle_lock.lock().ok();
+    let previous = shared.active_workers.fetch_add(1, Ordering::AcqRel);
+    if previous == 0 && shared.adaptive {
+        // A parked lane may resume the same work generation after its earlier
+        // execution interval was finalized. Reopen timing/accounting without
+        // resetting any lane's nonce cursor or cumulative hash counter.
+        if let Ok(mut started) = shared.assignment_started_at.lock() {
+            if started.is_none() {
+                shared.assignment_hashes.store(0, Ordering::Release);
+                let generation = shared.assignment_generation.load(Ordering::Acquire);
+                shared
+                    .assignment_reported_generation
+                    .store(generation.saturating_sub(1), Ordering::Release);
+                *started = Some(Instant::now());
+            }
+        }
+    }
     *worker_active = true;
+}
+
+fn activate_worker(
+    shared: &Shared,
+    thread_idx: usize,
+    generation: u64,
+    active: &mut bool,
+) -> Result<bool> {
+    if *active {
+        return Ok(true);
+    }
+    // Serialize admission with cancel and resize. A fence must not observe zero
+    // workers and return just before a parked lane starts an old assignment.
+    let control = shared
+        .work_control
+        .lock()
+        .map_err(|_| anyhow!("CPU control lock poisoned"))?;
+    if control.shutdown
+        || control.generation != generation
+        || control.work.is_none()
+        || thread_idx >= shared.desired_workers.load(Ordering::Acquire)
+    {
+        return Ok(false);
+    }
+    mark_worker_active(shared, active);
+    Ok(true)
 }
 
 fn mark_worker_inactive(shared: &Shared, worker_active: &mut bool) {
     if !*worker_active {
         return;
     }
+    let mut control = shared.work_control.lock().ok();
+    let _idle_guard = shared.idle_lock.lock().ok();
     let prev = shared.active_workers.fetch_sub(1, Ordering::AcqRel);
     *worker_active = false;
     if prev <= 1 {
-        maybe_finalize_assignment(shared);
+        finalize_assignment_counters(shared);
+        clear_completed_fixed_work(shared, control.as_deref_mut());
         shared.idle_cv.notify_all();
     }
 }
@@ -1268,6 +1459,9 @@ fn flush_hashes(shared: &Shared, thread_idx: usize, pending_hashes: &mut u64) {
     shared
         .assignment_hashes
         .fetch_add(*pending_hashes, Ordering::Relaxed);
+    shared
+        .lifetime_hashes
+        .fetch_add(*pending_hashes, Ordering::Relaxed);
     *pending_hashes = 0;
 }
 
@@ -1280,7 +1474,6 @@ fn should_flush_hashes(
     pending_hashes >= hash_batch_size.max(1) || now >= next_flush_at
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn emit_warning(shared: &Shared, message: String) {
     events::emit_warning(shared, message);
 }
@@ -1311,6 +1504,51 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn adaptive_resume_reopens_accounting_without_resetting_hash_totals() {
+        let backend = CpuBackend::adaptive(
+            1,
+            2,
+            CpuAffinityMode::Off,
+            super::CpuBackendTuning::default(),
+        );
+        let s = &backend.shared;
+        start_assignment(s, 1);
+        let mut active = false;
+        super::mark_worker_active(s, &mut active);
+        let mut hashes = 2;
+        super::flush_hashes(s, 0, &mut hashes);
+        super::mark_worker_inactive(s, &mut active);
+        super::mark_worker_active(s, &mut active);
+        hashes = 3;
+        super::flush_hashes(s, 0, &mut hashes);
+        super::mark_worker_inactive(s, &mut active);
+        assert_eq!(s.completed_assignment_hashes.load(Ordering::Acquire), 5);
+        assert_eq!(s.completed_assignments.load(Ordering::Acquire), 2);
+        assert_eq!(backend.take_hashes(), 5);
+        assert_eq!(backend.adaptive_snapshot().hashes, 5);
+    }
+
+    #[test]
+    fn adaptive_failures_exclude_successful_page_mode_fallbacks() {
+        let backend = CpuBackend::adaptive(
+            1,
+            2,
+            CpuAffinityMode::Off,
+            super::CpuBackendTuning::default(),
+        );
+        backend
+            .shared
+            .arena_allocation_failures
+            .store(1, Ordering::Release);
+        assert_eq!(backend.adaptive_snapshot().allocation_failures, 0);
+        backend
+            .shared
+            .worker_allocation_failures
+            .store(1, Ordering::Release);
+        assert_eq!(backend.adaptive_snapshot().allocation_failures, 1);
+    }
 
     #[test]
     fn lane_quota_even_chunk_distribution() {

@@ -463,11 +463,11 @@ struct Cli {
     #[arg(long)]
     cpu_event_dispatch_capacity: Option<usize>,
 
-    /// Enable startup CPU kernel autotuning and select the best thread count by measured H/s.
+    /// Enable adaptive CPU tuning while mining (offline kernel search in benchmark mode).
     #[arg(long, action = ArgAction::SetTrue)]
     cpu_autotune_threads: bool,
 
-    /// Disable startup CPU kernel autotuning.
+    /// Disable CPU thread autotuning and keep a fixed worker count.
     #[arg(long, action = ArgAction::SetTrue)]
     disable_cpu_autotune_threads: bool,
 
@@ -479,8 +479,8 @@ struct Cli {
     #[arg(long)]
     cpu_autotune_max_threads: Option<usize>,
 
-    /// Base benchmark window (seconds) per CPU autotune sample.
-    /// Candidate samples may run longer to collect a stable minimum hash count.
+    /// Base CPU autotune sample window; mining uses max(30, 5 * seconds).
+    /// Samples may run longer to collect a stable minimum hash count.
     #[arg(long, default_value_t = DEFAULT_CPU_AUTOTUNE_SECS)]
     cpu_autotune_secs: u64,
 
@@ -725,6 +725,7 @@ pub struct Config {
     pub backend_specs: Vec<BackendSpec>,
     pub threads: usize,
     pub cpu_auto_threads_cap: usize,
+    pub cpu_memory_reserve_percent: u8,
     pub cpu_affinity: CpuAffinityMode,
     pub cpu_page_mode: CpuPageMode,
     pub cpu_profile: CpuPerformanceProfile,
@@ -1085,12 +1086,7 @@ impl Config {
         };
         let profile_defaults = cpu_profile_defaults(cli.cpu_profile, auto_threads_cap);
         let resolved_threads = cli.threads.unwrap_or(profile_defaults.threads);
-        let cpu_autotune_default_enabled = cli.threads.is_none() && cpu_backend_instances > 0;
-        let cpu_autotune_threads = if cli.disable_cpu_autotune_threads {
-            false
-        } else {
-            cli.cpu_autotune_threads || cpu_autotune_default_enabled
-        };
+        let cpu_autotune_threads = cpu_autotune_enabled(&cli, cpu_backend_instances);
         if cpu_backend_instances > 0 && (cli.threads.is_none() || cpu_autotune_threads) {
             startup_notices.push(format!(
                 "CPU automatic sizing reserves {}% of effective RAM; cap={} thread(s) per instance (--cpu-memory-reserve-percent 0 disables the reserve)",
@@ -1137,13 +1133,17 @@ impl Config {
             },
         )?;
 
-        validate_cpu_memory(
-            &backend_specs,
-            resolved_threads,
-            cli.allow_oversubscribe,
-            gpu_memory_reservation,
-            cli.cpu_page_mode,
-        )?;
+        // Automatic mining starts within a fresh budget and can wait for RAM.
+        // Explicit counts and offline benchmarks retain fail-fast validation.
+        if !cpu_autotune_threads || cli.bench {
+            validate_cpu_memory(
+                &backend_specs,
+                resolved_threads,
+                cli.allow_oversubscribe,
+                gpu_memory_reservation,
+                cli.cpu_page_mode,
+            )?;
+        }
 
         let mode = cli.mode.unwrap_or(MiningMode::Pool);
         let requested_network = cli_requested_daemon_network(&cli);
@@ -1192,7 +1192,7 @@ impl Config {
             NvidiaTemplateStopPolicy::Off => false,
         };
 
-        Ok(Self {
+        let mut cfg = Self {
             mode,
             pool_url: cli.pool_url.as_deref().and_then(normalize_pool_url),
             pool_worker: cli
@@ -1213,6 +1213,7 @@ impl Config {
             backend_specs,
             threads: resolved_threads,
             cpu_auto_threads_cap: auto_threads_cap,
+            cpu_memory_reserve_percent: cli.cpu_memory_reserve_percent,
             cpu_affinity: cli.cpu_affinity,
             cpu_page_mode: cli.cpu_page_mode,
             cpu_profile: cli.cpu_profile,
@@ -1291,7 +1292,11 @@ impl Config {
             bench_baseline_policy: cli.bench_baseline_policy,
             nvidia_hint,
             startup_notices,
-        })
+        };
+        if cfg.cpu_autotune_threads && !cfg.bench {
+            cfg.cpu_auto_threads_cap = cpu_autotune_capacity(&cfg, 0).0;
+        }
+        Ok(cfg)
     }
 }
 
@@ -2747,6 +2752,12 @@ fn cpu_parallelism_cap(affinity: CpuAffinityMode) -> usize {
     logical_parallelism
 }
 
+fn cpu_autotune_enabled(cli: &Cli, instances: usize) -> bool {
+    !cli.disable_cpu_autotune_threads
+        && (cli.cpu_autotune_threads
+            || (instances > 0 && cli.threads.is_none() && cli.cpu_threads_per_instance.is_empty()))
+}
+
 fn auto_cpu_threads(
     cpu_backend_instances: usize,
     gpu_memory_reservation: u64,
@@ -2849,6 +2860,63 @@ struct MemoryBudgetBytes {
     effective_available: u64,
 }
 
+/// Total capacity is stable across temporary RAM use; available capacity includes
+/// only arenas this miner already owns, so they are not subtracted twice.
+pub(crate) fn cpu_autotune_capacity(cfg: &Config, owned_bytes: u64) -> (usize, usize) {
+    let instances = cfg
+        .backend_specs
+        .iter()
+        .filter(|s| s.kind == BackendKind::Cpu)
+        .count()
+        .max(1);
+    let cpu_cap = cpu_parallelism_cap(cfg.cpu_affinity) / instances;
+    let gpu_reserve = if cfg
+        .backend_specs
+        .iter()
+        .any(|s| s.kind == BackendKind::Metal)
+    {
+        estimate_metal_memory_bytes(cfg.metal_max_lanes)
+    } else {
+        0
+    };
+    match detect_memory_budget_bytes(cfg.cpu_page_mode) {
+        Some(budget) => cpu_capacity_from_budget(
+            budget,
+            owned_bytes,
+            gpu_reserve,
+            cfg.cpu_memory_reserve_percent,
+            instances,
+            cpu_cap,
+        ),
+        // Unknown headroom must not authorize additional 2 GiB allocations.
+        None => (
+            cpu_cap.max(1),
+            (owned_bytes / CPU_LANE_MEMORY_BYTES) as usize / instances,
+        ),
+    }
+}
+
+fn cpu_capacity_from_budget(
+    budget: MemoryBudgetBytes,
+    owned_bytes: u64,
+    gpu_reserve: u64,
+    reserve_percent: u8,
+    instances: usize,
+    cpu_cap: usize,
+) -> (usize, usize) {
+    let reserve = budget.effective_total / 100 * u64::from(reserve_percent);
+    let per_count = CPU_LANE_MEMORY_BYTES.saturating_mul(instances.max(1) as u64);
+    let usable = |bytes: u64| bytes.saturating_sub(reserve).saturating_sub(gpu_reserve) / per_count;
+    let capacity = (usable(budget.effective_total) as usize).min(cpu_cap);
+    let available = budget
+        .effective_available
+        .saturating_add(owned_bytes)
+        .min(budget.effective_total);
+    // Keep RAM headroom separate from CPU/user ceilings. Pressure handling must
+    // not mistake a two-core machine for a machine with room for only two arenas.
+    (capacity.max(1), usable(available) as usize)
+}
+
 fn detect_memory_budget_bytes(page_mode: CpuPageMode) -> Option<MemoryBudgetBytes> {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
@@ -2859,9 +2927,6 @@ fn detect_memory_budget_bytes(page_mode: CpuPageMode) -> Option<MemoryBudgetByte
     } else {
         let mut effective_total = total;
         let mut effective_available = sys.available_memory();
-        if effective_available == 0 {
-            effective_available = total;
-        }
         if page_mode != CpuPageMode::Regular {
             if let Some(hugetlb_unreserved_bytes) = linux_hugetlb_unreserved_bytes() {
                 // HugeTLB pools are typically excluded from MemAvailable even though CPU workers
@@ -2879,13 +2944,17 @@ fn detect_memory_budget_bytes(page_mode: CpuPageMode) -> Option<MemoryBudgetByte
             }
         }
 
-        if let Some(cgroup) = sys.cgroup_limits() {
+        if let Some(budget) = linux_cgroup_v2_memory_budget(MemoryBudgetBytes {
+            effective_total,
+            effective_available,
+        }) {
+            effective_total = budget.effective_total;
+            effective_available = budget.effective_available;
+        } else if let Some(cgroup) = sys.cgroup_limits() {
             if cgroup.total_memory > 0 {
                 effective_total = effective_total.min(cgroup.total_memory);
             }
-            if cgroup.free_memory > 0 {
-                effective_available = effective_available.min(cgroup.free_memory);
-            }
+            effective_available = effective_available.min(cgroup.free_memory);
         }
 
         effective_available = effective_available.min(effective_total);
@@ -2893,6 +2962,104 @@ fn detect_memory_budget_bytes(page_mode: CpuPageMode) -> Option<MemoryBudgetByte
             effective_total,
             effective_available,
         })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_cgroup_v2_memory_budget(budget: MemoryBudgetBytes) -> Option<MemoryBudgetBytes> {
+    let root = std::path::Path::new("/sys/fs/cgroup");
+    let current = linux_cgroup_v2_path()?;
+    cgroup_v2_budget_at(budget, root, current.strip_prefix(root).ok()?.to_str()?)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_cgroup_v2_path() -> Option<PathBuf> {
+    let membership = fs::read_to_string("/proc/self/cgroup").ok()?;
+    let relative = membership
+        .lines()
+        .find_map(|line| line.strip_prefix("0::/"))?;
+    if std::path::Path::new(relative).components().any(|part| {
+        !matches!(
+            part,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    }) {
+        return None;
+    }
+    let dir = std::path::Path::new("/sys/fs/cgroup").join(relative);
+    dir.is_dir().then_some(dir)
+}
+
+#[cfg(target_os = "linux")]
+fn cgroup_v2_budget_at(
+    mut budget: MemoryBudgetBytes,
+    root: &std::path::Path,
+    relative: &str,
+) -> Option<MemoryBudgetBytes> {
+    if std::path::Path::new(relative).components().any(|part| {
+        !matches!(
+            part,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    }) {
+        return None;
+    }
+    let current = root.join(relative);
+    if !current.is_dir() {
+        return None;
+    }
+    let number = |path| fs::read_to_string(path).ok()?.trim().parse::<u64>().ok();
+    // sysinfo 0.31 reads only the mount root. Systemd services and other nested
+    // groups also inherit limits from every ancestor of their actual membership.
+    for dir in current.ancestors().take_while(|dir| dir.starts_with(root)) {
+        let limit = [
+            number(dir.join("memory.max")),
+            number(dir.join("memory.high")),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
+        if let Some(limit) = limit {
+            let usage = number(dir.join("memory.current")).unwrap_or(limit);
+            let stats = fs::read_to_string(dir.join("memory.stat")).unwrap_or_default();
+            let stat = |key| {
+                stats
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(' ')?;
+                        (name == key)
+                            .then(|| value.trim().parse::<u64>().ok())
+                            .flatten()
+                    })
+                    .unwrap_or(0)
+            };
+            // Clean inactive file cache can be reclaimed. Dirty/writeback pages
+            // are conservatively excluded from the credit.
+            let reclaimable = stat("inactive_file")
+                .saturating_sub(stat("file_dirty").saturating_add(stat("file_writeback")));
+            budget = constrain_cgroup_budget(budget, limit, usage, reclaimable);
+        }
+    }
+    Some(budget)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_cgroup_v2_memory_budget(_budget: MemoryBudgetBytes) -> Option<MemoryBudgetBytes> {
+    None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn constrain_cgroup_budget(
+    budget: MemoryBudgetBytes,
+    limit: u64,
+    usage: u64,
+    reclaimable: u64,
+) -> MemoryBudgetBytes {
+    let total = budget.effective_total.min(limit);
+    let available = limit.saturating_sub(usage.saturating_sub(reclaimable));
+    MemoryBudgetBytes {
+        effective_total: total,
+        effective_available: budget.effective_available.min(available).min(total),
     }
 }
 
@@ -3901,6 +4068,116 @@ HugePages_Rsvd:          0
     }
 
     #[test]
+    fn cgroup_headroom_credits_reclaimable_cache_and_keeps_zero_limits() {
+        let budget = MemoryBudgetBytes {
+            effective_total: 100,
+            effective_available: 50,
+        };
+        let child = constrain_cgroup_budget(budget, 80, 70, 20);
+        assert_eq!((child.effective_total, child.effective_available), (80, 30));
+        let parent = constrain_cgroup_budget(child, 60, 55, 5);
+        assert_eq!(
+            (parent.effective_total, parent.effective_available),
+            (60, 10)
+        );
+        let exhausted = constrain_cgroup_budget(budget, 50, 80, 10);
+        assert_eq!(exhausted.effective_available, 0);
+        let zero = constrain_cgroup_budget(budget, 0, 0, 100);
+        assert_eq!((zero.effective_total, zero.effective_available), (0, 0));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn nested_cgroup_budget_inherits_high_and_max_and_excludes_dirty_cache() {
+        let root = std::env::temp_dir().join(format!(
+            "seine-cgroup-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child = root.join("service/worker");
+        fs::create_dir_all(&child).unwrap();
+        for (dir, max, high, current, stats) in [
+            (
+                root.clone(),
+                "100",
+                "max",
+                "90",
+                "inactive_file 20\nfile_dirty 3\nfile_writeback 2\n",
+            ),
+            (
+                root.join("service"),
+                "90",
+                "80",
+                "70",
+                "inactive_file 20\nfile_dirty 0\nfile_writeback 0\n",
+            ),
+            (child, "max", "max", "40", "inactive_file 0\n"),
+        ] {
+            for (name, value) in [
+                ("memory.max", max),
+                ("memory.high", high),
+                ("memory.current", current),
+                ("memory.stat", stats),
+            ] {
+                fs::write(dir.join(name), value).unwrap();
+            }
+        }
+        let budget = MemoryBudgetBytes {
+            effective_total: 200,
+            effective_available: 100,
+        };
+        let result = cgroup_v2_budget_at(budget, &root, "service/worker").unwrap();
+        assert_eq!(
+            (result.effective_total, result.effective_available),
+            (80, 25)
+        );
+        assert!(cgroup_v2_budget_at(budget, &root, "../outside").is_none());
+        assert!(cgroup_v2_budget_at(budget, &root, "/outside").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adaptive_memory_budget_counts_owned_arenas_once_and_allows_zero() {
+        let gib = 1024 * 1024 * 1024;
+        let budget = MemoryBudgetBytes {
+            effective_total: 32 * gib,
+            effective_available: 8 * gib,
+        };
+        let calculate = |owned| cpu_capacity_from_budget(budget, owned, 0, 5, 1, 16);
+        assert_eq!(calculate(0), (15, 3));
+        assert_eq!(calculate(8 * gib), (15, 7));
+        assert_eq!(
+            cpu_capacity_from_budget(budget, 8 * gib, 0, 5, 1, 2),
+            (2, 7)
+        );
+        assert_eq!(
+            cpu_capacity_from_budget(
+                MemoryBudgetBytes {
+                    effective_total: 32 * gib,
+                    effective_available: 0
+                },
+                0,
+                0,
+                5,
+                1,
+                16
+            ),
+            (15, 0)
+        );
+        assert_eq!(
+            cpu_capacity_from_budget(budget, 8 * gib, 0, 5, 2, 8),
+            (7, 3)
+        );
+        assert_eq!(
+            cpu_capacity_from_budget(budget, u64::MAX, 0, 5, 1, 16),
+            (15, 15)
+        );
+    }
+
+    #[test]
     fn automatic_memory_headroom_respects_effective_total_and_gpu_reservation() {
         let gib = 1024 * 1024 * 1024;
         let budget = MemoryBudgetBytes {
@@ -4002,15 +4279,24 @@ HugePages_Rsvd:          0
             cli.cpu_memory_reserve_percent,
         );
         let defaults = cpu_profile_defaults(cli.cpu_profile, auto_threads_cap);
-        let cpu_autotune_default_enabled = cli.threads.is_none() && cpu_backend_instances > 0;
-        let cpu_autotune_threads = if cli.disable_cpu_autotune_threads {
-            false
-        } else {
-            cli.cpu_autotune_threads || cpu_autotune_default_enabled
-        };
+        let cpu_autotune_threads = cpu_autotune_enabled(&cli, cpu_backend_instances);
         let resolved_threads = cli.threads.unwrap_or(defaults.threads);
         assert!(cpu_autotune_threads);
         assert!(resolved_threads >= 1);
+    }
+
+    #[test]
+    fn explicit_cpu_counts_disable_adaptation_unless_forced() {
+        let mut cli = sample_cli();
+        cli.threads = None;
+        cli.cpu_threads_per_instance = vec![2, 4];
+        assert!(!cpu_autotune_enabled(&cli, 2));
+        cli.cpu_autotune_threads = true;
+        assert!(cpu_autotune_enabled(&cli, 2));
+        cli.cpu_autotune_threads = false;
+        cli.cpu_threads_per_instance.clear();
+        cli.threads = Some(2);
+        assert!(!cpu_autotune_enabled(&cli, 1));
     }
 
     #[test]
@@ -4023,12 +4309,7 @@ HugePages_Rsvd:          0
             .iter()
             .filter(|kind| matches!(kind, BackendKind::Cpu))
             .count();
-        let cpu_autotune_default_enabled = cli.threads.is_none() && cpu_backend_instances > 0;
-        let cpu_autotune_threads = if cli.disable_cpu_autotune_threads {
-            false
-        } else {
-            cli.cpu_autotune_threads || cpu_autotune_default_enabled
-        };
+        let cpu_autotune_threads = cpu_autotune_enabled(&cli, cpu_backend_instances);
         assert!(!cpu_autotune_threads);
     }
 

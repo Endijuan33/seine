@@ -11,6 +11,7 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-24 productive CPU autotuning and changing resource budgets`
 - `2026-10-24 CPU sampler panic handling`
 - `2026-10-24 CPU autotuner warmed sampling and lifecycle timing`
 - `2026-10-24 independent two-node Milan release validation`
@@ -51,6 +52,56 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Validation`
 - `Baseline`
 - `Benchmark protocol`
+
+## 2026-10-24 productive CPU autotuning and changing resource budgets
+
+- Automatic mining previously ran an offline startup search and kept its selected
+  count for the session. Temporary CPU load or low available RAM could therefore
+  determine the operating count long after conditions improved.
+- Mining now starts from a compatible cached count, or half the stable automatic
+  capacity, capped by current RAM. Productive baseline/candidate/baseline trials
+  measure completed hashes while the miner remains connected. Every arena warms
+  before measurement; each window takes at least 30 seconds and 20 hashes.
+  Baseline drift above 8%, sustained work loss, and RAM changes invalidate trials.
+  Balanced/efficiency floors remain 99%/75% of the tracked peak; upward changes
+  require a gain exceeding 2% plus hash-count quantization. Periodic local and
+  occasional wider probes revisit changing CPU load without a new startup sweep.
+- CPU lanes keep fixed nonce strides and individual cursors. Disabled workers
+  release their arenas and reference tables; survivors keep theirs. Zero enabled
+  workers is supported. Recovery waits for 30 seconds of headroom; failed arena
+  allocations wait five minutes and do not quarantine healthy workers. Explicit
+  CLI/API/TUI counts retain manual control unless automatic tuning is requested.
+- Budgets include allocations in progress as well as resident arenas. A real
+  two-worker pilot exposed a race where first-touch RAM was initially attributed
+  to other applications, causing the new worker to be immediately removed.
+  A blocked-allocator regression now verifies the credit before backing appears.
+  CPU/user ceilings are kept separate from RAM headroom for pressure decisions.
+- Linux reads the actual cgroup-v2 membership and inherited `memory.high` and
+  `memory.max`, crediting clean inactive file cache. The pinned sysinfo version
+  only checked the mount root. The ordinary tool process's 4 GiB `memory.high`
+  correctly permits only one 2 GiB arena after reserve/overhead. Linux PSI prefers
+  the miner's own cgroup to avoid reacting to unrelated host stalls; system PSI is
+  the fallback. Pressure and Windows low-memory notifications require three
+  consecutive samples and tight headroom before shedding workers; byte-budget
+  reductions apply immediately.
+- Schema 11 stores mining observations and the resource-limit flag. Compatible
+  schema-10 records remain startup seeds. A temporarily lower RAM ceiling retains
+  a previous higher selected count on disk. Offline kernel and live mining scores
+  remain distinct; hardware/build/topology/page-mode compatibility still applies.
+- Validation: CPU-only workspace suite **452 passed**, three opt-in tests ignored;
+  default-feature all-target check, Windows GNU CPU-only cross-check, scoped
+  formatting and Clippy completed (existing warnings retained). Deterministic
+  simulations cover a peak changing 8→2→8 workers, noncompounding efficiency
+  selection, interrupted trials, constrained-cache preservation, and recovery.
+  Real small-arena workers cover nonce uniqueness, allocation failure, parking,
+  new work while parked, cancellation, resumed accounting, and bounded shutdown.
+- An optimized full-size backend lifecycle smoke (at most 4 GiB of arenas) passed
+  1→2→0→1 resizing: startup **0.946 s**, first two hashes **2.415 s**, release
+  **1.831 s**, 12 completed hashes. These are local lifecycle observations, not a
+  cross-host throughput improvement claim. Native Windows/macOS runtime testing
+  remains outstanding; the macOS cross-check lacked an Apple C toolchain/SDK.
+- Local evidence is retained under ignored `data/adaptive-autotune-20261024/`,
+  including failed/interrupted pilots. No cloud resources or GPU jobs were used.
 
 ## 2026-10-24 CPU sampler panic handling
 
