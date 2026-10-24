@@ -37,7 +37,21 @@ is retained and is not described as an end-to-end pass.
 This CPU does not expose SHA3. The generic candidate passes native full-size
 reference parity for all three nonces and dirty reuse. Both construction and
 runtime selection reject `neon-sha3`, leaving baseline NEON active. The real
-full-arena worker switch test passes. Performance fallback comparison is pending.
+full-arena worker switch test passes.
+
+Four longer alternating HugeTLB pairs also confirm the candidate's ordinary
+NEON fallback against v0.2.21: one worker **0.6822 → 0.7070 H/s** (+3.60% to
++3.67%); sixteen workers **10.5834 → 11.0587 H/s** (+4.38% to +4.55%). These
+are fallback code-generation results, not SHA3 execution on unsupported hardware.
+A separate prefetch64-only screen did not beat this fallback, so no additional
+kernel identity is proposed.
+
+The exact generic verifier built on Graviton3 (SHA256
+`c590c348f34a8b579fb51670394368795059818c1d702d738cc4d621a029a4ac`)
+also ran unchanged on Graviton2: unsupported SHA3 selection was rejected and
+all three full-size NEON reference/dirty-reuse cases passed. The 43-file
+confirmation archive was individually verified, SHA256
+`f8475309f38f454bbad373729efa4b4339ce5ca8ca526d963bc3d943535d7107`.
 
 ## Independent review
 
