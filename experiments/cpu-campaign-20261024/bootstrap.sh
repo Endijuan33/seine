@@ -11,6 +11,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-c
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
 sh rustup-init.sh -y --profile minimal --default-toolchain 1.93.0
 source "$HOME/.cargo/env"
+rustup component add --toolchain 1.93.0 clippy
 tar xzf baseline.tar.gz -C src
 export SEINE_GIT_TAG=v0.2.21
 export SEINE_GIT_COMMIT=359265e325d8

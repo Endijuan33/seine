@@ -28,6 +28,7 @@ def main():
               'SEINE_SKIP_GLOBAL_SHA3=1 bash bootstrap.sh\n' +
               ('bash arm_generation.sh\n' if arm else ('bash cpu_functional_validate.sh\n' if args.functional else '')))
     command = "python3 - <<'REMOTE'\n" + '''import json, subprocess, tarfile
+from pathlib import Path
 root=Path('/home/ubuntu/campaign')
 root.mkdir(exist_ok=False)
 with tarfile.open('/home/ubuntu/campaign-input.tar.gz') as archive:

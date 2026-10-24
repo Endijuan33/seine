@@ -19,6 +19,8 @@ on another machine. No campaign PR has been merged or released.
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two opposite-order screening passes; full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
+| Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.632 → 1.738 / 12.214 → 12.955 | Two opposite-order screening passes. Full AVX-512 leads at every tested worker count. |
+| Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.661 / 12.388 | Slower than full AVX-512; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
 Later-generation Intel, older Intel/Zen and Graviton2/4 results remain pending.
@@ -44,8 +46,9 @@ Graviton3 uses 64-byte cache lines and has runtime SHA3 support. The candidate
 combines XAR-based XOR/rotate with complete 64-byte prefetch coverage. Separate
 screens isolated the SHA3 and prefetch contributions before combining them.
 The baseline NEON path remains available; startup preference stays unchanged.
-Apple Silicon performance and unsupported-SHA3 fallback still need their own
-native evidence before broader conclusions.
+Native Graviton2 / Neoverse-N1, which lacks SHA3, passed three full-size
+reference nonces and dirty reuse; unsupported SHA3 selection is rejected and
+NEON remains active. Apple Silicon candidate performance remains untested.
 
 The first Ice Lake streaming comparison is **excluded**: a shared Cargo target
 reused an experimental library in the purported baseline. Symbol inspection
@@ -59,6 +62,29 @@ one logical CPU 1.832, on both SMT siblings of one physical core 2.232, and on t
 physical cores 3.599. All four direct modes passed full-size reference parity,
 three nonce pairs and dirty reuse. This rejects the experiment on this Ice Lake
 configuration; it does not prove a universal result across architectures.
+
+## Resource lifecycle findings
+
+Both Graviton3 and Ice Lake reproduced a constrained-start recovery bug: a
+process restarted under `memory.high=3G` remained capped at one worker after
+the limit rose to 12 GiB. Earlier pressure, zero-worker parking, productive
+recovery and CPU-load phases passed, but the restart failure prevented the
+subsequent opt-out phase. These runs are recorded as failures, not partial
+passes. Graviton3 independently confirmed automatic SHA3 selection at 194.1
+seconds and a later two-to-three-worker increase before the restart.
+
+The repair separates parked worker capacity and nonce stride from changing RAM
+limits, while active arenas remain bounded by the current allowance. Recovery
+gets a debounced opportunity even during kernel comparisons. The standalone
+repair passes 484 CPU-only workspace tests (four ignored) and independent
+review by the autotune owner. Native reruns additionally require at least
+4 GiB of resident anonymous memory after restart recovery, so a requested
+thread count alone cannot hide an undersized backend. Native reruns pending.
+
+Two clean alternating Ice Lake regression pairs compare the ARM-change build
+against its separately rebuilt CPU-only baseline: approximately −0.29% at one
+worker and −0.27% at twelve. This small negative is retained explicitly. Full
+reference parity and native workspace tests passed.
 
 ## Reviewable changes
 

@@ -219,6 +219,9 @@ def main():
         set_high(unit, "12G")
         observe(unit, "restart-recovery", 210, records)
         assert any(s["phase"] == "restart-recovery" and (s["requested_threads"] or 0) > 1 for s in records), "did not recover above the temporary one-arena cap"
+        assert any(s["phase"] == "restart-recovery" and
+                   int(s.get("smaps_rollup", {}).get("Anonymous", "0 kB").split()[0]) >= 4 * 1024**2
+                   for s in records), "requested growth did not allocate two real 2 GiB arenas"
         stop(unit)
         text = (OUT / (unit + ".log")).read_text()
         assert "cached starting point" in text, "restart did not reuse cache"
