@@ -190,6 +190,9 @@ eventual deletion of the task-owned security group and SSH keys.
   binaries; native full-size parity and alternating architecture regressions.
 - `summarize_matrix.py`, `summarize_lifecycle.py`: verify completion and export
   paired gains or actual resident-arena lifecycle evidence.
+- `summarize_provenance.py`: verify frozen binary digests and archived matrix
+  inputs, then publish sanitized executable/source identities. Runtime Git-label
+  environment overrides are retained as annotations, not executable identity.
 - `export_evidence.py`: normalize schema-14 rounds while retaining raw SHA256
   identities and completed-work/fence accounting.
 - `reproduce_codegen_review.py --data <retained-data-directory>`: inspect the

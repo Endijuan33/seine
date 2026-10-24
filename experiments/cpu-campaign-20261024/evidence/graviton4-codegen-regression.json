@@ -1,6 +1,6 @@
 {
   "status": "confirmation",
-  "note": "Two corrected balanced passes,636 versus f20x86-only boundary fix,1/16workers; unchanged ARM algorithm, native generic build/full2GiB parity and three-nonce dirty dispatch passed. No performance-gain claim for boundary fix on ARM.",
+  "note": "Two corrected balanced passes,636 versus f20x86-only boundary fix,1/16workers; unchanged ARM algorithm, native generic build/full2GiB parity and three-nonce dirty dispatch passed. No performance-gain claim for boundary fix on ARM. The archived controller inherited SEINE_GIT_COMMIT=f20e7bb into both processes; raw Git labels are retained. Actual earlier binary SHA256 ce1ac5c9abf9d8e4af8d95c5b32a233012937eb52b02a04256a038177813fef1 maps to636e688; fix SHA256 4e4b0bbdba495a44d7605a2bbc453b4f1d6d6761e1374761835a2de2fa74455e maps tof20e7bb. Compiled source fingerprints differ; see binary-provenance.json.",
   "order_verification": {
     "per_worker_order_reversed_each_pass": true,
     "passes": 2,

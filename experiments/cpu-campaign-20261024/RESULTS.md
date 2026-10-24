@@ -49,6 +49,15 @@ SHA-verified cloud archives remain in ignored campaign data; the public
 The
 [controllers](README.md#scripts) reproduce the configurations.
 
+Some older shell controllers inherited `SEINE_GIT_COMMIT` into every comparison
+process. The report's Git label can therefore name the same revision for distinct
+executables. Raw labels remain unchanged. The public
+[binary-provenance index](evidence/binary-provenance.json) records the actual
+experiment binary SHA256 values, compiled source fingerprints and frozen source
+mappings. These identities, rather than an overridable Git annotation, establish
+which builds were compared. This includes the final Graviton4 boundary check:
+its earlier binary is `636e688`, even though both raw Git labels say `f20e7bb`.
+
 Native Windows tests used the published MSVC release. WSL's synthetic single-L3
 topology was not used to infer CCD placement. Windows explicit large-page
 allocation failed with error 1450, so the reported desktop comparisons require
