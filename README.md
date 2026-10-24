@@ -183,7 +183,9 @@ low-memory notifications reduce the operating count when arena headroom is also
 tight; brief reclaim spikes do not force a reduction.
 The CPU backend can pause at zero workers when no complete arena fits, then retry
 after 30 seconds of sustained headroom. Released Linux HugeTLB arenas return to the
-reserved hugepage pool; the miner does not resize that OS pool. Returning capacity
+reserved hugepage pool; the miner does not resize that OS pool. Parked worker slots and nonce stride follow the CPU and configured worker ceiling,
+so raising a RAM limit after a constrained start can activate additional workers.
+Only active arenas count against the refreshed memory allowance. Returning capacity
 and sustained throughput changes prompt new probes. Stable settings are revisited
 periodically; failed allocation attempts back off for five minutes.
 
