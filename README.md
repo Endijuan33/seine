@@ -144,7 +144,9 @@ Explicit `--threads` / `--cpu-threads-per-instance` counts bypass this reserve
 (unless thread autotuning is explicitly requested), but retain the existing
 memory checks. The existing minimum of one worker per CPU instance still applies.
 Autotune caches are invalidated when the allowed CPU set or detected NUMA/L3 layout
-changes, including changes that leave the CPU count unchanged.
+changes, including changes that leave the CPU count unchanged. Autotuning scores
+warmed hashing time, including final-hash overrun, separately from arena setup
+and teardown. Upgrading from an older sampling schema triggers a fresh tune.
 
 On a rented EPYC 8434P, L3 spreading improved the 24-worker offline backend
 benchmark by 16.7% across three alternating pairs; the 32-worker result was
