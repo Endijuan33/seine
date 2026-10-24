@@ -127,6 +127,21 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::mpsc;
+
+    fn sample_without_hanging(
+        action: impl FnOnce() -> Result<KernelBenchSample> + Send + 'static,
+    ) -> Result<KernelBenchSample> {
+        let (sender, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let _ = sender.send(action());
+        });
+        let result = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("sample failed to release every lane");
+        worker.join().expect("sample controller panicked");
+        result
+    }
 
     #[test]
     fn warmup_and_lifecycle_are_excluded_but_last_hash_overrun_is_timed() {
@@ -219,21 +234,23 @@ mod tests {
 
     #[test]
     fn panicking_hash_releases_all_lanes() {
-        let result = sample(
-            2,
-            Duration::from_secs(1),
-            false,
-            &AtomicBool::new(false),
-            |lane| {
-                Ok(move || {
-                    if lane == 0 {
-                        panic!("injected hash panic");
-                    }
-                    thread::sleep(Duration::from_millis(1));
-                    Ok(())
-                })
-            },
-        );
+        let result = sample_without_hanging(|| {
+            sample(
+                2,
+                Duration::from_secs(1),
+                false,
+                &AtomicBool::new(false),
+                |lane| {
+                    Ok(move || {
+                        if lane == 0 {
+                            panic!("injected hash panic");
+                        }
+                        thread::sleep(Duration::from_millis(1));
+                        Ok(())
+                    })
+                },
+            )
+        });
         assert!(result
             .unwrap_err()
             .to_string()
@@ -243,19 +260,21 @@ mod tests {
     #[test]
     fn panicking_setup_or_warmup_releases_all_lanes() {
         for fail_warmup in [false, true] {
-            let result = sample(
-                3,
-                Duration::from_millis(10),
-                true,
-                &AtomicBool::new(false),
-                |lane| {
-                    assert!(lane != 1 || fail_warmup, "injected setup panic");
-                    Ok(move || {
-                        assert!(lane != 1, "injected warmup panic");
-                        Ok(())
-                    })
-                },
-            );
+            let result = sample_without_hanging(move || {
+                sample(
+                    3,
+                    Duration::from_millis(10),
+                    true,
+                    &AtomicBool::new(false),
+                    |lane| {
+                        assert!(lane != 1 || fail_warmup, "injected setup panic");
+                        Ok(move || {
+                            assert!(lane != 1, "injected warmup panic");
+                            Ok(())
+                        })
+                    },
+                )
+            });
             let error = result.unwrap_err().to_string();
             assert!(error.contains(if fail_warmup {
                 "injected warmup panic"
