@@ -20,4 +20,4 @@ cargo +1.93.0 clippy --locked --release -p blocknet-pow-kernel --all-targets -- 
 cd ..
 sha256sum bin/seine-neon-auto neon-auto.tar.gz > results/arm-auto-build/identities.txt
 touch results/arm-auto-build/COMPLETE
-python3 resource_lifecycle.py --binary bin/seine-neon-auto --cpus 0-3
+python3 resource_lifecycle.py --binary bin/seine-neon-auto --cpus 0-3 --initial-seconds 360 --expect-kernel neon-sha3

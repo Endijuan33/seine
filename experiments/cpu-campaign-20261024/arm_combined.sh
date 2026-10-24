@@ -4,7 +4,7 @@ cd /home/ubuntu/campaign
 test -f results/arm-followup-screen/COMPLETE
 source "$HOME/.cargo/env"
 export CARGO_BUILD_JOBS=8
-export CARGO_TARGET_DIR=/home/ubuntu/campaign/src/target
+export CARGO_TARGET_DIR=/home/ubuntu/campaign/targets/combined-8280a66
 export SEINE_GIT_TAG=v0.2.21-neon-combined-experiment
 export SEINE_GIT_COMMIT=8280a66
 mkdir -p src-combined results/arm-combined-build

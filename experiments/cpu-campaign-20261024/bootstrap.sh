@@ -21,7 +21,7 @@ cp target/release/examples/verify_cpu_kernels ../bin/verify-generic
 if [[ $(uname -m) == aarch64 ]]; then
   cargo +1.93.0 build --locked --release --no-default-features --bin seine
   cp target/release/seine ../bin/seine-generic
-  if grep -qw sha3 /proc/cpuinfo; then
+  if [[ ${SEINE_SKIP_GLOBAL_SHA3:-0} != 1 ]] && grep -qw sha3 /proc/cpuinfo; then
     RUSTFLAGS='-C target-feature=+sha3' CARGO_TARGET_DIR=target-sha3 cargo +1.93.0 build --locked --release --no-default-features --bin seine
     RUSTFLAGS='-C target-feature=+sha3' CARGO_TARGET_DIR=target-sha3 cargo +1.93.0 build --locked --release -p blocknet-pow-kernel --example verify_cpu_kernels
     cp target-sha3/release/seine ../bin/seine-sha3

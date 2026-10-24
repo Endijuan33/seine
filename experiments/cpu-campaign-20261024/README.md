@@ -132,7 +132,9 @@ eventual deletion of the task-owned security group and SSH keys.
   path. Run the helper's `setup()` once before the matrix. The matrices assume
   the recorded native topology; verify masks before using another machine.
   The original executed scripts are retained unchanged beside raw evidence;
-  tracked copies make only their local paths configurable.
+  tracked copies make their local paths configurable. Early shell follow-up
+  scripts now also use isolated Cargo targets; the exact originally executed
+  scripts remain in the archived evidence, including the excluded Intel run.
 
 ## Primary references for ARM investigation
 
@@ -141,5 +143,5 @@ eventual deletion of the task-owned security group and SSH keys.
 
 ## Results
 
-Pending native screens and confirmation. No performance change has been accepted
-into production by this campaign yet.
+See [RESULTS.md](RESULTS.md) for collected measurements, exclusions, review PRs
+and remaining work. No campaign performance change has been merged or released.

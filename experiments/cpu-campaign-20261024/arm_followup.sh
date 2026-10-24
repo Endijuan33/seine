@@ -9,7 +9,7 @@ export SEINE_GIT_COMMIT=9ce67f6
 mkdir -p src-runtime results/arm-build
 tar xzf neon-runtime.tar.gz -C src-runtime
 cd src-runtime
-export CARGO_TARGET_DIR=/home/ubuntu/campaign/src/target
+export CARGO_TARGET_DIR=/home/ubuntu/campaign/targets/followup-runtime
 cargo +1.93.0 test --locked --release -p blocknet-pow-kernel -- --test-threads=1 > ../results/arm-build/runtime-tests.log 2>&1
 cargo +1.93.0 build --locked --release --no-default-features --bin seine
 cp "$CARGO_TARGET_DIR/release/seine" ../bin/seine-runtime
@@ -25,7 +25,7 @@ cd src-prefetch64
 patch -p1 < ../arm-prefetch64.patch
 export SEINE_GIT_TAG=v0.2.21-prefetch64-experiment
 export SEINE_GIT_COMMIT=359265e325d8
-export CARGO_TARGET_DIR=/home/ubuntu/campaign/src/target-sha3
+export CARGO_TARGET_DIR=/home/ubuntu/campaign/targets/followup-prefetch64
 export RUSTFLAGS='-C target-feature=+sha3'
 cargo +1.93.0 build --locked --release --no-default-features --bin seine
 cp "$CARGO_TARGET_DIR/release/seine" ../bin/seine-prefetch64

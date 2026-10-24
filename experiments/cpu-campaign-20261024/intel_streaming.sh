@@ -5,7 +5,7 @@ test -f results/SCREEN-COMPLETE
 test -f results/interhash/COMPLETE
 source "$HOME/.cargo/env"
 export CARGO_BUILD_JOBS=8
-export CARGO_TARGET_DIR=/home/ubuntu/campaign/src/target
+export CARGO_TARGET_DIR=/home/ubuntu/campaign/targets/streaming-baseline
 mkdir -p results/streaming-build src-streaming
 export SEINE_GIT_TAG=v0.2.21-cpu-only
 export SEINE_GIT_COMMIT=359265e325d8
@@ -15,6 +15,7 @@ cp "$CARGO_TARGET_DIR/release/seine" ../bin/seine-cpu-baseline
 cd ..
 tar xzf streaming-verify-v2.tar.gz -C src-streaming
 cd src-streaming
+export CARGO_TARGET_DIR=/home/ubuntu/campaign/targets/streaming-d283877
 export SEINE_GIT_TAG=v0.2.21-streaming-experiment
 export SEINE_GIT_COMMIT=d283877
 cargo +1.93.0 test --locked --release -p blocknet-pow-kernel -- --test-threads=1 > ../results/streaming-build/tests.log 2>&1

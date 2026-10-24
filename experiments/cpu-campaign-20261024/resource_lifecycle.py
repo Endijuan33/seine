@@ -11,6 +11,7 @@ MemoryMax remains 16 GiB. Only uniquely named task-owned systemd units change.
 import argparse
 import datetime
 import json
+import hashlib
 from pathlib import Path
 import socketserver
 import re
@@ -77,8 +78,22 @@ def set_high(unit, value):
     command(["sudo", "systemctl", "set-property", "--runtime", unit, "MemoryHigh=" + value])
 
 
-def start(unit, binary, cache, port, cpus, high, fixed=False, page="auto"):
-    args = [str(binary), "--mode", "pool", "--pool-url", f"127.0.0.1:{port}", "--address", "@campaign",
+def fixture_address():
+    # Two compressed Ristretto identities are syntactically valid test keys.
+    # A literal address avoids the network shortname-resolution startup path.
+    payload = bytes(64)
+    checksum = hashlib.sha3_256(b"blocknet_stealth_address_checksum" + b"blocknet_mainnet" + payload).digest()[:4]
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    value = int.from_bytes(checksum, "big")
+    encoded = ""
+    while value:
+        value, digit = divmod(value, 58)
+        encoded = alphabet[digit] + encoded
+    return "1" * 64 + encoded
+
+
+def start(unit, binary, cache, port, cpus, high, fixed=False, page="auto", runtime=550):
+    args = [str(binary), "--mode", "pool", "--pool-url", f"127.0.0.1:{port}", "--address", fixture_address(),
             "--pool-worker", "offline-cpu-campaign", "--backend", "cpu", "--cpu-page-mode", page,
             "--cpu-affinity", "auto", "--cpu-autotune-config", str(cache), "--data-dir", str(OUT / "config"),
             "--ui", "plain", "--stats-secs", "5"]
@@ -87,7 +102,7 @@ def start(unit, binary, cache, port, cpus, high, fixed=False, page="auto"):
     else:
         args += ["--cpu-autotune-max-threads", "4"]
     command(["sudo", "systemd-run", "--quiet", "--unit=" + unit, "--uid=ubuntu",
-             "--property=Type=exec", "--property=RuntimeMaxSec=550", "--property=TimeoutStopSec=15",
+             "--property=Type=exec", "--property=RuntimeMaxSec=" + str(runtime), "--property=TimeoutStopSec=15",
              "--property=KillSignal=SIGINT", "--property=MemoryHigh=" + high, "--property=MemoryMax=16G",
              "--property=BindReadOnlyPaths=" + str(OUT / "hosts") + ":/etc/hosts",
              "--property=IPAddressDeny=any", "--property=IPAddressAllow=localhost",
@@ -138,7 +153,10 @@ def main():
     p.add_argument("--binary", type=Path, required=True)
     p.add_argument("--cpus", default="0-3")
     p.add_argument("--page", choices=["auto", "regular"], default="auto")
+    p.add_argument("--initial-seconds", type=int, default=240)
+    p.add_argument("--expect-kernel")
     a = p.parse_args()
+    assert 240 <= a.initial_seconds <= 600
     assert int(Path("/proc/sys/vm/nr_hugepages").read_text()) == 0, "release benchmark pools before pressure tests"
     OUT.mkdir(parents=True, exist_ok=False)
     (OUT / "hosts").write_text("127.0.0.1 localhost bntpool.com\n::1 localhost\n")
@@ -150,9 +168,13 @@ def main():
     try:
         unit = "seine-campaign-lifecycle-first.service"
         units.append(unit)
-        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G", page=a.page)
+        start(unit, a.binary.resolve(), cache, server.server_address[1], a.cpus, "12G", page=a.page, runtime=a.initial_seconds + 310)
         records = []
-        observe(unit, "initial-stable", 240, records)
+        observe(unit, "initial-stable", a.initial_seconds, records)
+        if a.expect_kernel:
+            kernel_cache = json.loads(Path(str(cache) + ".kernels.json").read_text())
+            save("kernel-before-pressure.json", kernel_cache)
+            assert any(w["kernel"] == a.expect_kernel and len(w["samples"]) == 6 for w in kernel_cache["winners"]), "automatic kernel promotion was not confirmed"
         if cache.exists():
             save("seed-before-pressure.json", json.loads(cache.read_text()))
         set_high(unit, "3G")
