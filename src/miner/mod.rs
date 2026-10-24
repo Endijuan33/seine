@@ -11,10 +11,12 @@ mod round_control;
 mod round_driver;
 mod runtime;
 mod scheduler;
+pub(crate) mod session;
 mod solution_cache;
 mod stats;
 mod submit;
 mod template_prefetch;
+pub(crate) mod thread_control;
 mod tip;
 mod tui;
 pub(crate) mod ui;
@@ -234,6 +236,20 @@ fn resolve_mining_config(
 }
 
 pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
+    run_with_thread_control(
+        cfg,
+        shutdown,
+        None,
+        Arc::new(session::SessionHistory::new()),
+    )
+}
+
+pub(crate) fn run_with_thread_control(
+    cfg: &Config,
+    shutdown: Arc<AtomicBool>,
+    thread_control: Option<thread_control::ThreadControl>,
+    history: Arc<session::SessionHistory>,
+) -> Result<()> {
     if cfg!(debug_assertions) {
         warn(
             "MINER",
@@ -564,6 +580,31 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         (cpu_lanes as f64 * CPU_LANE_MEMORY_BYTES as f64) / (1024.0 * 1024.0 * 1024.0);
     let tui_state = if should_enable_tui(cfg) {
         let state = build_tui_state(cfg, &backends);
+        history.attach_tui(&state);
+        if let Ok(mut s) = state.lock() {
+            if let Some(mut control) = thread_control {
+                let cpu_backends: Vec<_> = backends
+                    .iter()
+                    .filter(|slot| slot.backend.name() == "cpu")
+                    .collect();
+                if let Some(first) = cpu_backends.first() {
+                    control.current_threads = cpu_backends
+                        .iter()
+                        .map(|slot| slot.lanes as usize)
+                        .min()
+                        .unwrap_or(first.lanes as usize);
+                    // Preserve the ability to reduce an explicit above-auto count.
+                    control.max_threads = cfg.cpu_auto_threads_cap.max(
+                        cpu_backends
+                            .iter()
+                            .map(|slot| slot.lanes as usize)
+                            .min()
+                            .unwrap_or(1),
+                    );
+                    s.thread_control = Some(control);
+                }
+            }
+        }
         if pending_nvidia_count > 0 {
             if let Ok(mut s) = state.lock() {
                 s.pending_nvidia = pending_nvidia_count;
@@ -826,6 +867,7 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
                     backend_executor: &backend_executor,
                 },
                 tui_state,
+                Arc::clone(&history),
                 tip_listener.as_ref().map(mining::TipListener::signal),
                 deferred_backends,
             )
@@ -840,6 +882,7 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
             },
             daemon_client.clone(),
             tui_state,
+            Arc::clone(&history),
             deferred_backends,
         ),
     };
@@ -874,7 +917,7 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
     result
 }
 
-fn should_enable_tui(cfg: &Config) -> bool {
+pub(crate) fn should_enable_tui(cfg: &Config) -> bool {
     match cfg.ui_mode {
         UiMode::Plain => false,
         UiMode::Tui => true,
@@ -895,7 +938,7 @@ fn build_tui_state(cfg: &Config, backends: &[BackendSlot]) -> TuiState {
             MiningMode::Pool => cfg.pool_url.clone().unwrap_or_else(|| "---".to_string()),
         };
         s.pool_worker = cfg.pool_worker.clone().unwrap_or_else(|| "---".to_string());
-        s.threads = cfg.threads;
+        s.threads = cpu_lane_count(backends) as usize;
         s.refresh_secs = cfg.refresh_interval.as_secs();
         s.sse_enabled = cfg.sse_enabled;
         s.backends_desc = backend_descriptions(backends);
@@ -2035,6 +2078,7 @@ fn parse_meminfo_u64(value: &str) -> Option<u64> {
     value.split_whitespace().next()?.parse::<u64>().ok()
 }
 
+#[cfg(target_os = "linux")]
 fn div_ceil_u64(numerator: u64, denominator: u64) -> u64 {
     if denominator == 0 {
         return 0;
@@ -3205,7 +3249,7 @@ fn next_work_id(next_id: &mut u64) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::backend::{NonceChunk, WorkAssignment, WorkTemplate};
     use anyhow::anyhow;
@@ -3553,7 +3597,7 @@ mod tests {
         }
     }
 
-    fn test_config() -> Config {
+    pub(crate) fn test_config() -> Config {
         Config {
             mode: MiningMode::Daemon,
             pool_url: None,

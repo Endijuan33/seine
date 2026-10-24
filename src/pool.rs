@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
+#[cfg(test)]
 use std::io::Write;
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+#[cfg(test)]
+use std::net::TcpStream;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -874,10 +877,7 @@ fn friendly_pool_disconnect_message(endpoint: &PoolEndpoint) -> String {
     format!("pool offline at {}", endpoint.display())
 }
 
-fn should_enable_idle_keepalive(endpoint: &str) -> bool {
-    !endpoint.trim().is_empty()
-}
-
+#[cfg(test)]
 fn send_login(
     stream: &mut TcpStream,
     address: &str,
@@ -888,6 +888,7 @@ fn send_login(
     write_text_line(stream, &payload)
 }
 
+#[cfg(test)]
 fn send_submit(
     stream: &mut TcpStream,
     request_id: u64,
@@ -898,6 +899,7 @@ fn send_submit(
     write_text_line(stream, &payload)
 }
 
+#[cfg(test)]
 fn write_text_line(stream: &mut TcpStream, payload: &str) -> Result<()> {
     let mut line = payload.as_bytes().to_vec();
     line.push(b'\n');
@@ -1803,13 +1805,6 @@ mod tests {
         server.join().expect("server thread should finish");
         shutdown.store(true, Ordering::Relaxed);
         assert!(saw_rejected_submit, "expected rejected submit ack event");
-    }
-
-    #[test]
-    fn idle_keepalive_is_enabled_for_remote_endpoints() {
-        assert!(should_enable_idle_keepalive("127.0.0.1:3333"));
-        assert!(should_enable_idle_keepalive("pool.example.com:3333"));
-        assert!(!should_enable_idle_keepalive("   "));
     }
 
     #[test]

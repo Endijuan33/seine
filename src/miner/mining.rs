@@ -1238,6 +1238,7 @@ pub(super) fn run_mining_loop(
     shutdown: Arc<AtomicBool>,
     runtime_backends: MiningRuntimeBackends<'_>,
     tui_state: Option<TuiState>,
+    history: Arc<super::session::SessionHistory>,
     tip_signal: Option<&TipSignal>,
     deferred_backends: Option<(Receiver<super::BackendSlot>, u64)>,
 ) -> Result<()> {
@@ -1250,12 +1251,12 @@ pub(super) fn run_mining_loop(
         Some((rx, count)) => (Some(rx), count),
         None => (None, 0),
     };
-    let stats = Stats::new();
+    let stats = &history.stats;
     let mut nonce_scheduler = NonceScheduler::new(cfg.start_nonce, cfg.nonce_iters_per_lane);
     let mut work_id_cursor = 1u64;
     let mut epoch = 0u64;
     let mut last_stats_print = Instant::now();
-    let mut tui = init_tui_display(tui_state, Arc::clone(&shutdown));
+    let mut tui = init_tui_display(tui_state, Arc::clone(&shutdown), Arc::clone(&history));
     if tui.is_some() {
         // Re-emit hugepage guidance after TUI state is attached so users see it
         // in the dashboard log pane (early startup logs happen before TUI attach).
