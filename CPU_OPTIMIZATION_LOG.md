@@ -12,6 +12,9 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 ## Newest-first index
 
 - `2026-10-24 explicit CPU kernel benchmarks and architecture identity`
+
+- `2026-10-24 CPU sampler panic handling`
+- `2026-10-24 CPU autotuner warmed sampling and lifecycle timing`
 - `2026-10-24 independent two-node Milan release validation`
 - `2026-10-24 Intel AVX2 release validation`
 - `2026-10-24 two-node EPYC placement and autotuner validation`
@@ -80,6 +83,103 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
   macOS AArch64; neither target was executed. Edited-file formatting passed.
 - Local evidence and the CLI validation runner are in ignored
   `data/kernel-selection-validation/`. No AWS resources were provisioned.
+
+## 2026-10-24 CPU sampler panic handling
+
+- Review of the warmed sampler (`f35e6c1`) found that a lane panic during
+  measured hashing strands its peers at the finish barrier. An injected panic
+  reproduced the hang; a five-second process timeout was required to stop it.
+- Setup/warmup and measured hash actions now convert unwinding panics into
+  lane-specific errors, allowing every worker to reach the synchronization
+  barriers. Sampling rejects the failed measurement. Normal score calculation
+  and warmup policy are unchanged.
+- A bounded regression covers panics during setup, warmup, and measured hashing;
+  errors preserve the failing lane, phase, and panic message. The test fails
+  after five seconds if a barrier stops releasing workers. Integrated with the
+  v0.2.19 source and cancellation coverage, 428 CPU-only workspace tests pass,
+  with one pre-reserved 1 GiB HugeTLB test ignored. Default-feature compilation and
+  CPU-only Clippy pass with existing warnings. Scoped Rust 1.93.0 formatting
+  and `git diff --check` pass.
+- Reproduction and validation logs are retained in
+  `data/sampler-review/` in the sampler review worktree. This is failure-path
+  validation; the warmed sampler's performance comparison is recorded separately.
+
+## 2026-10-24 CPU autotuner warmed sampling and lifecycle timing
+
+- Prior two-node EPYC validation found a fresh tune selecting 10 workers while
+  an alternating 10/12-worker comparison favored 12 by 4.42%. Its trace stopped
+  the ascending search at 11 workers: arena setup and teardown were included
+  in the short-sample denominator, and first-touch hashing was not warmed.
+- Candidate `f35e6c1` keeps the search thresholds, profile policy, memory cap,
+  page policy, and affinity unchanged. Each worker allocates after pinning and
+  completes one warmup hash before a shared measurement start. Scoring uses
+  completed hashes divided by elapsed time through the last worker's actual
+  completion, before a final barrier releases any arena for teardown. Warmup
+  hashes are excluded; last-hash overrun is included. Total lifecycle time is
+  logged separately.
+- The generic kernel benchmark retains its full-wall accounting and no added
+  warmup; warmed timing is used only for CPU autotune. Sampling propagates
+  setup/hash errors, releases all lanes on setup/warmup failure, and skips
+  incomplete samples on shutdown. Schema 10 invalidates old autotune scores.
+- Local validation after integrating current mainline: 425 CPU-binary tests
+  passed, one pre-reserved 1 GiB HugeTLB test ignored; default-feature compilation and CPU-only Clippy passed with
+  existing warnings. Tests cover excluded warmup/lifecycle time, included
+  last-hash overrun, barrier release on setup/warmup failure, cancellation,
+  weighting confirmation scores by hashing time instead of lifecycle time, and
+  releasing barriers after panics in setup, warmup, or measured hashing.
+- Native comparison uses identical portable Rust 1.93.0 CPU-only builds apart
+  from this sampler change, baseline `cb682a8` and candidate `f35e6c1`, on an
+  EC2 `c6a.8xlarge` EPYC 7R13 guest with two NUMA nodes, 16 physical cores,
+  32 vCPUs and 64 GiB RAM. Artifacts, exact runners and binary hashes are kept
+  in `data/autotune-steady-20261024/`. A 12-worker warmup preconditions the host;
+  three fresh-cache pairs alternate old/new order, with ordinary pages,
+  automatic affinity, default balanced profile and six-second sample windows.
+  Each selected count is checked with one warmup and two 20-second backend
+  rounds. A final run checks cache reuse. These are offline measurements.
+  Final integration `fb3a4ba` includes newer mainline terminal/session controls,
+  version metadata, and panic-to-error guards without changing the scoring rule
+  or hash kernel. It receives a separate bounded 12..16-worker fresh tune and
+  cache-hit smoke check; those samples are excluded from paired means. An earlier
+  partial pilot predating the finish barrier is also retained separately.
+
+| Pair | Old workers | New workers | Old counted H/s | New counted H/s | Gain |
+|---|---:|---:|---:|---:|---:|
+| 1 | 11 | 16 | 11.195 | 11.693 | +4.45% |
+| 2 | 10 | 14 | 10.972 | 11.608 | +5.80% |
+| 3 | 12 | 14 | 11.405 | 11.719 | +2.76% |
+
+- All three pairs favor the corrected sampler. Mean counted throughput rises
+  from 11.191 to 11.674 H/s (+4.32%); all-completed throughput rises from
+  11.724 to 12.380 H/s (+5.59%). These gains come from selecting more effective
+  worker counts, not a faster hash kernel. Exact selection still varies (14/16);
+  this removes a systematic scoring bias but does not guarantee a global optimum
+  or the same gain on other hardware, page modes, or profiles.
+- Selected scores underestimate subsequent completed-hash throughput by
+  21.45% on average before the fix versus 0.69% afterward (individual new
+  errors: -0.44%, -0.40%, -1.22%). This metric compares each score with that
+  same run's selected count, not with a separately assumed optimal count.
+- Tradeoffs: mean fresh-tuning time increases from 174.7 to 277.1 seconds
+  (+58.6%, approximately 102 extra seconds). Each sample adds a warmup, and
+  corrected scores allow the unchanged search to explore higher thread counts.
+  Selected arena memory rises from 20–24 GiB to 28–32 GiB on this 64 GiB guest;
+  the default 5% RAM reserve still bounds the search. Cached launches skip tuning.
+- Final integrated binary `fb3a4ba` passes a fresh 12..16-worker tune, selecting
+  14 at 12.064 sample H/s and measuring 11.508 counted / 12.185 completed H/s.
+  Its cache-hit run reuses 14 and measures 11.599 / 12.283 H/s. Both the frozen
+  candidate and final build log cache reuse without repeating the search.
+- Every benchmark report verifies ordinary-page backing and zero allocation
+  failures, dropped events, or assignment/control timeouts. Host counters show
+  no swap/OOM activity and negligible CPU steal (under 0.001%). Several runs
+  emit the existing slow-stop/interrupt warning after writing their reports;
+  all exit successfully, and the runner waits for each exit before starting
+  the next process. Final inspection confirms no Seine process remains.
+- All 47 final artifact files pass the remote SHA-256 manifest after download.
+  Exact scripts, binaries, fingerprints, timings, logs, raw reports and cleanup
+  evidence are retained in `data/autotune-steady-20261024/`. The rental was
+  terminated after approximately 49 minutes; its root disk and dedicated
+  security group were deleted, its Spot request cancelled, and its private SSH
+  key removed. Observed compute pricing was $0.5276/hour (about $0.43 compute,
+  before storage/network charges), with a $0.60/hour request ceiling.
 
 ## 2026-10-24 independent two-node Milan release validation
 
