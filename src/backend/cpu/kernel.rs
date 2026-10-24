@@ -161,7 +161,8 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             shared
                 .arena_committed_bytes
                 .fetch_add(arena_bytes, Ordering::AcqRel);
-            let initialized = fixed_argon::FixedArgon2id::new(MEMORY_KB);
+            let initialized = fixed_argon::FixedArgon2id::with_kernel(MEMORY_KB, shared.kernel)
+                .expect("kernel support checked before CPU backend starts");
             let block_count = initialized.block_count();
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             let block_bytes = block_count * std::mem::size_of::<fixed_argon::PowBlock>();

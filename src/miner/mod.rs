@@ -505,6 +505,7 @@ pub(crate) fn run_with_thread_control(
                         hash_flush_interval: cfg.cpu_hash_flush_interval,
                         event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
                         page_mode: cfg.cpu_page_mode,
+                        kernel: None,
                     };
                     let threads = backend_spec.cpu_threads.unwrap_or(cfg.threads);
                     let affinity = backend_spec.cpu_affinity.unwrap_or(cfg.cpu_affinity);
@@ -1701,6 +1702,7 @@ fn bench_cpu_autotune_candidate(
             hash_flush_interval: cfg.cpu_hash_flush_interval,
             event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
             page_mode: cfg.cpu_page_mode,
+            kernel: None,
         },
     );
 
@@ -2148,6 +2150,7 @@ fn build_backend_instances(cfg: &Config) -> Vec<(BackendSpec, Arc<dyn PowBackend
                         hash_flush_interval: cfg.cpu_hash_flush_interval,
                         event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
                         page_mode: cfg.cpu_page_mode,
+                        kernel: cfg.bench_cpu_kernel,
                     },
                 )) as Arc<dyn PowBackend>,
                 BackendKind::Nvidia => Arc::new(NvidiaBackend::new(
@@ -3734,6 +3737,7 @@ pub(crate) mod tests {
             allow_wallet_prompt: true,
             bench: false,
             bench_kind: crate::config::BenchKind::Backend,
+            bench_cpu_kernel: None,
             bench_secs: 20,
             bench_rounds: 3,
             bench_warmup_rounds: 0,

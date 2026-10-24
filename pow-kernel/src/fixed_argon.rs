@@ -1,3 +1,7 @@
+#[cfg(target_arch = "x86_64")]
+mod avx512_256;
+
+use crate::CpuKernel;
 use std::convert::TryInto;
 use std::num::Wrapping;
 
@@ -16,6 +20,8 @@ const ISA_AVX2: u8 = 1;
 const ISA_AVX512: u8 = 2;
 #[allow(dead_code)]
 const ISA_NEON: u8 = 3;
+#[allow(dead_code)]
+const ISA_AVX512_256: u8 = 4;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -32,6 +38,7 @@ pub enum Error {
     OutputTooShort,
     OutputTooLong,
     MemoryTooLittle,
+    UnsupportedKernel,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -41,6 +48,7 @@ const fn isa_label(isa: u8) -> &'static str {
     match isa {
         ISA_AVX2 => "avx2",
         ISA_AVX512 => "avx512",
+        ISA_AVX512_256 => "avx512-256",
         ISA_NEON => "neon",
         _ => "scalar",
     }
@@ -48,25 +56,16 @@ const fn isa_label(isa: u8) -> &'static str {
 
 #[inline]
 fn detect_isa() -> u8 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        if std::arch::is_x86_feature_detected!("avx512f")
-            && std::arch::is_x86_feature_detected!("avx512vl")
-        {
-            ISA_AVX512
-        } else if std::arch::is_x86_feature_detected!("avx2") {
-            ISA_AVX2
-        } else {
-            ISA_SCALAR
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        ISA_NEON
-    }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    {
-        ISA_SCALAR
+    kernel_isa(CpuKernel::preferred())
+}
+
+const fn kernel_isa(kernel: CpuKernel) -> u8 {
+    match kernel {
+        CpuKernel::Scalar => ISA_SCALAR,
+        CpuKernel::Avx2 => ISA_AVX2,
+        CpuKernel::Avx512 => ISA_AVX512,
+        CpuKernel::Avx512256 => ISA_AVX512_256,
+        CpuKernel::Neon => ISA_NEON,
     }
 }
 
@@ -77,7 +76,7 @@ pub fn active_isa_label() -> &'static str {
 pub fn compiled_isa_variants() -> &'static [&'static str] {
     #[cfg(target_arch = "x86_64")]
     {
-        &["scalar", "avx2", "avx512"]
+        &["scalar", "avx2", "avx512", "avx512-256"]
     }
     #[cfg(target_arch = "aarch64")]
     {
@@ -100,6 +99,19 @@ pub struct FixedArgon2id {
 
 impl FixedArgon2id {
     pub fn new(requested_memory_kib: u32) -> Self {
+        Self::new_for_isa(requested_memory_kib, detect_isa())
+    }
+
+    /// Select a supported path explicitly without global or environment overrides.
+    /// Unsupported paths fail before precomputation or arena allocation.
+    pub fn with_kernel(requested_memory_kib: u32, kernel: CpuKernel) -> Result<Self> {
+        if !kernel.is_supported() {
+            return Err(Error::UnsupportedKernel);
+        }
+        Ok(Self::new_for_isa(requested_memory_kib, kernel_isa(kernel)))
+    }
+
+    fn new_for_isa(requested_memory_kib: u32, isa: u8) -> Self {
         let lanes = ARGON2_LANES as usize;
         let min_blocks = 2 * SYNC_POINTS * lanes;
         let memory_blocks = requested_memory_kib.max(min_blocks as u32) as usize;
@@ -107,7 +119,6 @@ impl FixedArgon2id {
         let block_count = segment_length * lanes * SYNC_POINTS;
         let data_independent_ref_indexes =
             precompute_data_independent_ref_indexes(block_count, segment_length);
-        let isa = detect_isa();
         Self {
             requested_memory_kib,
             block_count,
@@ -150,6 +161,7 @@ impl FixedArgon2id {
 
         match self.isa {
             ISA_AVX512 => self.fill_blocks::<ISA_AVX512, true, false>(memory_blocks),
+            ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
             _ => self.fill_blocks::<ISA_SCALAR, false, false>(memory_blocks),
@@ -383,6 +395,14 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
                 next_ref_area_size,
                 base as *const PowBlock,
             );
+        } else if ISA == ISA_AVX512_256 {
+            avx512_256::compress_into_mid_prefetch(
+                prev,
+                refb,
+                dst,
+                next_ref_area_size,
+                base as *const PowBlock,
+            );
         } else {
             compress_avx2_into_mid_prefetch(
                 prev,
@@ -565,6 +585,11 @@ fn compress<const ISA: u8>(rhs: &PowBlock, lhs: &PowBlock) -> PowBlock {
                 return compress_avx512(rhs, lhs);
             }
         }
+        if ISA == ISA_AVX512_256 {
+            unsafe {
+                return avx512_256::compress(rhs, lhs);
+            }
+        }
         if ISA == ISA_AVX2 {
             unsafe {
                 return compress_avx2(rhs, lhs);
@@ -594,6 +619,12 @@ fn compress_into<const ISA: u8>(rhs: &PowBlock, lhs: &PowBlock, dst: &mut PowBlo
         if ISA == ISA_AVX512 {
             unsafe {
                 compress_avx512_into(rhs, lhs, dst);
+                return;
+            }
+        }
+        if ISA == ISA_AVX512_256 {
+            unsafe {
+                avx512_256::compress_into(rhs, lhs, dst);
                 return;
             }
         }

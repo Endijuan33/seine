@@ -141,3 +141,79 @@ Run the controller tests with:
 ```bash
 python3 -m unittest scripts/test_benchctl.py -v
 ```
+
+
+## CPU kernel selection and architecture evidence
+
+One portable executable includes the CPU kernels for its target architecture.
+Automatic dispatch remains unchanged: x86-64 prefers AVX-512F/VL, then AVX2,
+then scalar; AArch64 uses NEON. These are instruction-set paths, not claims of
+separate tuning for every Zen or Intel generation.
+
+For an explicit, offline comparison, use `--bench-cpu-kernel`. It requires
+`--bench`, a fixed `--threads` argument, CPU-only backends, and CPU autotuning
+to be disabled. Explicit `--threads` already disables implicit autotuning;
+`--disable-cpu-autotune-threads` makes that intent clear. Combining the override
+with forced autotuning is rejected. The override is not persisted and does not
+read or write CPU autotune caches. There is no global/environment override.
+Unsupported instruction sets fail before hash-worker or arena startup; there
+is no silent fallback. All benchmark kinds honor the selection.
+
+`avx512-256` is an experimental 256-bit implementation using AVX-512 rotate
+instructions. It requires AVX2, AVX-512F and AVX-512VL, including OS support.
+Select it explicitly for benchmarks; automatic mining and autotuning never
+choose it. Its report identity is distinct from the existing `avx512` path.
+
+```sh
+./target/release/seine --bench --bench-kind backend --backend cpu \
+  --threads 1 --disable-cpu-autotune-threads --cpu-page-mode regular \
+  --bench-cpu-kernel avx2 --bench-secs 20 --bench-rounds 3 \
+  --bench-warmup-rounds 1 --bench-output avx2.json
+```
+
+Schema-14 reports record:
+
+- `config_fingerprint.cpu_kernel`: selected path, or null for a GPU-only run.
+- `config_fingerprint.cpu_kernel_requested`: explicit override, or null for auto.
+- `environment.cpu_kernels_supported`: paths supported by this host and build.
+- `environment.cpu_identity`: x86 vendor and decoded family/model/stepping;
+  these are null on other architectures. Existing CPU brand, architecture,
+  target triple, compiler/build flags and fingerprints remain available.
+
+The numeric identity is what the current OS/VM exposes. It is not an inferred
+microarchitecture label or proof of physical-host capabilities. x86 instruction
+checks also account for OS vector-state support. Family/model decoding follows
+[Intel's CPUID specification](https://cdrdv2-public.intel.com/843860/architecture-instruction-set-extensions-programming-reference-dec-24.pdf).
+
+`--bench-baseline` rejects different selected CPU kernels even with
+`--bench-baseline-policy ignore-environment`; it also rejects CPU baselines
+without kernel identity. Capture a new baseline for older CPU reports. Auto
+and explicit selection of the *same* kernel remain comparable. Strict policy
+also checks the raw CPU identity; ignore-environment permits intentional
+cross-host/build comparisons while retaining kernel/config/PoW checks.
+
+Use the paired A/B harness for a deliberate kernel comparison. For example,
+with a single pinned binary on a host supporting both paths:
+
+```sh
+bash scripts/bench_cpu_ab.sh \
+  --baseline-dir . --candidate-dir . \
+  --baseline-binary "$PWD/target/release/seine" \
+  --candidate-binary "$PWD/target/release/seine" \
+  --bench-kind backend --threads 1 --page-mode regular \
+  --pairs 4 --bench-secs 20 --bench-rounds 3 --bench-warmup-rounds 1 \
+  --baseline-miner-arg --bench-cpu-kernel --baseline-miner-arg avx2 \
+  --candidate-miner-arg --bench-cpu-kernel --candidate-miner-arg avx512 \
+  --output-dir data/kernel-avx2-vs-avx512
+python3 scripts/benchctl.py compare data/kernel-avx2-vs-avx512/results.tsv
+```
+
+Keep page backing, affinity, worker count and binary fixed. Do not call an
+AVX2 override on Zen 5 evidence for Zen 3 or Intel. Add microarchitecture-specific
+implementations or dispatch rules only after correctness and repeatable
+same-host backend measurements support them. No new architecture-specific
+preference or autotuning policy is introduced here.
+
+The [2026-10-24 architecture matrix](../experiments/cpu-architecture-20261024/README.md)
+records real AMD Zen 1–5 and five Intel server generations, including the
+worker-count and page-backing limits of those measurements.

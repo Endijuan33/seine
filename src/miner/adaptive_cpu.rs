@@ -728,6 +728,7 @@ mod tests {
         cfg.cpu_autotune_max_threads = Some(2);
         cfg.cpu_autotune_secs = 6;
         cfg.cpu_page_mode = CpuPageMode::Regular;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
         let dir = std::env::temp_dir().join(format!(
             "seine-live-tune-{}-{}",
             std::process::id(),
