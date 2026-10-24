@@ -114,6 +114,7 @@ struct Policy {
     up: bool,
     attempts: u64,
     ramp: bool,
+    next_up_probe: Option<usize>,
     unsuccessful: usize,
     next_trial: u64,
     allocation_retry_at: u64,
@@ -146,6 +147,7 @@ impl Policy {
             up: true,
             attempts: 0,
             ramp: true,
+            next_up_probe: None,
             unsuccessful: 0,
             next_trial: 0,
             allocation_retry_at: 0,
@@ -174,6 +176,7 @@ impl Policy {
 
     fn reset(&mut self, now: u64, delay: u64) {
         self.phase = Phase::Baseline;
+        self.next_up_probe = None;
         self.sampling = false;
         self.idle_since = None;
         self.next_trial = now.saturating_add(delay);
@@ -195,6 +198,7 @@ impl Policy {
             }
             if cap > self.previous_cap {
                 self.up = true;
+                self.ramp = true;
                 self.next_trial = self.next_trial.min(now.saturating_add(RECOVERY_SECS));
             }
             self.previous_cap = cap;
@@ -294,6 +298,7 @@ impl Policy {
                     if (ratio - 1.0).abs() > MAX_DRIFT {
                         self.next_trial = now;
                         self.up = true;
+                        self.ramp = true;
                         self.peak_hps = hps;
                     } else {
                         // Track gradual clock/load drift at the same operating
@@ -315,7 +320,13 @@ impl Policy {
                     1
                 };
                 let can_grow = now.saturating_sub(self.headroom_since) >= RECOVERY_SECS;
-                let candidate = if self.up && can_grow && self.current < cap {
+                let farther_probe = self
+                    .next_up_probe
+                    .take()
+                    .filter(|&n| can_grow && n > self.current && n <= cap);
+                let candidate = if let Some(threads) = farther_probe {
+                    threads
+                } else if self.up && can_grow && self.current < cap {
                     self.current.saturating_add(step).min(cap)
                 } else if !self.up && self.current > floor {
                     self.current.saturating_sub(step).max(floor)
@@ -355,6 +366,7 @@ impl Policy {
             } => {
                 let stable = (hps / before.hps - 1.0).abs() <= MAX_DRIFT;
                 let baseline = merge_cpu_autotune_measurements(before, sample);
+                let previous_peak = self.peak_hps;
                 if stable {
                     self.peak_hps = self.peak_hps.max(baseline.hps).max(candidate_sample.hps);
                 } else {
@@ -370,17 +382,35 @@ impl Policy {
                             >= self.peak_hps * cpu_autotune_peak_floor_frac(self.profile)
                     } else {
                         candidate_sample.hps > baseline.hps * 1.02 + quantization
+                            // Discover the peak initially, then retain fewer
+                            // workers when they already satisfy the profile.
+                            // Probes still update the peak before this choice.
+                            && (self.ramp
+                                || baseline.hps
+                                    < self.peak_hps * cpu_autotune_peak_floor_frac(self.profile))
                     };
-                self.up = if better {
+                // A new peak can justify probing farther even if this candidate
+                // does not justify a larger operating count. This discovers
+                // recovered capacity when load changes leave the baseline's
+                // own rate unchanged, without recommitting known higher counts.
+                let next_up_probe = (stable
+                    && !better
+                    && candidate > base
+                    && candidate < cap
+                    && candidate_sample.hps > previous_peak * 1.02 + quantization)
+                    .then(|| candidate + 1);
+                self.up = if !stable {
+                    true
+                } else if better {
                     candidate > base
                 } else {
                     candidate < base
                 };
-                if better {
+                if better || next_up_probe.is_some() {
                     self.unsuccessful = 0;
                 } else {
                     self.unsuccessful += 1;
-                    self.ramp = false;
+                    self.ramp = !stable;
                 }
                 self.reset(
                     now,
@@ -390,6 +420,7 @@ impl Policy {
                         RETRY_SECS
                     },
                 );
+                self.next_up_probe = next_up_probe;
                 let mut decision = self.change(
                     if better { candidate } else { base.min(cap) },
                     if !stable {
@@ -960,6 +991,80 @@ mod tests {
             recovered,
             "a busy interval must not permanently cap throughput"
         );
+    }
+
+    #[test]
+    fn efficiency_keeps_qualifying_count_across_sustained_rechecks() {
+        let mut p = policy(4);
+        p.max = 8;
+        p.profile = CpuPerformanceProfile::Efficiency;
+        let rates = [0, 24, 48, 72, 96, 112, 124, 132, 136];
+        let mut hashes = 0;
+        let mut confirmations = 0;
+        for now in 0..14_400 {
+            hashes += rates[p.current];
+            if let Some(d) = p.tick(now, hashes, true, 8, false, p.current) {
+                if now >= 1800 && d.learned.is_some() {
+                    confirmations += 1;
+                    assert_eq!(d.threads, 5, "steady-state confirmation at {now}s");
+                }
+            }
+        }
+        assert!(
+            confirmations >= 20,
+            "exercise repeated rechecks, not one endpoint"
+        );
+    }
+
+    #[test]
+    fn efficiency_rediscovers_peak_after_cpu_load_changes() {
+        let mut p = policy(4);
+        p.max = 8;
+        p.profile = CpuPerformanceProfile::Efficiency;
+        let normal = [0, 24, 48, 72, 96, 112, 124, 132, 136];
+        let loaded = [0, 24, 48, 64, 60, 56, 52, 48, 44];
+        let mut hashes = 0;
+        let mut confirmations = [0; 3];
+        for now in 0..14_400 {
+            let stage = (now / 4800) as usize;
+            hashes += if stage == 1 {
+                loaded[p.current]
+            } else {
+                normal[p.current]
+            };
+            if let Some(d) = p.tick(now, hashes, true, 8, false, p.current) {
+                if now % 4800 >= 1800 && d.learned.is_some() {
+                    confirmations[stage] += 1;
+                    assert_eq!(
+                        d.threads,
+                        if stage == 1 { 2 } else { 5 },
+                        "stage {stage}, {now}s"
+                    );
+                }
+            }
+        }
+        assert!(confirmations.iter().all(|&count| count >= 5));
+    }
+
+    #[test]
+    fn efficiency_rediscovers_peak_after_ram_capacity_returns() {
+        let mut p = policy(2);
+        p.max = 8;
+        p.profile = CpuPerformanceProfile::Efficiency;
+        let rates = [0, 24, 48, 72, 96, 112, 124, 132, 136];
+        let mut hashes = 0;
+        let mut recovered = 0;
+        for now in 0..8000 {
+            let cap = if now < 4000 { 2 } else { 8 };
+            hashes += rates[p.current];
+            if let Some(d) = p.tick(now, hashes, true, cap, false, p.current) {
+                if now >= 6000 && d.learned.is_some() {
+                    recovered += 1;
+                    assert_eq!(d.threads, 5, "recovered capacity at {now}s");
+                }
+            }
+        }
+        assert!(recovered >= 5);
     }
 
     #[test]

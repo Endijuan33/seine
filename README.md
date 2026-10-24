@@ -153,6 +153,9 @@ Brief gaps between jobs remain part of measured wall time. Sustained work loss,
 changing RAM limits, or substantial baseline drift discard the comparison.
 Balanced/efficiency profiles retain their 99%/75% peak floors;
 upward changes additionally require a gain above a conservative noise margin.
+After exploring the peak, a lower count that meets the profile's floor stays
+selected between probes. New peak measurements can extend exploration without
+repeatedly committing higher counts that are already known to be unnecessary.
 
 Available RAM is checked once per second. Workers finish their current hash before
 parking and releasing their arenas and reference tables. Linux budgets honor nested
