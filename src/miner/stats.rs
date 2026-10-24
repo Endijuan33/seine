@@ -46,6 +46,10 @@ impl Stats {
         }
     }
 
+    pub(super) fn started_at(&self) -> Instant {
+        self.started_at
+    }
+
     /// Registers backends that this run is expected to keep active. Labels
     /// already registered are kept; the set only grows (e.g. when a deferred
     /// NVIDIA backend comes online mid-run).
