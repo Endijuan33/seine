@@ -76,5 +76,21 @@
       "Historical Graviton3 followup used shared targets and remains a screen; later clean confirmation used separate targets.",
       "Identical source fingerprints can have different binaries when build flags differ; source fingerprint alone is not executable identity."
     ]
+  },
+  "final_g2_g3_review": {
+    "reviewed_at": "2026-10-24T18:49:25.232189+00:00",
+    "status": "passed",
+    "normalized_reports": 48,
+    "checks": [
+      "Raw report SHA256 and completed rate arithmetic",
+      "Actual per-worker timestamp order reverses each pass",
+      "Means and pair ranges round to RESULTS table",
+      "Expected worker-count times2GiB backing; zero allocation/drop/control/assignment errors",
+      "Frozen baseline/candidate executable SHA and generic CPU-only profile",
+      "Parity text, hashes and identity files match retained originals",
+      "Both archive SHA256 and all54 G2/93 G3 manifest files verified",
+      "G2 unsupported SHA3 rejection and three dirty nonces; G3 NEON/SHA3/switchback three nonces"
+    ],
+    "new_timing_or_resources": false
   }
 }
