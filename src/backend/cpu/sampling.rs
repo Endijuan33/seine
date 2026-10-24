@@ -1,13 +1,25 @@
 //! Synchronized CPU samples with hashing time separate from arena lifecycle time.
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Barrier, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::backend::KernelBenchSample;
+
+fn lane_action<T>(lane: usize, phase: &str, action: impl FnOnce() -> Result<T>) -> Result<T> {
+    catch_unwind(AssertUnwindSafe(action)).unwrap_or_else(|payload| {
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic payload");
+        Err(anyhow!("cpu lane {lane}: {phase} panicked ({message})"))
+    })
+}
 
 pub(super) fn sample<Setup, Hash>(
     lanes: usize,
@@ -46,7 +58,8 @@ where
                 let mut worker = if shutdown.load(Ordering::Relaxed) {
                     None
                 } else {
-                    match setup(lane).and_then(|mut hash| {
+                    match lane_action(lane, "setup/warmup", || {
+                        let mut hash = setup(lane)?;
                         if warmup && !shutdown.load(Ordering::Relaxed) {
                             hash()?;
                         }
@@ -68,7 +81,7 @@ where
                 let mut local_hashes = 0u64;
                 if let Some(hash) = worker.as_mut() {
                     while Instant::now() < stop_at && !shutdown.load(Ordering::Relaxed) {
-                        if let Err(err) = hash() {
+                        if let Err(err) = lane_action(lane, "hash", &mut *hash) {
                             *error.lock().unwrap() = Some(err);
                             break;
                         }
@@ -202,5 +215,53 @@ mod tests {
         .unwrap();
         assert_eq!(sample.hashes, 0);
         assert_eq!(sample.elapsed_secs, 0.0);
+    }
+
+    #[test]
+    fn panicking_hash_releases_all_lanes() {
+        let result = sample(
+            2,
+            Duration::from_secs(1),
+            false,
+            &AtomicBool::new(false),
+            |lane| {
+                Ok(move || {
+                    if lane == 0 {
+                        panic!("injected hash panic");
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                    Ok(())
+                })
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("injected hash panic"));
+    }
+
+    #[test]
+    fn panicking_setup_or_warmup_releases_all_lanes() {
+        for fail_warmup in [false, true] {
+            let result = sample(
+                3,
+                Duration::from_millis(10),
+                true,
+                &AtomicBool::new(false),
+                |lane| {
+                    assert!(lane != 1 || fail_warmup, "injected setup panic");
+                    Ok(move || {
+                        assert!(lane != 1, "injected warmup panic");
+                        Ok(())
+                    })
+                },
+            );
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains(if fail_warmup {
+                "injected warmup panic"
+            } else {
+                "injected setup panic"
+            }));
+        }
     }
 }
