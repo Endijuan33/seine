@@ -100,8 +100,9 @@ def main():
                 for sample in report['runs']:
                     for backend in sample['backend_runs']:
                         for key in ('memory_allocation_failures', 'dropped_events',
-                                    'assignment_timeouts', 'control_timeouts'):
-                            assert backend.get(key, 0) == 0, (report_path, key)
+                                    'assignment_enqueue_timeouts', 'assignment_execution_timeouts',
+                                    'control_enqueue_timeouts', 'control_execution_timeouts'):
+                            assert backend[key] == 0, (report_path, key)
             print(label + ': ' + (out / label / 'summary.txt').read_text(), flush=True)
     finally:
         run(['sudo', 'sysctl', '-w', f'vm.nr_hugepages={old_pages}'], out / 'release-pages.log')
