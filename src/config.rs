@@ -467,7 +467,7 @@ struct Cli {
     #[arg(long, action = ArgAction::SetTrue)]
     cpu_autotune_threads: bool,
 
-    /// Disable CPU thread autotuning and keep a fixed worker count.
+    /// Disable adaptive CPU thread/kernel tuning; keep a fixed count and the default ISA.
     #[arg(long, action = ArgAction::SetTrue)]
     disable_cpu_autotune_threads: bool,
 

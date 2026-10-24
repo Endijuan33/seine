@@ -108,6 +108,7 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
     }
 
     let mut hasher = None;
+    let mut active_kernel_request = 0;
     let arena_bytes = u64::from(MEMORY_KB) * 1024;
     let mut arena: Option<PowArena> = None;
     let mut backing = None;
@@ -135,6 +136,8 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             // Free the arena before advertising the recovered headroom.
             drop(arena.take());
             drop(hasher.take());
+            active_kernel_request = 0;
+            shared.kernel_acknowledgements[thread_idx].store(0, Ordering::Release);
             if warmed {
                 shared.warmed_workers.fetch_sub(1, Ordering::AcqRel);
                 warmed = false;
@@ -317,6 +320,18 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
                 break;
             }
         }
+        // Finish the previous hash before changing ISA. Keep the same arena,
+        // nonce cursor and assignment; switching must never repeat mining work.
+        let request = shared.kernel_request.load(Ordering::Acquire);
+        if active_kernel_request != request {
+            flush_hashes(&shared, thread_idx, &mut pending_hashes);
+            hasher
+                .as_mut()
+                .expect("enabled worker has a hasher")
+                .set_kernel(super::kernel_from_request(request))
+                .expect("requested kernel was checked before publication");
+            active_kernel_request = request;
+        }
         let target_snapshot = template.target_snapshot();
         let nonce_bytes = nonce.to_le_bytes();
         if hasher
@@ -348,6 +363,16 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
         }
         control_hashes_remaining -= 1;
         pending_hashes += 1;
+
+        if shared.kernel_acknowledgements[thread_idx].load(Ordering::Acquire)
+            != active_kernel_request
+        {
+            // Publish completion only after flushing old and warm-up work. A
+            // sampler starts a fresh counter window after every lane has acked.
+            flush_hashes(&shared, thread_idx, &mut pending_hashes);
+            shared.kernel_acknowledgements[thread_idx]
+                .store(active_kernel_request, Ordering::Release);
+        }
 
         let hash_completed_at = Instant::now();
         let should_flush = should_flush_hashes(
@@ -605,6 +630,199 @@ mod tests {
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    #[ignore = "real 2 GiB kernel switches and sequential RustCrypto parity; run optimized"]
+    fn adaptive_kernel_real_arena_smoke() {
+        use crate::backend::cpu::CpuBackendTuning;
+        use crate::backend::{NonceChunk, PowBackend, WorkAssignment};
+        use blocknet_pow_kernel::CpuKernel;
+        let backend = CpuBackend::adaptive(
+            1,
+            1,
+            CpuAffinityMode::Off,
+            CpuBackendTuning {
+                page_mode: crate::config::CpuPageMode::Regular,
+                ..CpuBackendTuning::default()
+            },
+        );
+        let (tx, rx) = unbounded();
+        backend.set_instance_id(1);
+        backend.set_event_sink(tx);
+        backend.start().unwrap();
+        let mut solutions = Vec::new();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            backend
+                .assign_work(WorkAssignment {
+                    template: Arc::new(WorkTemplate {
+                        work_id: 1,
+                        epoch: 1,
+                        header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                        target: [0xff; 32],
+                        dynamic_share_target: None,
+                        pause_on_solution: false,
+                        stop_at: Instant::now() + Duration::from_secs(180),
+                    }),
+                    nonce_chunk: NonceChunk {
+                        start_nonce: 100,
+                        nonce_count: 1_000_000,
+                    },
+                })
+                .unwrap();
+            let paths: Vec<_> = [CpuKernel::Avx2, CpuKernel::Avx512]
+                .into_iter()
+                .filter(|k| k.is_supported())
+                .collect();
+            for kernel in paths
+                .into_iter()
+                .chain(std::iter::once(CpuKernel::preferred()))
+            {
+                backend.set_active_kernel(kernel).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(60);
+                while !backend.adaptive_snapshot().kernel_ready {
+                    assert!(Instant::now() < deadline, "kernel switch timed out");
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                while rx.try_recv().is_ok() {}
+                loop {
+                    match rx.recv_timeout(Duration::from_secs(60)).unwrap() {
+                        BackendEvent::Solution(solution) => {
+                            solutions.push(solution);
+                            break;
+                        }
+                        BackendEvent::Error { message, .. } => panic!("backend error: {message}"),
+                        _ => {}
+                    }
+                }
+                let s = backend.adaptive_snapshot();
+                assert_eq!(s.kernel, kernel);
+                assert_eq!(s.resident_bytes, blocknet_pow_spec::CPU_LANE_MEMORY_BYTES);
+                assert_eq!(s.allocation_failures, 0);
+            }
+        }));
+        backend.stop();
+        result.unwrap();
+        // Reference allocation follows worker teardown; never hold two 2 GiB arenas.
+        let params = argon2::Params::new(blocknet_pow_spec::POW_MEMORY_KB, 1, 1, Some(32)).unwrap();
+        let mut arena = vec![argon2::Block::default(); params.block_count()];
+        let reference =
+            argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+        let mut nonces = std::collections::HashSet::new();
+        for solution in solutions {
+            assert!(nonces.insert(solution.nonce));
+            let mut expected = [0; 32];
+            reference
+                .hash_password_into_with_memory(
+                    &solution.nonce.to_le_bytes(),
+                    &[0u8; POW_HEADER_BASE_LEN],
+                    &mut expected,
+                    &mut arena,
+                )
+                .unwrap();
+            assert_eq!(solution.hash, Some(expected));
+        }
+    }
+
+    #[test]
+    fn switching_kernel_preserves_arena_nonces_and_correct_hashes() {
+        use crate::backend::cpu::{request_shutdown, CpuBackendTuning};
+        use crate::backend::{NonceChunk, PowBackend, WorkAssignment};
+        use blocknet_pow_kernel::CpuKernel;
+        use std::collections::HashSet;
+        let backend = CpuBackend::adaptive(
+            1,
+            1,
+            CpuAffinityMode::Off,
+            CpuBackendTuning {
+                page_mode: crate::config::CpuPageMode::Regular,
+                ..CpuBackendTuning::default()
+            },
+        );
+        backend.shared.started.store(true, Ordering::Release);
+        let (tx, rx) = unbounded();
+        *backend.shared.event_dispatch_tx.write().unwrap() = Some(tx);
+        let allocations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&allocations);
+        let shared = Arc::clone(&backend.shared);
+        let handle = std::thread::spawn(move || {
+            super::worker_loop_with_allocator::<32>(shared, 0, None, |blocks, page| {
+                counted.fetch_add(1, Ordering::Relaxed);
+                super::PowArena::new(blocks, page)
+            });
+        });
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            backend
+                .assign_work(WorkAssignment {
+                    template: Arc::new(WorkTemplate {
+                        work_id: 1,
+                        epoch: 1,
+                        header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                        target: [0xff; 32],
+                        dynamic_share_target: None,
+                        pause_on_solution: false,
+                        stop_at: Instant::now() + Duration::from_secs(60),
+                    }),
+                    nonce_chunk: NonceChunk {
+                        start_nonce: 100,
+                        nonce_count: 1_000_000,
+                    },
+                })
+                .unwrap();
+            let reference = argon2::Argon2::new(
+                argon2::Algorithm::Argon2id,
+                argon2::Version::V0x13,
+                argon2::Params::new(32, 1, 1, Some(32)).unwrap(),
+            );
+            let mut nonces = HashSet::new();
+            for kernel in CpuKernel::ALL.into_iter().filter(|k| k.is_supported()) {
+                backend.set_active_kernel(kernel).unwrap();
+                let until = Instant::now() + Duration::from_secs(5);
+                loop {
+                    let snapshot = backend.adaptive_snapshot();
+                    if snapshot.kernel_ready && snapshot.kernel == kernel {
+                        break;
+                    }
+                    assert!(
+                        Instant::now() < until,
+                        "switch not acknowledged: {snapshot:?}"
+                    );
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                for _ in 0..10 {
+                    if let BackendEvent::Solution(solution) =
+                        rx.recv_timeout(Duration::from_secs(5)).unwrap()
+                    {
+                        assert!(nonces.insert(solution.nonce), "switch repeated nonce");
+                        let mut expected = [0; 32];
+                        reference
+                            .hash_password_into(
+                                &solution.nonce.to_le_bytes(),
+                                &[0u8; POW_HEADER_BASE_LEN],
+                                &mut expected,
+                            )
+                            .unwrap();
+                        assert_eq!(solution.hash, Some(expected));
+                    }
+                }
+                assert_eq!(
+                    allocations.load(Ordering::Relaxed),
+                    1,
+                    "switch reallocated arena"
+                );
+                assert_eq!(backend.adaptive_snapshot().resident_bytes, 32 * 1024);
+            }
+            // An A -> B -> A switch cannot reuse the first A acknowledgement.
+            if CpuKernel::preferred() != CpuKernel::Scalar {
+                let old = backend.shared.kernel_request.load(Ordering::Acquire);
+                backend.set_active_kernel(CpuKernel::Scalar).unwrap();
+                backend.set_active_kernel(CpuKernel::preferred()).unwrap();
+                assert_ne!(old, backend.shared.kernel_request.load(Ordering::Acquire));
+            }
+        }));
+        request_shutdown(&backend.shared);
+        handle.join().unwrap();
+        result.unwrap();
+    }
 
     #[test]
     fn allocation_in_progress_is_credited_before_backing_is_published() {
