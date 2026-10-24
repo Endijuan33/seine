@@ -28,6 +28,7 @@ def summarize_trial(path, experiment):
         assert report['bench_secs'] == experiment['seconds']
         assert report['environment']['build_rustflags'] == ''
         assert report['schema_version'] == 14
+        assert report['cpu_threads'] == int(path.name.rsplit('-t', 1)[1])
         assert report['config_fingerprint']['cpu_autotune_threads'] is False
         assert report['config_fingerprint']['cpu_affinity'] == 'os'
         expected = 'avx512' if experiment['comparison'] == 'avx2-vs-avx512' and row['variant'] == 'candidate' else 'avx2'
@@ -47,6 +48,9 @@ def summarize_trial(path, experiment):
         config = dict(report['config_fingerprint'])
         for key in ('cpu_kernel', 'cpu_kernel_requested'):
             config.pop(key)
+        # This RAM-derived suggestion is unused with fixed workers and autotune off.
+        # Actual worker counts and arena bytes are checked above.
+        config.pop('cpu_auto_threads_cap', None)
         pair = pairs.setdefault(int(row['pair']), {})
         pair[row['variant']] = {'counted_hps': report['avg_hps'], 'completed_hps': completed_hps,
                                 'config': config, 'pow': report['pow_fingerprint'],

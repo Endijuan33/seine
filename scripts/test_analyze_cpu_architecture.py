@@ -77,6 +77,14 @@ class MatrixEvidenceTests(unittest.TestCase):
         self.change_candidate(lambda r: r['environment'].update(source_fingerprint='different-source'))
         with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
 
+    def test_unused_auto_cap_does_not_change_fixed_worker_comparison(self):
+        self.change_candidate(lambda r: r['config_fingerprint'].update(cpu_auto_threads_cap=6))
+        self.assertEqual(analyzer.summarize_trial(self.path, self.experiment)['threads'], 1)
+
+    def test_actual_worker_count_mismatch_is_rejected(self):
+        self.change_candidate(lambda r: r.update(cpu_threads=4))
+        with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
+
     def test_cross_host_comparison_is_rejected(self):
         self.change_candidate(lambda r: r['environment'].update(cpu_identity={'family': 26}))
         with self.assertRaises(AssertionError): analyzer.summarize_trial(self.path, self.experiment)
