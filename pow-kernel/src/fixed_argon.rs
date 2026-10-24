@@ -186,6 +186,10 @@ impl FixedArgon2id {
         finalize(memory_blocks, out)
     }
 
+    // Keep the x86 loop out of the dispatch function. The ARM target-feature
+    // wrapper needs an inline implementation, but inlining that loop into x86
+    // dispatch inflates its stack frame and changes hot-loop register allocation.
+    #[cfg_attr(target_arch = "x86_64", inline(never))]
     fn fill_blocks<
         const ISA: u8,
         const USE_X86_MID_PREFETCH: bool,
