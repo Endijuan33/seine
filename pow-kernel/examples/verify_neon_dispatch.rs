@@ -3,10 +3,8 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use blocknet_pow_kernel::{CpuKernel, FixedArgon2id, PowBlock};
 
 fn main() {
-    assert!(
-        CpuKernel::NeonSha3.is_supported(),
-        "requires native ARM SHA3 support"
-    );
+    assert!(CpuKernel::Neon.is_supported(), "requires native AArch64");
+    let sha3_supported = CpuKernel::NeonSha3.is_supported();
     const MEMORY_KIB: u32 = 2 * 1024 * 1024;
     let salt = b"runtime-neon-full-size";
     let reference = Argon2::new(
@@ -24,8 +22,16 @@ fn main() {
     }
     let mut arena = vec![PowBlock::default(); MEMORY_KIB as usize];
     let mut hasher = FixedArgon2id::with_kernel(MEMORY_KIB, CpuKernel::Neon).unwrap();
+    let paths = if sha3_supported {
+        vec![CpuKernel::Neon, CpuKernel::NeonSha3, CpuKernel::Neon]
+    } else {
+        assert!(FixedArgon2id::with_kernel(MEMORY_KIB, CpuKernel::NeonSha3).is_err());
+        assert!(hasher.set_kernel(CpuKernel::NeonSha3).is_err());
+        println!("PASS unsupported SHA3 selection rejected; baseline remains active");
+        vec![CpuKernel::Neon]
+    };
     for (nonce, expected) in cases {
-        for kernel in [CpuKernel::Neon, CpuKernel::NeonSha3, CpuKernel::Neon] {
+        for &kernel in &paths {
             hasher.set_kernel(kernel).unwrap();
             let mut output = [0u8; 32];
             hasher
