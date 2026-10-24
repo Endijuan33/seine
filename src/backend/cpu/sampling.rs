@@ -215,6 +215,32 @@ mod tests {
     }
 
     #[test]
+    fn hash_failure_or_shutdown_releases_the_finish_barrier() {
+        for cancel in [false, true] {
+            let shutdown = AtomicBool::new(false);
+            let result = sample(3, Duration::from_secs(1), false, &shutdown, |_| {
+                Ok(|| {
+                    if cancel {
+                        shutdown.store(true, Ordering::Relaxed);
+                        Ok(())
+                    } else {
+                        Err(anyhow!("measured hash failure"))
+                    }
+                })
+            });
+            if cancel {
+                assert!(shutdown.load(Ordering::Relaxed));
+                assert!(result.unwrap().hashes > 0);
+            } else {
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("measured hash failure"));
+            }
+        }
+    }
+
+    #[test]
     fn preexisting_shutdown_skips_allocation() {
         let sample = sample(
             2,
