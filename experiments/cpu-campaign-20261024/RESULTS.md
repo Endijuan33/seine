@@ -17,6 +17,7 @@ on another machine. No campaign PR has been merged or released.
 | Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.316 → 17.930 | Four repeated pairs, +44.61% to +46.18%; isolated targets, but per-worker order limited. Corrected confirmation pending. |
 | Same Graviton3, regular pages, 1 / 8 workers | 0.756 → 1.038 / 5.862 → 7.791 | Two repeated pairs each, +37.09% to +37.48% / +32.69% to +33.14%; order limited. |
 | Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → candidate portable NEON | 0.682 → 0.707 / 10.583 → 11.059 | Four longer repeated pairs: +3.60% to +3.67% / +4.38% to +4.55%; order limited, corrected confirmation pending. This is the fallback path, not SHA3 execution. |
+| Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Final hardened lifecycle/regression follows. |
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two screening passes (order limitation below); full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
@@ -27,7 +28,7 @@ on another machine. No campaign PR has been merged or released.
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Older Intel/Zen and Graviton4 candidate results remain pending.
+Older Intel/Zen results and final Graviton2/3 corrected confirmation remain pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -76,6 +77,10 @@ and candidate first at sixteen. Therefore their repeated gains do not yet meet
 the intended per-worker order-reversal requirement. Raw results remain intact;
 normalized evidence is labelled `order_limited`, and corrected native Graviton2,
 Graviton3 and Graviton4 confirmation is required before making the ARM PR ready.
+
+Graviton4 completed the corrected four-pass protocol with gains in every pair;
+its original interrupted/order-limited run remains archived. Graviton2/3
+corrected final-binary confirmations remain pending.
 
 The fix rotates by each configuration's stable original index and asserts the
 actual completed variant sequence reverses on every pass. The in-progress
