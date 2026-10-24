@@ -246,7 +246,8 @@ and candidate all-target runs produced the same 65 error-message lines (63
 underlying diagnostics plus build summaries); strict kernel-crate Clippy passed.
 The Windows cache PR's binary-only check found 61 existing diagnostics, all in
 source files byte-identical to its parent. These are disclosed, not counted as
-passing checks.
+passing checks. The final combined all-target check reported 124 existing
+diagnostics, with none on changed lines; strict kernel-crate Clippy passed.
 
 [Draft PR #46](https://github.com/zpalmtree/seine/pull/46) separately prototypes
 joint worker-count/kernel exploration. It restores the original configuration
