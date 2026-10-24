@@ -18,7 +18,8 @@ def main():
     bundles = {}
     known_sources = {}
     for name in ['portable-final-arm', 'portable-codegen-arm',
-                 'portable-final-x86', 'portable-codegen-x86', 'portable-joint-x86']:
+                 'portable-final-x86', 'portable-codegen-x86', 'portable-joint-x86',
+                 'portable-accepted-x86']:
         path = args.directory / name / 'identities.json'
         identity = json.loads(path.read_text())
         bundles[name] = {key: identity[key] for key in

@@ -124,5 +124,33 @@
       "CandidateB AVX2 +2.55% below uncertainty-adjusted +3.53% threshold; correctly unpromoted",
       "Warm-cache and prototype changed-load/RAM behavior remain unvalidated; scope-stop is not product failure or lifecycle pass"
     ]
+  },
+  "final_sapphire_review": {
+    "reviewed_at": "2026-10-24T19:41:59.879228+00:00",
+    "status": "passed",
+    "reports": 16,
+    "archive_files": 52,
+    "checks": [
+      "Raw report hashes and completed rate arithmetic match",
+      "Actual per-worker order reversed",
+      "Frozen binary SHA256, source fingerprints and generic CPU-only profiles match",
+      "Full-size scalar/AVX2/full512/256 parity passed",
+      "Expected HugeTLB backing; zero OOM/swap/timeout/drops; max steal0.00207%"
+    ],
+    "finding": "Small timing differences; twelve-worker full512 mixed +0.154%/-0.783%. Does not resolve separate Granite regression gate."
+  },
+  "final_ice_review": {
+    "reviewed_at": "2026-10-24T19:49:29.610998+00:00",
+    "status": "evidence passed; performance gate not satisfied",
+    "reports": 16,
+    "archive_files": 52,
+    "checks": [
+      "Raw report SHA256, rates and summaries match",
+      "Actual per-worker comparison order reverses",
+      "Frozen baseline/f20 executable identities, fingerprints and generic CPU-only flags match",
+      "Full-size scalar/AVX2/full512/256 parity passed",
+      "Expected24GiB HugeTLB backing; zero OOM/swap/errors/drops; max steal0.00207%"
+    ],
+    "finding": "All eight paired differences negative; twelve-worker means AVX2 -1.322%,full512 -1.307%. Do not characterize final combined x86 as near-flat across hosts; retain draft gate."
   }
 }

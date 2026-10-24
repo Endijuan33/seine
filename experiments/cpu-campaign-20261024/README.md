@@ -147,7 +147,11 @@ lease's full reservation.
 The guest schedules an absolute-deadline shutdown before installing tools. EC2
 converts that shutdown to termination independently of the controlling session.
 The controller verifies `/run/systemd/shutdown/scheduled` before experiments.
-Leases last at most 150 minutes and must expire by 20:00 UTC. Normal completion
+The original investigation leases lasted at most 150 minutes and expired by
+20:00 UTC. After the user explicitly requested merging the good PRs, one final
+accepted-subset confirmation lease received a 20:20 UTC independent deadline,
+within the unchanged 20:27:13 campaign finish bound and $40 cap. The previous
+17 rentals had already been verified cleaned up. Normal completion
 terminates earlier and verifies instance termination, root-volume deletion and
 eventual deletion of the task-owned security group and SSH keys.
 
@@ -172,6 +176,9 @@ eventual deletion of the task-owned security group and SSH keys.
   transfer contingency and preserve the $40 reservation cap.
 - `start_arm_final_confirm.py`: corrected native G2/G3 confirmation using
   transfer-frozen generic ARM binaries and fresh full-size parity.
+- `start_accepted_confirm.py`: separately confirm PRs #40/#41/#43/#45 against
+  baseline after the merge instruction, excluding held drafts #44/#46. Its
+  source identity is pinned and the outer job is bounded to 25 minutes.
 - `start_x86_final_confirm.py`: final frozen baseline/candidate AVX2 and full
   AVX-512 regressions on already-screened Intel generations, with fresh parity.
 - `start_joint_confirm.py`: bounded confirmation of the separate frozen joint

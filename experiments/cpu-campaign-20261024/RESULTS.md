@@ -3,7 +3,8 @@
 **Work in progress.** Baseline v0.2.21 (`359265e`), current 2 GiB Argon2id PoW.
 All rates below are completed hashes divided by actual elapsed time, including
 round-end fences. They describe the tested configuration, not a guaranteed gain
-on another machine. No campaign PR has been merged or released.
+on another machine. Following the user’s merge instruction, PRs #40 and #45 have been merged.
+The runtime subset is in final confirmation; no release has been published.
 
 ## Architecture evidence collected
 
@@ -17,16 +18,20 @@ on another machine. No campaign PR has been merged or released.
 | Same Graviton3, 16 physical workers, 2 MiB HugeTLB | 12.520 → 18.170 | Four corrected alternating pairs, +44.31% to +45.91%; frozen generic CPU-only binaries. |
 | Same Graviton3, regular pages, 1 / 8 workers | 0.762 → 1.038 / 5.892 → 7.807 | Four corrected alternating pairs each, +35.52% to +36.72% / +32.23% to +32.86%. |
 | Graviton2 / Neoverse-N1 without SHA3, 1 / 16 workers, 2 MiB HugeTLB, baseline → final `f20e7bb` portable NEON | 0.680 → 0.707 / 10.609 → 11.047 | Four corrected alternating pairs: +3.81% to +3.95% / +3.83% to +4.55%. Full-size dirty-reuse parity and unsupported SHA3 rejection passed. This is the fallback path, not SHA3 execution. |
-| Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Final636native lifecycle passed; f20x86-boundary change is near-flat on ARM (two pairs,16-worker mean−0.29%). |
+| Graviton4 / Neoverse-V2, 1 / 16 workers, 2 MiB HugeTLB, NEON → runtime SHA3 + prefetch | 0.891 → 1.373 / 13.800 → 21.503 | Four corrected, balanced, actual-order-verified pairs: +53.94% to +54.33% / +55.11% to +57.00%. Combined `636e688` lifecycle passed; the final `f20e7bb` boundary change is near-flat on ARM (two pairs, sixteen-worker mean −0.29%). |
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two screening passes (order limitation below); full AVX-512 remains the stronger shipping path here. |
+| Ice Lake, final `f20e7bb` versus baseline, 1 / 12 workers, AVX2 | 1.490 → 1.458 / 11.369 → 11.219 | Two corrected pairs: −2.640% to −1.691% / −1.721% to −0.920%; all negative. Combined-stack regression remains unresolved. |
+| Same final Ice Lake comparison, full AVX-512 | 1.836 → 1.825 / 12.205 → 12.045 | Two corrected pairs: −0.782% to −0.413% / −1.334% to −1.280%; all negative. Native full-size parity and evidence audit passed; no promotion. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
 | Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.617 → 1.726 / 12.512 → 13.099 | Four longer repeated pairs (AVX2-relative order limited), full AVX-512 +6.13% to +7.97% / +4.05% to +5.27%. Also leads across the preliminary worker-count screen. |
+| Sapphire Rapids, final `f20e7bb` versus baseline, 1 / 12 workers, AVX2 | 1.593 → 1.595 / 12.142 → 12.213 | Two corrected pairs: +0.116% to +0.129% / +0.471% to +0.700%; native full-size parity passed. |
+| Same final Sapphire Rapids comparison, full AVX-512 | 1.716 → 1.721 / 12.767 → 12.727 | Two corrected pairs: +0.202% to +0.286% / −0.783% to +0.154%; mixed at twelve workers, no material gain claimed. |
 | Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.654 / 12.737 | Four longer pairs: full AVX-512 +4.10% to +4.62% / +2.22% to +3.10% over this path; no promotion. |
 | Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two screens (order limitation below); full AVX-512 11.605 / 12.969. No material gain; no promotion. |
 | Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two screens (order limitation below); full AVX-512 leads at all tested counts. |
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
-| Xeon 6975P-C, final `f20e7bb` versus baseline, 12 workers, full AVX-512 | 12.486 → 12.324 | Four longer corrected pairs, all negative (−0.063% to −3.719%), mean −1.304%. Earlier two short pairs also negative. Unresolved regression signal; PR #44 remains draft. |
+| Xeon 6975P-C, final `f20e7bb` versus baseline, 12 workers, full AVX-512 | 12.486 → 12.324 | Four longer corrected pairs, all negative (−0.063% to −3.719%), ratio of mean rates −1.304%. Earlier two short pairs also negative. Unresolved regression signal; PR #44 remains draft. |
 | Skylake / Xeon 8124M, joint tuning prototype, four 900-second fresh-process/cache ABBA windows | 6.241 → 6.152 logged H/s | Both paired differences negative (−2.006%, −0.836%); aggregate −1.424%. No promotion; subsequent lifecycle intentionally deferred. These include startup/trials/shutdown and are not fixed-kernel rates. |
 | Intel Xeon Platinum 8275CL / Cascade Lake, 12 workers, full AVX-512, baseline → combined `636e688` | 9.303 → 9.036 | Four corrected longer pairs lose 2.60–3.34%; regression retained and repaired below. |
 | Same Cascade Lake, baseline → x86-boundary fix `f20e7bb` | 9.303 → 9.267 | Four pairs: −0.93% to +0.004%; about −0.39% mean. Consistently ahead of the regressed build; no x86 speedup claim. |
@@ -38,7 +43,10 @@ on another machine. No campaign PR has been merged or released.
 
 Final Graviton2/3 corrected confirmations passed. Fresh Xeon 6975P-C confirmation
 retains a negative final-build signal, so ARM PR #44 remains draft. Final Sapphire
-Rapids and Ice Lake checks are in progress.
+Rapids checks passed correctness with small/mixed timing differences. Ice Lake
+confirmation also retained negative differences in all eight paired comparisons.
+Following the user’s subsequent merge instruction, the accepted subset is being
+confirmed separately before runtime changes are merged.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -114,7 +122,7 @@ and subsequent architecture screens use the corrected controller. Earlier Intel
 screens retain the limitation; Sapphire Rapids full-width versus 256-bit relative
 order did reverse, but its comparison against AVX2 did not. The separate native
 Windows four-pair controller and direct interhash reversal are unaffected.
-No code candidate or individual sample was altered to obtain a better result.
+The order repair changed the controller; archived binaries and measured samples remained unchanged.
 
 ## Resource lifecycle findings
 
@@ -180,8 +188,8 @@ Its complete nine-phase lifecycle passed, including restart growth to three
 workers / 6.028 GiB anonymous residency, no OOM/quarantine and opt-out. The
 40-task full-pool check provisioned nine CPU slots, observed at most 35 tasks
 and 84 completed hashes before clean shutdown. Graviton4 also passed all nine
-phases, with three workers /6.02784GiB after restart and no OOM/quarantine. Its
-40-task check observed nine slots,35tasks and54completedhashes.
+phases, with three workers / 6.02784 GiB after restart and no OOM/quarantine. Its
+40-task check observed nine slots, 35 tasks and 54 completed hashes.
 
 Corrected-order final x86 regression pairs at one/twelve workers show AVX2 mean
 changes of +0.26% / −0.48% (the latter pairs range −1.13% to +0.16%) and full
