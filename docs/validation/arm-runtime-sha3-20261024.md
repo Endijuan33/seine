@@ -1,12 +1,18 @@
 # Native ARM runtime SHA3 validation
 
+**Order-review update (15:48 UTC):** the earlier ARM matrices did not reverse
+baseline/candidate order within each worker count as intended. Performance
+figures below are provisional, order-limited evidence until corrected native
+Graviton2/3/4 confirmation completes. The research PR retains the original runs
+and controller correction. Native parity and functional tests are unaffected.
+
 Baseline: v0.2.21 (`359265e`). Current PoW: 2 GiB Argon2id, one iteration,
 one lane. Rates use completed hashes divided by actual elapsed time including
 the round-end fence. These are measured configurations, not promised gains.
 
 ## Graviton3 / Neoverse-V1
 
-Four alternating pairs used separate Cargo targets for baseline and candidate,
+Four repeated pairs used separate Cargo targets for baseline and candidate,
 generic AArch64 compilation without global `+sha3`, and explicit 2 MiB HugeTLB
 backing. Each run used two 30-second measured rounds after a warmup round.
 
@@ -15,7 +21,7 @@ backing. Each run used two 30-second measured rounds after a warmup round.
 | 1 | 0.820 | 1.228 | +49.63% to +49.82% |
 | 16 | 12.316 | 17.930 | +44.61% to +46.18% |
 
-Regular-page confirmation used two alternating pairs: one worker 0.756 → 1.038
+Regular-page confirmation used two repeated pairs: one worker 0.756 → 1.038
 H/s (+37.09% to +37.48%); eight workers 5.862 → 7.791 (+32.69% to +33.14%).
 Earlier screens isolated the SHA3 and prefetch contributions before combining
 both. No failed allocation, dropped event, control timeout, or unexpected page
@@ -63,7 +69,7 @@ candidate limits. It did not independently rerun the hardware measurements.
 
 ## x86 regression and remaining confirmation
 
-Ice Lake ran two clean alternating pairs against the separately rebuilt
+Ice Lake ran two clean repeated pairs against the separately rebuilt
 CPU-only baseline: approximately −0.29% at one worker and −0.27% at twelve.
 Full-size scalar, AVX2, AVX-512 and AVX-512/256 reference parity passed. Strict
 workspace Clippy reports the same existing diagnostics on both builds; strict
