@@ -3,7 +3,7 @@
 The final frozen generic AArch64 candidate `f20e7bb` passed corrected native
 Graviton2 and Graviton3 confirmation. Graviton4 passed longer kernel confirmation,
 combined-build regression and the final x86-boundary-change check. The PR remains
-draft while fresh final-binary Intel regressions finish.
+draft because final-build Xeon 6975P-C confirmation retains an unresolved negative throughput signal.
 
 Baseline: v0.2.21 (`359265e`). Current PoW: 2 GiB Argon2id, one iteration,
 one lane. Rates count completed hashes and include round-end fence time. These
@@ -87,6 +87,18 @@ to +0.004% (mean about −0.39%), consistently ahead of the regressed build.
 Full-size native reference parity passed. Both the original regression and
 residual small negative remain disclosed. Archive SHA256:
 `22d2258d66fd292aaf998b86b753800bc0bc091b5eb450c1a39e4a7a545e0fdb`.
+
+Fresh Xeon 6975P-C final-build checks at twelve workers retain a negative signal.
+Two short full AVX-512 pairs were −0.271% and −1.274%. Four longer, actually
+alternating pairs measured 12.486 → 12.324 H/s (−1.304% ratio of means), with
+paired differences −0.063%, −0.071%, −3.719% and −1.480%. Independent audit
+verified all reports, both archives, identities, full-size parity, page backing
+and zero allocation/control errors, swap or OOM. Throughput drift on both sides
+limits causal interpretation and stable effect-size claims. The combined-stack
+comparison does not isolate the causal change to this PR, but normalized x86
+instruction equivalence has not established performance equivalence. **Keep this
+PR draft until that signal is understood.** Positive results elsewhere do not
+remove this gate.
 
 Haswell, Zen 1 and Zen 2 final AVX2 checks were near-flat. Earlier Ice Lake
 ARM-change checks were order-limited and retain small negatives; they are not
