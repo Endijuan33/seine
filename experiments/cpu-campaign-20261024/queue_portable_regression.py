@@ -19,6 +19,7 @@ def main():
     assert cloud.TYPES[record['type']] == 'amd64'
     root = cloud.ROOT / args.bundle
     identities = json.loads((root / 'identities.json').read_text())
+    assert identities['source_control'] == '359265e325d85c9c7b6e3eed7b5b126fcec63f9c'
     expected = {'portable-final-x86': '636e6887c405c41d732433b1eeb018cefcdc962d',
                 'portable-codegen-x86': 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd'}
     assert identities['source_candidate'] == expected[args.bundle]

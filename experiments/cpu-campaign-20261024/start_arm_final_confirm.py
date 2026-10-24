@@ -25,6 +25,7 @@ def main():
     kernel = 'neon' if record['type'] == 'm6g.4xlarge' else 'neon-sha3'
     bundle = cloud.ROOT / args.bundle
     identity = json.loads((bundle / 'identities.json').read_text())
+    assert identity['source_control'] == '359265e325d85c9c7b6e3eed7b5b126fcec63f9c'
     expected = {'portable-final-arm': '636e6887c405c41d732433b1eeb018cefcdc962d',
                 'portable-codegen-arm': 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd'}
     assert identity['source_candidate'] == expected[args.bundle]

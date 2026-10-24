@@ -11,6 +11,7 @@ import datetime as dt
 import fcntl
 import ipaddress
 import json
+import math
 import pathlib
 import shlex
 import subprocess
@@ -53,6 +54,42 @@ def state():
 
 def persist(s):
     save(ROOT / "cloud-leases.json", s)
+
+
+def finalize_reserve(record):
+    """Release unused contingency only after instance AND disk deletion proof.
+
+    Closed compute/storage/IP time is rounded UP to whole hours, with the full
+    $1 transfer allowance retained. This is a conservative commitment, not an
+    invoice. Original three-hour reservations remain auditable in the record.
+    """
+    assert record.get('terminated') and record.get('volumes_deleted')
+    assert record.get('volume_ids'), 'unknown disk identities cannot release a reservation'
+    if record.get('reservation_finalized_at'):
+        return 0.0
+    elapsed = (dt.datetime.fromisoformat(record['verified_at'])
+               - dt.datetime.fromisoformat(record['launched_at'])).total_seconds()
+    assert 0 <= elapsed <= 3 * 3600, 'do not reduce an unbounded/late-cleanup reservation'
+    hours = max(1, math.ceil(elapsed / 3600))
+    closed = (record['hourly_usd'] + .005 + 16 * .08 / (28 * 24)) * hours + 1
+    initial = record['cost_reserved_usd']
+    assert closed <= initial + 1e-9
+    record.update(initial_cost_reserved_usd=initial, cost_reserved_usd=closed,
+                  released_reserve_usd=initial - closed, closed_billing_hours_upper=hours,
+                  reservation_finalized_at=now().isoformat())
+    return initial - closed
+
+
+def finalize_budget():
+    s = state()
+    before = sum(r['cost_reserved_usd'] for r in s['leases'])
+    released = sum(finalize_reserve(r) for r in s['leases'] if r.get('terminated'))
+    after = sum(r['cost_reserved_usd'] for r in s['leases'])
+    s.setdefault('budget_history', []).append({'at': now().isoformat(),
+        'action': 'finalize verified terminated reservations', 'before_usd': before,
+        'after_usd': after, 'released_usd': released})
+    persist(s)
+    print(json.dumps({'before_usd': before, 'after_usd': after, 'released_usd': released}))
 
 
 def quote(instance_type):
@@ -196,6 +233,9 @@ chmod 600 /home/ubuntu/.ssh/authorized_keys
               "price_retrieved_utc": price["retrieved_utc"],
               "expires_at": end.isoformat(), "volume_ids": [], "timer_verified": False}
     s["leases"].append(record)
+    s.setdefault('budget_history', []).append({'at': now().isoformat(),
+        'action': 'launch reservation',
+        'after_usd': sum(r['cost_reserved_usd'] for r in s['leases'])})
     persist(s)
     save(ROOT / (record["instance_id"] + "-launch.json"), answer)
     print(json.dumps(record), flush=True)
@@ -239,16 +279,29 @@ def terminate(ident):
             break
         time.sleep(5)
     assert info["State"]["Name"] == "terminated"
+    assert record['volume_ids'], 'instance terminated, but disk identities are unknown; retain its reservation'
     for _ in range(12):
         volumes = aws("ec2", "describe-volumes", "--filters",
-                      "Name=tag:Experiment,Values=" + EXPERIMENT)["Volumes"]
-        if not any(v["VolumeId"] in record["volume_ids"] for v in volumes):
+                      "Name=volume-id,Values=" + ','.join(record['volume_ids']))["Volumes"]
+        if not volumes:
             break
         time.sleep(5)
-    assert not any(v["VolumeId"] in record["volume_ids"] for v in volumes)
+    assert not volumes, 'known campaign disk still exists'
     s = state()
     saved = next(x for x in s["leases"] if x["instance_id"] == ident)
-    saved.update(volume_ids=record["volume_ids"], terminated=True, volumes_deleted=True, verified_at=now().isoformat())
+    verified = now().isoformat()
+    saved.update(volume_ids=record["volume_ids"], terminated=True, volumes_deleted=True)
+    if saved.get('verified_at'):
+        saved['cleanup_rechecked_at'] = verified
+    else:
+        saved['verified_at'] = verified
+    # Keep obtained cleanup proof even if conservative reconciliation refuses
+    # to release budget (for example, a verification delayed beyond three hours).
+    persist(s)
+    released = finalize_reserve(saved)
+    s.setdefault('budget_history', []).append({'at': now().isoformat(),
+        'action': 'finalize verified terminated reservation', 'released_usd': released,
+        'after_usd': sum(r['cost_reserved_usd'] for r in s['leases'])})
     persist(s)
     print(json.dumps(saved))
 
@@ -279,7 +332,7 @@ def cleanup():
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("action", choices=["launch", "ready", "ssh", "upload", "download", "terminate", "cleanup", "status"])
+    p.add_argument("action", choices=["launch", "ready", "ssh", "upload", "download", "terminate", "cleanup", "status", "finalize-budget"])
     p.add_argument("args", nargs="*")
     a = p.parse_args()
     # State mutations serialize, preventing two local launches from overspending.
@@ -291,6 +344,7 @@ def main():
         elif a.action in ("upload", "download"): copy(*a.args, download=a.action == "download")
         elif a.action == "terminate": terminate(a.args[0])
         elif a.action == "cleanup": cleanup()
+        elif a.action == "finalize-budget": finalize_budget()
         else: print(json.dumps(state(), indent=2))
 
 

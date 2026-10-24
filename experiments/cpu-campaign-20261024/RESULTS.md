@@ -26,10 +26,14 @@ on another machine. No campaign PR has been merged or released.
 | Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two screens (order limitation below); full AVX-512 11.605 / 12.969. No material gain; no promotion. |
 | Intel Xeon 6975P-C / C8i, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.809 → 1.938 / 12.428 → 12.916 | Two screens (order limitation below); full AVX-512 leads at all tested counts. |
 | Same Xeon 6975P-C, experimental 256-bit AVX-512, 1 / 12 workers | 1.859 / 12.448 | Does not beat full AVX-512; no promotion. |
-| Intel Xeon Platinum 8275CL / Cascade Lake, 12 workers, full AVX-512, baseline → combined `636e688` | 9.312 → 9.024 | Two corrected-order regression pairs both lose about 3%; draft blocker under longer three-way confirmation. |
+| Intel Xeon Platinum 8275CL / Cascade Lake, 12 workers, full AVX-512, baseline → combined `636e688` | 9.303 → 9.036 | Four corrected longer pairs lose 2.60–3.34%; regression retained and repaired below. |
+| Same Cascade Lake, baseline → x86-boundary fix `f20e7bb` | 9.303 → 9.267 | Four pairs: −0.93% to +0.004%; about −0.39% mean. Consistently ahead of the regressed build; no x86 speedup claim. |
+| Same Cascade Lake, published AVX2 / full AVX-512 / experimental 256-bit path, 12 workers | 10.247 / 9.254 / 10.405 | Four corrected longer pairs. AVX2 beats full-width here; narrow path's small advantage does not justify promotion. |
+| Haswell / Xeon E5-2666 v3, final AVX2 regression, 1 / 11 workers | 1.175 → 1.175 / 9.722 → 9.679 | Two balanced pairs; eleven-worker differences −1.30% and +0.41%, so no repeatable loss or gain established. |
+| Zen 1 / EPYC 7571, final AVX2 regression, 1 / 16 workers | 0.901 → 0.905 / 4.594 → 4.596 | Two balanced pairs and native full-size parity; sixteen-worker differences −0.027% to +0.111%, near-flat. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
-Older Intel/Zen results and final Graviton2/3 corrected confirmation remain pending.
+Zen 2 results and final Graviton2/3 corrected confirmation remain pending.
 EPYC evidence from the coordinated session is described separately below; it is
 not relabelled as a v0.2.21 campaign measurement.
 
@@ -182,9 +186,12 @@ An isolated four-line change, `f20e7bb`, keeps the x86 fill wrapper out of line
 without applying that attribute to ARM. The resulting dispatch and all four
 fill functions match the baseline's normalized instruction sequences and sizes.
 See [static evidence](evidence/x86-codegen-review.json). Static equivalence does
-not establish performance recovery: a longer native baseline/`636e688`/fix
-comparison and an ARM regression check are still pending. The ARM PR remains
-draft and the fix is not yet integrated there.
+not establish performance recovery by itself. The completed four-pair native
+comparison measured 9.303 / 9.036 / 9.267 H/s respectively: the fix consistently
+beats the regressed build while retaining a roughly −0.39% baseline-relative mean.
+The ARM check is near-flat (sixteen-worker pairs −0.712% and +0.142%). The fix
+is now incorporated in the ARM PR, which remains draft pending corrected final
+Graviton2/3 confirmation.
 
 The separate combined integration branch includes PRs #40, #41, #43, #44 and
 #45 plus this candidate fix. It passes 497 workspace tests (five ignored),
@@ -224,6 +231,15 @@ underlying diagnostics plus build summaries); strict kernel-crate Clippy passed.
 The Windows cache PR's binary-only check found 61 existing diagnostics, all in
 source files byte-identical to its parent. These are disclosed, not counted as
 passing checks.
+
+[Draft PR #46](https://github.com/zpalmtree/seine/pull/46) separately prototypes
+joint worker-count/kernel exploration. It restores the original configuration
+for confirmation and requires a repeated outer comparison when both change.
+Review found and fixed a quarantine/survivor cancellation issue. The frozen
+review build passes 506 workspace tests (five ignored), full-size local parity,
+all-feature compilation and Windows test cross-compilation. Native convergence,
+productive-window comparisons and pressure/restart checks remain pending; it
+is excluded from the accepted default changes.
 
 ## Coordinated EPYC evidence
 

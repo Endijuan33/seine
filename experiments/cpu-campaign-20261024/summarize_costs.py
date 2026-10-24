@@ -48,16 +48,28 @@ def main():
             'independent_deadline': lease['expires_at'], 'compute_usd_per_hour': lease['hourly_usd'],
             'estimated_compute_usd': compute, 'estimated_root_disk_usd': disk,
             'estimated_ipv4_usd': address, 'reserved_usd': lease['cost_reserved_usd'],
+            'initial_reserved_usd': lease.get('initial_cost_reserved_usd', lease['cost_reserved_usd']),
+            'unused_reservation_released_usd': lease.get('released_reserve_usd', 0),
             'instance_terminated': True, 'root_volumes_deleted': True})
     subtotal = sum(r['estimated_compute_usd'] + r['estimated_root_disk_usd'] + r['estimated_ipv4_usd'] for r in rows)
     reserve = sum(r['reserved_usd'] for r in rows)
     assert reserve <= 40
+    assert subtotal + len(rows) <= 40
+    history = ledger.get('budget_history', [])
+    peak = max([reserve] + [event[field] for event in history
+                           for field in ['before_usd', 'after_usd'] if field in event])
+    assert peak <= 40
     result = {'scope': 'campaign-created rentals only; estimate, not an AWS invoice',
         'basis': 'live AWS Pricing API; launch through verified cleanup; conservative disk/address duration',
         'compute_storage_ipv4_estimate_usd': subtotal,
         'unmetered_transfer_contingency_usd': len(rows),
         'estimate_plus_transfer_contingency_usd': subtotal + len(rows),
         'cumulative_reserved_ceiling_usd': reserve, 'authorized_cap_usd': 40,
+        'initial_reservations_total_usd': sum(r['initial_reserved_usd'] for r in rows),
+        'unused_reservations_released_usd': sum(r['unused_reservation_released_usd'] for r in rows),
+        'maximum_recorded_commitment_usd': peak,
+        'reservation_method': 'Each launch reserves three hours plus transfer allowance. Verified closed leases retain ceil(whole elapsed hours) plus the full transfer allowance; unused live reservations are never released.',
+        'budget_history': history,
         'resources': rows, 'security_group_absence_verified': True,
         'local_ssh_material_removed': True, 'cleanup_verified_at': ledger['cleanup_verified_at'],
         'private_ledger_sha256': hashlib.sha256(ledger_path.read_bytes()).hexdigest(),

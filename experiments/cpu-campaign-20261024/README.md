@@ -11,6 +11,16 @@ cloud credentials and private resource identifiers stay in ignored
 `data/cpu-campaign-20261024/`. No GPU or energy measurements are part of this work.
 The current PoW remains Argon2id v1.3, 2 GiB, one pass and one lane per hash.
 
+Every rental initially reserves three hours of compute, disk and IPv4 charges
+plus a $1 transfer allowance. After **both instance termination and disk deletion
+are verified**, unused reservation is released using elapsed time rounded up to
+whole hours; the entire transfer allowance remains. Original reservations,
+cleanup timestamps, released amounts and cumulative budget history are retained.
+This conservative reconciliation permits final-binary rechecks within the same
+$40 cumulative cap; it does not reset spending or release a live lease's budget.
+`test_budget_reservations.py` checks rounding, cleanup gates and idempotence
+without making AWS calls.
+
 ## Experiment plan and evidence rules
 
 | Area | Question | Required control |
