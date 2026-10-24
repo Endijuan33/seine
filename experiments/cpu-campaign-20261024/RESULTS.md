@@ -20,8 +20,9 @@ on another machine. No campaign PR has been merged or released.
 | Intel Xeon Platinum 8375C / Ice Lake, 1 / 12 workers, 2 MiB HugeTLB, published AVX2 → AVX-512 | 1.449 → 1.853 / 11.139 → 12.118 | Two opposite-order screening passes; full AVX-512 remains the stronger shipping path here. |
 | Same Ice Lake, experimental 256-bit AVX-512, 1 / 12 workers | 1.552 / 11.913 | Slower than full AVX-512 in this screen; remains benchmark-only. |
 | Same Ice Lake, streaming ring at 12 workers | 12.191 | No material improvement over published full AVX-512 (12.112); slower than separately rebuilt default-feature full AVX-512 (12.450). No promotion. |
-| Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.632 → 1.738 / 12.214 → 12.955 | Two opposite-order screening passes. Full AVX-512 leads at every tested worker count. |
-| Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.661 / 12.388 | Slower than full AVX-512; no promotion. |
+| Intel Xeon Platinum 8488C / Sapphire Rapids, 1 / 12 workers, 2 MiB HugeTLB, AVX2 → AVX-512 | 1.617 → 1.726 / 12.512 → 13.099 | Four longer alternating pairs, full AVX-512 +6.13% to +7.97% / +4.05% to +5.27%. Also leads across the preliminary worker-count screen. |
+| Same Sapphire Rapids, experimental 256-bit AVX-512, 1 / 12 workers | 1.654 / 12.737 | Four longer pairs: full AVX-512 +4.10% to +4.62% / +2.22% to +3.10% over this path; no promotion. |
+| Same Sapphire Rapids, streaming ring at 8 / 12 workers | 11.666 / 12.973 | Two opposite-order screens; full AVX-512 11.605 / 12.969. No material gain; no promotion. |
 | Same Ice Lake, independent-hash interleaving, equal 4 GiB arenas | 1.977 versus ordinary SMT 2.232 | Rejected early after both run orders; best interleaving is about 11.4% slower than the same-physical-core SMT control. |
 
 Newer Intel, older Intel/Zen and Graviton4 results remain pending.
@@ -84,7 +85,8 @@ thread count alone cannot hide an undersized backend. The complete fixed Sapphir
 fixed-thread opt-out. Restart recovery reached three workers and 6.028 GiB
 anonymous residency; no OOM kills or quarantine occurred. Both full-arena
 growth/switch tests, full-size ISA parity, 485 workspace tests and strict kernel
-Clippy passed. ARM repeat remains pending.
+Clippy passed. The same complete lifecycle also passed on Graviton2, including
+three workers and 6.028 GiB anonymous residency after constrained restart.
 
 Two clean alternating Ice Lake regression pairs compare the ARM-change build
 against its separately rebuilt CPU-only baseline: approximately −0.29% at one
@@ -97,9 +99,13 @@ probe with explicit 16-CPU affinity, `pids.max=12` and `memory.high=3G` starts
 with the legacy one-slot capacity, but the new sixteen-slot capacity fails at
 worker 9 with EAGAIN. Both use one enabled arena. Owned test units were cleaned
 up. The [reproducer patch](pid-startup-probe.patch), [controller](pid_probe.py)
-and [evidence](evidence/pid-startup-regression.json) are retained. The existing
-autotune owner is implementing focused hardening in a separate worktree; PR #43
-remains draft until this is resolved and validated.
+and [evidence](evidence/pid-startup-regression.json) are retained. The autotune owner implemented focused hardening: nested cgroup PID headroom
+bounds parked slots, adaptive resource-related spawn failures clean up and retry
+with fewer workers, and manual counts retain RAM-safe limits. The same real OS
+probe now passes with four provisioned slots and unchanged stride 16; the legacy
+one-slot control also passes. This probe deliberately bypasses preflight and is
+not a full pool runtime test. PR #43 remains draft while combined native pool
+startup and resource lifecycle checks run on Graviton4 and Xeon 6975P-C.
 
 ## Reviewable changes
 
@@ -113,7 +119,8 @@ remains draft until this is resolved and validated.
   results retain their existing policy.
 - [Draft PR #43](https://github.com/zpalmtree/seine/pull/43): recoverable CPU
   worker capacity after temporary RAM limits, stacked on #41. Native fixed
-  lifecycle passed on Sapphire Rapids; ARM repeat is pending.
+  lifecycle passed on Sapphire Rapids and Graviton2. PID-limit hardening and
+  final combined native confirmation are in progress.
 - [PR #45](https://github.com/zpalmtree/seine/pull/45): native CPU-only Linux
   ARM release archive with kernel tests and full-size reference verification.
   Native source build, package contents/digests and YAML checks pass; the hosted
