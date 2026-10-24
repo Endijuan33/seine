@@ -8,6 +8,30 @@ upgrade: lead with what they gain, keep it brief, skip internal refactors.
 
 ## Unreleased
 
+## v0.2.20
+
+**More reliable CPU thread tuning.** Fresh autotuning now warms each worker's
+memory before measuring hashing speed and excludes setup and teardown from its
+score. This reduces bias against larger worker counts. Failed or panicking
+sample workers release their peers instead of leaving tuning stuck. Fresh
+tuning can take longer because of the warmup; cached choices are refreshed.
+
+**Compare CPU kernels on your own hardware.** Offline benchmarks can explicitly
+select `scalar`, `avx2`, `avx512`, `avx512-256`, or `neon` with
+`--bench-cpu-kernel`, subject to CPU support. This requires CPU-only benchmarks,
+fixed threads and disabled autotuning. The experimental `avx512-256` path uses
+256-bit AVX-512 operations and is never chosen automatically for mining.
+
+**More trustworthy benchmark comparisons.** Reports now identify the selected
+kernel and CPU vendor/family/model/stepping. Baseline comparisons reject
+mismatched or missing CPU kernel identities, including with
+`--bench-baseline-policy ignore-environment`; capture a new baseline for older
+CPU reports. The paired A/B harness supports deliberate cross-kernel tests.
+
+The release includes reproducible results across AMD Zen 1–5 EPYC and five
+Intel server generations. Kernel winners vary with worker count, page backing
+and placement, so the automatic mining ISA preference remains unchanged.
+
 ## v0.2.19
 
 **Adjust CPU threads from the dashboard.** Press `+` or `-` beside the thread
