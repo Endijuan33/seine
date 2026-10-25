@@ -10,6 +10,7 @@
     "commit": "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd",
     "kernel_selection": "explicit --bench-cpu-kernel neon-sha3 (runtime-guarded by is_aarch64_feature_detected!(\"sha3\"); generic build, no RUSTFLAGS)"
   },
+  "terminology": "threads = seine --threads = concurrent 2 GiB hashing workers",
   "metric": "completed hashes / actual elapsed seconds including the round-end fence; mean over invocations (each invocation = 1x20 s warmup + 2x20 s measured rounds)",
   "hosts": [
     {
@@ -103,12 +104,12 @@
         "hugetlb_retry_after_compaction": false
       },
       "kernel_os": "7.0.0-1014-aws",
-      "worker_counts": [
+      "thread_counts": [
         16,
         24,
         26
       ],
-      "max_fitting_workers": 26,
+      "max_fitting_threads": 26,
       "variants_timed": [
         {
           "name": "v022-avx2",
@@ -141,7 +142,7 @@
           "variant": "v022-avx2",
           "kernel": "avx2",
           "binary": "seine-v022",
-          "workers": 16,
+          "threads": 16,
           "samples_completed_hps": [
             11.640957459854471,
             11.60610246280441
@@ -153,7 +154,7 @@
           "variant": "v022-avx2",
           "kernel": "avx2",
           "binary": "seine-v022",
-          "workers": 24,
+          "threads": 24,
           "samples_completed_hps": [
             10.634151368591612,
             10.61589648807283
@@ -165,7 +166,7 @@
           "variant": "v022-avx2",
           "kernel": "avx2",
           "binary": "seine-v022",
-          "workers": 26,
+          "threads": 26,
           "samples_completed_hps": [
             10.401976985901856,
             10.40495526654703
@@ -186,7 +187,7 @@
         "variant": "v022-avx2",
         "kernel": "avx2",
         "binary": "seine-v022",
-        "workers": 16,
+        "threads": 16,
         "n_runs": 4,
         "values_completed_hps": [
           11.640957459854471,
@@ -205,7 +206,7 @@
         "variant": "v022-avx2",
         "kernel": "avx2",
         "binary": "seine-v022",
-        "workers": 24,
+        "threads": 24,
         "n_runs": 4,
         "values_completed_hps": [
           10.634151368591612,
@@ -226,7 +227,7 @@
         "variant": "v022-avx2",
         "kernel": "avx2",
         "binary": "seine-v022",
-        "workers": 16,
+        "threads": 16,
         "mean_completed_hps": 11.625497208243635,
         "n_runs": 4
       },
@@ -256,20 +257,409 @@
       "guest_wall_seconds": 682.499638594,
       "evidence_archive_sha256": "b3c220ef9d3679da228c8f04941814d4ae07bdb6e89312c8421f3eb886d9830d",
       "evidence_files_verified": 57
+    },
+    {
+      "label": "zen5-turin",
+      "host": "Zen 5 Turin",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "complete",
+          "error": null
+        }
+      ],
+      "leases": [
+        {
+          "type": "m8a.8xlarge",
+          "lifecycle": "on-demand",
+          "zone": "us-east-1a",
+          "launched_at": "2026-10-25T04:02:58+00:00",
+          "verified_terminated_at": "2026-10-25T04:34:44.081692+00:00",
+          "ondemand_usd_per_hour": 1.94752,
+          "spot_price_at_launch_usd_per_hour": null,
+          "cost": {
+            "billable_hours_rounded_up_to_minute": 0.5333333333333333,
+            "conservative_usd": 1.1422791598173514,
+            "expected_usd": 1.1422791598173514,
+            "extras_usd": 0.10360182648401826
+          },
+          "state_reason": {
+            "Code": "Client.UserInitiatedShutdown",
+            "Message": "Client.UserInitiatedShutdown: User initiated shutdown"
+          }
+        }
+      ],
+      "status": "complete",
+      "instance_type": "m8a.8xlarge",
+      "lifecycle": "on-demand",
+      "zone": "us-east-1a",
+      "cpu": {
+        "brand": "AMD EPYC 9R45",
+        "vendor": "AuthenticAMD",
+        "family": "26",
+        "model": "2",
+        "stepping": "1",
+        "microcode": "0xb002176",
+        "arm_midr": null,
+        "seine_cpu_identity": {
+          "vendor": "AuthenticAMD",
+          "family": 26,
+          "model": 2,
+          "stepping": 1
+        },
+        "flags": {
+          "avx2": true,
+          "avx512f": true,
+          "avx512vl": true,
+          "avx512_vnni": true,
+          "amx_tile": false,
+          "sha3": false,
+          "asimd": false,
+          "sve": false,
+          "sve2": false
+        }
+      },
+      "topology": {
+        "logical_cpus": 32,
+        "physical_cores": 32,
+        "threads_per_core": 1,
+        "sockets": 1,
+        "numa_nodes": 1,
+        "numa_node_cpus": {
+          "node0": "0-31"
+        },
+        "l3_instances": [
+          {
+            "shared_cpu_list": "0-7",
+            "size": "32768K"
+          },
+          {
+            "shared_cpu_list": "16-23",
+            "size": "32768K"
+          },
+          {
+            "shared_cpu_list": "24-31",
+            "size": "32768K"
+          },
+          {
+            "shared_cpu_list": "8-15",
+            "size": "32768K"
+          }
+        ]
+      },
+      "memory": {
+        "mem_total_gib": 123.45113754272461,
+        "mem_available_before_gib": 121.40557098388672,
+        "hugetlb_2mib_pages_reserved": 34407,
+        "ordinary_available_after_reservation_gib": 54.22179412841797,
+        "hugetlb_restored_to_zero": true,
+        "hugetlb_retry_after_compaction": false
+      },
+      "kernel_os": "7.0.0-1014-aws",
+      "thread_counts": [
+        16,
+        24,
+        30,
+        32
+      ],
+      "max_fitting_threads": 32,
+      "variants_timed": [
+        {
+          "name": "v022-avx2",
+          "binary": "seine-v022",
+          "kernel": "avx2"
+        },
+        {
+          "name": "v022-avx512",
+          "binary": "seine-v022",
+          "kernel": "avx512"
+        },
+        {
+          "name": "v022-avx512-256-stream",
+          "binary": "seine-v022",
+          "kernel": "avx512-256-stream"
+        }
+      ],
+      "parity": {
+        "verify-v022-x86": {
+          "exit_code": 0,
+          "passed": [
+            "scalar",
+            "avx2",
+            "avx512",
+            "avx512-256",
+            "avx512-256-stream"
+          ],
+          "unsupported": [
+            "neon"
+          ],
+          "sha256": "8e1e21ea79e5784b05787164e3ee647aca260545588f828d4dbd121d2f969b1b",
+          "covers_binary": [
+            "seine-v022"
+          ],
+          "status": null
+        }
+      },
+      "grid": [
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "threads": 16,
+          "samples_completed_hps": [
+            33.08252325381585,
+            32.82597375013262
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 32.954248501974234
+        },
+        {
+          "variant": "v022-avx512",
+          "kernel": "avx512",
+          "binary": "seine-v022",
+          "threads": 16,
+          "samples_completed_hps": [
+            32.72126372741622,
+            32.67018271586097
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 32.695723221638595
+        },
+        {
+          "variant": "v022-avx512-256-stream",
+          "kernel": "avx512-256-stream",
+          "binary": "seine-v022",
+          "threads": 16,
+          "samples_completed_hps": [
+            37.772110333562374,
+            37.75084512630811
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 37.76147772993524
+        },
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "threads": 24,
+          "samples_completed_hps": [
+            36.744464977997545,
+            36.781537685939696
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 36.763001331968624
+        },
+        {
+          "variant": "v022-avx512",
+          "kernel": "avx512",
+          "binary": "seine-v022",
+          "threads": 24,
+          "samples_completed_hps": [
+            36.124499898454296,
+            36.19247925439131
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 36.1584895764228
+        },
+        {
+          "variant": "v022-avx512-256-stream",
+          "kernel": "avx512-256-stream",
+          "binary": "seine-v022",
+          "threads": 24,
+          "samples_completed_hps": [
+            46.05892581935124,
+            46.101684420362886
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 46.08030511985706
+        },
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "threads": 30,
+          "samples_completed_hps": [
+            37.72178274294269,
+            37.67431012601699
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 37.69804643447984
+        },
+        {
+          "variant": "v022-avx512",
+          "kernel": "avx512",
+          "binary": "seine-v022",
+          "threads": 30,
+          "samples_completed_hps": [
+            37.38210892520468,
+            37.37474309781044
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 37.37842601150756
+        },
+        {
+          "variant": "v022-avx512-256-stream",
+          "kernel": "avx512-256-stream",
+          "binary": "seine-v022",
+          "threads": 30,
+          "samples_completed_hps": [
+            48.58545977101987,
+            48.5748671368963
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 48.580163453958086
+        },
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "threads": 32,
+          "samples_completed_hps": [
+            37.68258130884069,
+            37.73336133747981
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 37.70797132316025
+        },
+        {
+          "variant": "v022-avx512",
+          "kernel": "avx512",
+          "binary": "seine-v022",
+          "threads": 32,
+          "samples_completed_hps": [
+            37.6234359174106,
+            37.61713618772593
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 37.62028605256827
+        },
+        {
+          "variant": "v022-avx512-256-stream",
+          "kernel": "avx512-256-stream",
+          "binary": "seine-v022",
+          "threads": 32,
+          "samples_completed_hps": [
+            49.39867094628691,
+            49.38209555141202
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 49.39038324884947
+        }
+      ],
+      "grid_order": [
+        "p1-w16-v022-avx2",
+        "p1-w16-v022-avx512",
+        "p1-w16-v022-avx512-256-stream",
+        "p1-w24-v022-avx2",
+        "p1-w24-v022-avx512",
+        "p1-w24-v022-avx512-256-stream",
+        "p1-w30-v022-avx2",
+        "p1-w30-v022-avx512",
+        "p1-w30-v022-avx512-256-stream",
+        "p1-w32-v022-avx2",
+        "p1-w32-v022-avx512",
+        "p1-w32-v022-avx512-256-stream",
+        "p2-w32-v022-avx512-256-stream",
+        "p2-w32-v022-avx512",
+        "p2-w32-v022-avx2",
+        "p2-w30-v022-avx512-256-stream",
+        "p2-w30-v022-avx512",
+        "p2-w30-v022-avx2",
+        "p2-w24-v022-avx512-256-stream",
+        "p2-w24-v022-avx512",
+        "p2-w24-v022-avx2",
+        "p2-w16-v022-avx512-256-stream",
+        "p2-w16-v022-avx512",
+        "p2-w16-v022-avx2"
+      ],
+      "best_grid_cell": {
+        "variant": "v022-avx512-256-stream",
+        "kernel": "avx512-256-stream",
+        "binary": "seine-v022",
+        "threads": 32,
+        "n_runs": 4,
+        "values_completed_hps": [
+          49.39867094628691,
+          49.38209555141202,
+          49.39705817953632,
+          49.395715380228886
+        ],
+        "mean_completed_hps": 49.39338501436603,
+        "stdev_completed_hps": 0.007622681013159734,
+        "confirm_values": [
+          49.39705817953632,
+          49.395715380228886
+        ]
+      },
+      "runner_up_cell": {
+        "variant": "v022-avx2",
+        "kernel": "avx2",
+        "binary": "seine-v022",
+        "threads": 32,
+        "n_runs": 4,
+        "values_completed_hps": [
+          37.68258130884069,
+          37.73336133747981,
+          37.75294619469335,
+          37.710365555751515
+        ],
+        "mean_completed_hps": 37.71981359919134,
+        "stdev_completed_hps": 0.030314018028127068,
+        "confirm_values": [
+          37.75294619469335,
+          37.710365555751515
+        ]
+      },
+      "runner_up_basis": "second kernel at best worker count",
+      "confirmation_reversed_grid_choice": false,
+      "best": {
+        "variant": "v022-avx512-256-stream",
+        "kernel": "avx512-256-stream",
+        "binary": "seine-v022",
+        "threads": 32,
+        "mean_completed_hps": 49.39338501436603,
+        "n_runs": 4
+      },
+      "rejected_invocations": [],
+      "skipped_for_deadline": [],
+      "accepted_invocations": 28,
+      "max_steal_pct": 0.000997690346847049,
+      "binaries": {
+        "seine-v022": {
+          "sha256": "d336f33f6f610b868a2f0f6ccedfa7316481c62fb4e209db4a8b5d891a6df260",
+          "seine_version": "0.2.22",
+          "git_commit_label": "6e5411768d5d",
+          "source_fingerprint": "7ad8df30888fb8f1",
+          "build_features": "default,nvidia"
+        }
+      },
+      "pricing": {
+        "ondemand_usd_per_hour": 1.94752,
+        "ondemand_source": {
+          "usd_per_hour": 1.94752,
+          "source": "AWS Pricing API get-products",
+          "retrieved_utc": "2026-10-25T04:02:34.377774+00:00"
+        },
+        "spot_price_paid_usd_per_hour": null,
+        "hps_per_ondemand_usd_per_hour": 25.362196544510986
+      },
+      "guest_wall_seconds": 1812.7158783759999,
+      "evidence_archive_sha256": "babf20fc1b9f01f8ef323bdf3f5869e6c5ca719f3dacb61afc88da2f496c9aea",
+      "evidence_files_verified": 111
     }
   ],
   "cost": {
-    "leases": 1,
-    "closed_verified": 1,
-    "conservative_total_usd": 0.3666632420091324,
-    "expected_total_usd": 0.3666632420091324,
+    "leases": 2,
+    "closed_verified": 2,
+    "conservative_total_usd": 1.5089424018264839,
+    "expected_total_usd": 1.5089424018264839,
     "basis": "per-lease launch -> verified termination, rounded up to the minute; on-demand rate (spot unavailable), + 16 GiB gp3 + public IPv4 + $0.10 transfer contingency per lease",
     "budget_cap_usd": 30,
-    "launch_stop_usd": 28.0
+    "launch_stop_usd": 67.0
   },
   "spot_blocked": {
-    "at": "2026-10-25T01:11:47.494982+00:00",
-    "reason": "AuthFailure.ServiceLinkedRoleCreationNotPermitted: The provided credentials do not have permission to create the service-linked role for EC2 Spot Instances. (first Milan launch attempt 01:11 UTC; no instance created)"
+    "at": "2026-10-25T04:02:55.455845+00:00",
+    "reason": "aws: [ERROR]: An error occurred (AuthFailure.ServiceLinkedRoleCreationNotPermitted) when calling the RunInstances operation: The provided credentials do not have permission to create the service-linked role for EC2 Spot Instances."
   },
   "cleanup": {
     "final_audit": null,

@@ -25,15 +25,16 @@ RELEASE_COMMIT = '6e5411768d5d67365ecaff3abc30d280fb30cb0d'
 F20_COMMIT = 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd'
 VERIFIER_X86_COMMIT = '4f5fec9119fdfe6c9d24608fe9bc2a42eec49b4f'
 
-HOSTS = {
-    'zen1-naples': ('m5a.8xlarge', 'amd64'), 'zen2-rome': ('c5a.8xlarge', 'amd64'),
-    'zen3-milan': ('c6a.8xlarge', 'amd64'), 'zen4-genoa': ('c7a.8xlarge', 'amd64'),
-    'zen5-turin': ('c8a.8xlarge', 'amd64'), 'broadwell': ('r4.8xlarge', 'amd64'),
-    'skylake': ('m5.8xlarge', 'amd64'), 'skylake-r5': ('r5.8xlarge', 'amd64'),
-    'cascadelake': ('m5n.8xlarge', 'amd64'), 'icelake': ('c6i.8xlarge', 'amd64'),
-    'sapphirerapids': ('c7i.8xlarge', 'amd64'), 'graniterapids': ('c8i.8xlarge', 'amd64'),
-    'graviton2': ('c6g.8xlarge', 'arm64'), 'graviton3': ('c7g.8xlarge', 'arm64'),
-    'graviton4': ('c8g.8xlarge', 'arm64'),
+HOSTS = {  # label: (preferred type, arch, fallback type if preferred has no capacity)
+    'zen1-naples': ('m5a.8xlarge', 'amd64', None), 'zen2-rome': ('c5a.8xlarge', 'amd64', None),
+    'zen3-milan': ('c6a.8xlarge', 'amd64', None),
+    'zen4-genoa': ('m7a.8xlarge', 'amd64', 'c7a.8xlarge'), 'zen5-turin': ('m8a.8xlarge', 'amd64', 'c8a.8xlarge'),
+    'broadwell': ('r4.8xlarge', 'amd64', None),
+    'skylake': ('m5.8xlarge', 'amd64', None), 'skylake-r5': ('r5.8xlarge', 'amd64', None),
+    'cascadelake': ('m5n.8xlarge', 'amd64', None), 'icelake': ('c6i.8xlarge', 'amd64', None),
+    'sapphirerapids': ('c7i.8xlarge', 'amd64', None), 'graniterapids': ('c8i.8xlarge', 'amd64', None),
+    'graviton2': ('m6g.8xlarge', 'arm64', 'c6g.8xlarge'), 'graviton3': ('m7g.8xlarge', 'arm64', 'c7g.8xlarge'),
+    'graviton4': ('m8g.8xlarge', 'arm64', 'c8g.8xlarge'),
 }
 
 X86_FILES = {'seine-v022': ROOT / 'release/x-x86_64/seine',
@@ -144,7 +145,7 @@ print(json.dumps({'sha256':hashlib.sha256((root/'evidence.tar.gz').read_bytes())
 
 
 def run(label, attempt):
-    instance_type, arch = HOSTS[label]
+    instance_type, arch, fallback = HOSTS[label]
     files, config = host_config(label, arch)
     hostdir = ROOT / label
     hostdir.mkdir(parents=True, exist_ok=True)
@@ -163,7 +164,13 @@ def run(label, attempt):
             assert time.monotonic() - waited < 4 * 3600, 'on-demand quota never became free'
             print('waiting for free on-demand quota', json.dumps(q), cloud.now().isoformat(), flush=True)
             time.sleep(120)
-    record = cloud.launch(label, instance_type, arch)
+    try:
+        record = cloud.launch(label, instance_type, arch)
+    except RuntimeError as error:
+        if not fallback or 'no capacity' not in str(error):
+            raise
+        print('preferred type unavailable; falling back to', fallback, str(error)[:300], flush=True)
+        record = cloud.launch(label, fallback, arch)
     ident = record['instance_id']
     print('launched', json.dumps({k: record[k] for k in ('instance_id', 'lifecycle', 'zone',
           'spot_price_at_launch_usd_per_hour', 'ondemand_usd_per_hour')}), flush=True)

@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 import cloud
 
@@ -35,6 +36,9 @@ def run(label):
                                '--attempt', str(attempt)], stdout=f, stderr=subprocess.STDOUT).returncode
     tail = log.read_text().strip().splitlines()[-3:]
     print('END', label, 'exit', code, '|', ' / '.join(tail)[-400:], flush=True)
+    # Keep summary.json current after every host (coordinator request).
+    summary = subprocess.run([sys.executable, str(HERE / 'summarize.py')], capture_output=True, text=True)
+    print('SUMMARY', summary.returncode, summary.stdout.strip().splitlines()[-2:] if summary.stdout else summary.stderr[-300:], flush=True)
     return code
 
 
@@ -48,6 +52,13 @@ def skylake_is_cascade(label):
 def main():
     labels = sys.argv[1:]
     for label in labels:
+        # Coordinator quota hand-offs: hold before any launch while HOLD exists.
+        announced = False
+        while (cloud.ROOT / 'HOLD').exists():
+            if not announced:
+                print('HOLD present; not launching', label, cloud.now().isoformat(), flush=True)
+                announced = True
+            time.sleep(20)
         if done(label):
             print('SKIP done', label, flush=True)
             continue

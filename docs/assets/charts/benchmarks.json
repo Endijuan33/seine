@@ -19,10 +19,10 @@
   "servers": [
     {
       "name": "AMD EPYC 9R45",
-      "sub": "Zen 5 Turin · 24 threads",
+      "sub": "Zen 5 Turin · 32 threads",
       "category": "amd",
-      "hps": 44.742,
-      "source": "experiments/epyc-investigation/INTEGRATED_VALIDATION.md (c8a.8xlarge, streaming kernel)"
+      "hps": 49.393,
+      "source": "experiments/readme-hardware-20261025 (m8a.8xlarge, streaming kernel)"
     },
     {
       "name": "AMD EPYC 9R14",
@@ -112,9 +112,9 @@
   "best": [
     {
       "name": "AMD EPYC · Zen 5",
-      "sub": "EPYC 9R45 server · 24 threads",
+      "sub": "EPYC 9R45 server · 32 threads",
       "category": "amd",
-      "hps": 44.742
+      "hps": 49.393
     },
     {
       "name": "AMD EPYC · Zen 4",

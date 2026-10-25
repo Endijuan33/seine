@@ -25,8 +25,8 @@ ROOT = REPO / 'data/readme-hardware-20261025'
 EXPERIMENT = 'readme-hardware-20261025'
 CAMPAIGN = 'seine-readme-benchmarks'
 PROJECT = 'seine-avx2-validation'  # IAM-required tag value for this role
-BUDGET_STOP_USD = 28.0
-TIMER_MINUTES = 40
+BUDGET_STOP_USD = 67.0  # cap raised to $70 by the user at ~03:55 UTC (was $30 / stop $28)
+TIMER_MINUTES = 50  # wider 4-count sweeps (was 40)
 EBS_GIB = 16
 EBS_USD_PER_GIB_MONTH = 0.08
 IPV4_USD_PER_HOUR = 0.005
@@ -225,9 +225,7 @@ chmod 600 /home/ubuntu/.ssh/authorized_keys
     plans = []
     q = quota_room('spot', vcpus)
     attempts.append({'quota_spot': q})
-    if s.get('spot_blocked'):
-        attempts.append({'spot_skipped': s['spot_blocked']['reason']})
-    elif q['fits']:
+    if q['fits']:  # retried every launch: a refusal is free and the role may be added later
         plans += [('spot', z) for z in zones if z in spot]
     answer = None
     lifecycle = None
