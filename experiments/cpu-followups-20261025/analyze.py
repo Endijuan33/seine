@@ -83,10 +83,13 @@ def analyze(root):
         caches = {p.name: read(p) for p in folder.glob('tuning.json*') if p.is_file()}
         start = re.search(r'starting with (\d+) threads \(([^)]+)\)', text)
         assert start
+        identity = read(folder / 'identity.json')
         result['productive'][folder.name] = {'window': window, 'caches': caches,
+            'cache_mode': 'warm' if identity['cache_source'] else 'cold',
+            'scope_note': 'Classify by cache_source and startup log; the early Intel harness used a cold-cache scope string for both modes.',
             'starting_threads': int(start[1]), 'starting_reason': start[2],
             'trajectory': [line for line in text.splitlines() if ('autotune' in line.lower() or 'cpu-kernel' in line.lower())],
-            'identity': read(folder / 'identity.json')}
+            'identity': identity}
     assert len(result['productive']) == 8
     for name, run in result['productive'].items():
         if name.startswith('joint-warm-'):

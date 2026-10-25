@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Observe default joint tuning against a loopback pool on an owned EC2 guest.
 
-This is a bounded behavioral experiment, not a throughput benchmark. Explicit
-12-worker and memory bounds protect the 32-GiB guest; kernel selection remains
-automatic. Retain the trajectory even when it fails to find a known crossover.
+This measures bounded productive behavior including startup, rather than an
+isolated kernel. Explicit 12/24-worker bounds protect the 32/64-GiB guests;
+kernel selection remains automatic. Retain unsuccessful trajectories too.
 """
 import argparse
 import datetime
@@ -165,7 +165,7 @@ def main():
         'completed_hashes_lower_bound': final_hashes,
         'elapsed_start_request_through_stopped_seconds': elapsed,
         'completed_hps_lower_bound': final_hashes / elapsed,
-        'scope': 'Cold-cache real pool runtime including startup, productive trials and shutdown; log counters may omit final unreported hashes. Not a fixed-kernel throughput benchmark.'}, indent=2) + '\n')
+        'scope': ('Cached-restart' if args.cache_source else 'Cold-cache') + ' real pool runtime including startup, productive trials and shutdown; log counters may omit final unreported hashes. Not a fixed-kernel throughput benchmark.'}, indent=2) + '\n')
     (out / 'COMPLETE').write_text(datetime.datetime.now(datetime.timezone.utc).isoformat() + '\n')
     print(args.label, 'complete; owned service stopped and hugepage pool released', flush=True)
 
