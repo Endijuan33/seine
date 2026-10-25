@@ -3,8 +3,8 @@
 Hardware measurements finished at **13:40:36 EDT**: six completed datasets provide
 **33 reusable benchmark records**. The accepted short-sample policy and its
 evidence are landed on `master`. The combined page/power comparison remains
-unmeasured. **Cherry provider deletion and final billing verification are still
-pending authentication**; this report does not claim rental cleanup is complete.
+unmeasured. **Rental cleanup is verified for both providers.** Cherry reports
+USD 13.20 consumed; the final AWS charge remains unavailable to the benchmark role.
 
 ## Measured results
 
@@ -183,20 +183,24 @@ This is build preparation, not native HIP validation or a GPU performance point.
 
 ## Rentals and accounting
 
-The approved campaign limit is USD 25. Current reservations are USD 13.20 for
-Cherry and USD 3.25 for AWS, USD 16.45 total. Account top-ups are credit funding,
-not a second rental charge. Final Cherry consumption and cleanup are pending.
-The conservative estimate at **13:52 EDT** is **USD 15.965**: eleven started
-Cherry hours at USD 1.20 (USD 13.20) plus the closed AWS estimate below. This is
-not a provider invoice or a current portal balance. The last confirmed Cherry
-charge reading was USD 7.20 at **09:37 EDT**; later access needs fresh login.
+The approved campaign limit was USD 25. Reservations were USD 13.20 for Cherry
+and USD 3.25 for AWS, USD 16.45 total. Account top-ups are credit funding, not a
+second rental charge. After authenticated access was restored, Cherry's portal
+showed **no deployed servers, USD 0 hourly usage, USD 13.20 spent and USD 0.80
+credit remaining**, verified at **15:13 EDT**. The server was already absent;
+this final check did not issue a termination. Its removal time and reason were
+not established by the available activity log, so compliance with the planned
+**14:25 EDT** deletion deadline and **14:42:52 EDT** goal deadline is unverified.
+All evidence had been collected before access was lost to the server. The task
+SSH key was removed from the provider and locally after cleanup verification.
+No additional funding, rental or extension was made during this final check.
 
 The AWS instance, root volume and security group were removed at **07:44 EDT**
-after collection; its conservative duration-based estimate is USD 2.765 including
-IPv4, storage and a transfer allowance, not a provider invoice. All owned Cherry
-measurement services are inactive and its complete evidence is local. The idle
-rental is ready for immediate provider deletion and must be terminated by
-**14:25 EDT**; OS shutdown alone does not end billing, as the
-[provider FAQ](https://www.cherryservers.com/knowledge/faq) explains. The full goal
-ends at **14:42:52 EDT**. A manual authentication handoff is pending; no further
-rental or extension was started while cleanup access was unavailable.
+after collection. Its conservative duration-based estimate is USD 2.765 including
+IPv4, storage and a transfer allowance. A single resource-scoped Cost Explorer
+request at **14:11 EDT** was denied because the benchmark role lacks
+`ce:GetCostAndUsageWithResources`; no billing settings or permissions were changed.
+The final AWS charge remains unverified. Including a separate USD 0.01 allowance
+for that API request, the combined accounting estimate is **USD 15.975**. Only
+the Cherry USD 13.20 portion is provider-confirmed consumption; this combined
+figure is not an invoice or a confirmed final campaign total.
