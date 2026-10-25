@@ -225,3 +225,69 @@ preference or autotuning policy is introduced here.
 The [2026-10-24 architecture matrix](../experiments/cpu-architecture-20261024/README.md)
 records real AMD Zen 1–5 and five Intel server generations, including the
 worker-count and page-backing limits of those measurements.
+
+## Independent pool-work verification
+
+`scripts/bench_pool_work.py` serves deterministic local Stratum jobs and records
+every submitted hash, nonce, job and arrival time. It acknowledges receipt;
+`verified: false` means that acknowledgment is **not** cryptographic validation.
+The all-target workload submits every computed hash and is a synthetic throughput
+test, not a live-pool earnings estimate.
+
+Run unfamiliar miners inside an isolated environment without host credentials or
+external network access. The receiver itself does not provide that isolation.
+It uses a dummy address and listens only on loopback. To include Seine's fixed
+developer endpoint, map `bntpool.com` to `127.0.0.1` **inside the disposable
+environment only** and set `--listen-port 3333`. The user URL remains localhost,
+so this measures the generic-pool fee rather than the bntpool discount. Allow
+enough time to pass Seine's initial fee grace and verify that fee receipts exist.
+
+Inside that environment, a cold-start capture can use:
+
+```sh
+python3 scripts/bench_pool_work.py --output results/cold-1 \
+  --miner seine --executable ./seine --seconds 900 --warmup 0 \
+  --window-origin launch --listen-port 3333 -- \
+  --backend cpu --ui plain --data-dir results/cache-1
+```
+
+Omit tuning overrides for shipping-default comparisons. Use fresh directories
+for cold runs and each miner's own saved cache for warm restarts. Preserve the
+executable checksum, host topology, memory/page backing, drivers and exact
+commands separately. Interleave repeated runs and calculate uncertainty across
+pairs; individual hashes are not independent benchmark repetitions.
+
+For a separate job-change experiment, add `--job-secs 60 --stale-grace 0`.
+The receiver replaces jobs, changes their headers and nonce ranges, and rejects
+superseded work. An explicit positive grace accepts old jobs only within that
+window. Every receipt retains its original job/header, including rejected work.
+This distinguishes correct but stale hashes from useful throughput. Keep these
+results separate from static-job baselines and label the chosen interval/grace.
+
+After timed mining has stopped, verify captures using the independent system
+`libargon2` implementation (Argon2id v19, 2 GiB, one pass, one lane):
+
+```sh
+python3 scripts/verify_pool_work.py results/cold-1/work.json \
+  --cache private-reference-cache.json
+```
+
+Never mount the trusted reference cache into a miner's environment. The verifier
+rejects malformed jobs, wrong hashes, duplicate work and incomplete measurements.
+`verified_unique_hps` includes all unique correct hashes within the window;
+`verified_user_hps` excludes fee work and receipts rejected as stale. Both use
+the complete measured window, including startup when anchored to launch.
+
+For many captures, build the shared reference cache first on an otherwise idle
+Linux verifier host. Each process needs about 2 GiB; the builder checks available
+memory and CPU affinity and refuses concurrent cache writers:
+
+```sh
+python3 scripts/build_reference_cache.py results/*/work.json \
+  --cache private-reference-cache.json --workers 8
+```
+
+Then run the full verifier on **every** capture. A sampled correctness audit is
+useful during investigation but does not establish fully verified throughput.
+Do not infer energy efficiency from CPU TDP or VM rental price; record measured
+package or whole-system energy separately when trustworthy counters exist.
