@@ -759,6 +759,8 @@ pub struct Config {
     pub backend_specs: Vec<BackendSpec>,
     pub threads: usize,
     pub cpu_auto_threads_cap: usize,
+    /// Recheck RAM after teardown for interactive/API thread overrides.
+    pub cpu_manual_memory_check: bool,
     /// Frozen automatic worker slots for this run; distinct from the RAM-safe
     /// manual/offline ceiling and the CPU-only cache/search maximum.
     pub cpu_autotune_worker_slots: Option<usize>,
@@ -1277,6 +1279,7 @@ impl Config {
             backend_specs,
             threads: resolved_threads,
             cpu_auto_threads_cap: auto_threads_cap,
+            cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,
             cpu_memory_reserve_percent: cli.cpu_memory_reserve_percent,
             cpu_affinity: cli.cpu_affinity,

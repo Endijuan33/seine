@@ -373,11 +373,18 @@ fn spawn_tui_render_worker(
         while !render_stop_flag.load(Ordering::Relaxed) && !shutdown.load(Ordering::Relaxed) {
             match render_signal_rx.recv_timeout(Duration::from_millis(100)) {
                 Ok(RenderSignal::RenderNow) => {
-                    if let Ok(locked) = state.lock() {
+                    if let Ok(mut locked) = state.lock() {
+                        locked.poll_thread_rejection();
                         let _ = renderer.render(&locked);
                     }
                 }
-                Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                    if let Ok(mut locked) = state.lock() {
+                        if locked.poll_thread_rejection() {
+                            let _ = renderer.render(&locked);
+                        }
+                    }
+                }
                 Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
             }
         }

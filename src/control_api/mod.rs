@@ -712,6 +712,7 @@ impl MinerSupervisor {
         let thread_control = ThreadControl {
             run_id,
             sender: self.thread_changes_tx.clone(),
+            memory: None,
             max_threads: cfg.cpu_auto_threads_cap,
             current_threads: cfg.threads,
             quit_requested: Arc::new(AtomicBool::new(false)),
@@ -933,7 +934,20 @@ impl MinerSupervisor {
                 .or(state.effective_config.as_ref())
                 .cloned()
                 .ok_or_else(|| anyhow!("no active mining configuration"))?;
-            apply_runtime_thread_count(&mut cfg, request.threads, request.max_threads)?;
+            let admission = request
+                .memory
+                .as_ref()
+                .ok_or_else(|| anyhow!("RAM check unavailable; try again."))
+                .and_then(|guard| guard.validate(request.threads))
+                .and_then(|()| {
+                    apply_runtime_thread_count(&mut cfg, request.threads, request.max_threads)
+                });
+            if let Err(err) = admission {
+                if let Some(reply) = &request.rejection {
+                    let _ = reply.try_send(format!("{err:#}"));
+                }
+                return Err(err);
+            }
             state.staged_config = Some(cfg);
         }
         crate::miner::ui::info(
@@ -1943,6 +1957,7 @@ fn apply_start_patch(cfg: &mut Config, patch: &StartRequest) -> Result<()> {
             bail!("threads must be >= 1");
         }
         cfg.threads = threads;
+        cfg.cpu_manual_memory_check = true;
         if patch.cpu_autotune_threads.is_none() {
             cfg.cpu_autotune_threads = false;
         }
@@ -2600,6 +2615,7 @@ mod tests {
         apply_thread_count(&mut cfg, 4).unwrap();
         assert_eq!(cfg.threads, 4);
         assert_eq!(cfg.backend_specs[0].cpu_threads, Some(4));
+        assert!(cfg.cpu_manual_memory_check);
         assert_eq!(cfg.backend_specs[1], gpu);
         assert_eq!(cfg.api_url, endpoint);
         assert!(!cfg.cpu_autotune_threads);
@@ -2631,6 +2647,46 @@ mod tests {
     }
 
     #[test]
+    fn rejected_thread_request_keeps_session_and_config_and_replies() {
+        let mut cfg = crate::miner::tests::test_config();
+        // Deterministic zero headroom without allocating RAM or relying on this host.
+        cfg.cpu_memory_reserve_percent = 100;
+        let supervisor = MinerSupervisor::new(cfg.clone(), Arc::new(AtomicBool::new(false)));
+        let session_shutdown = Arc::new(AtomicBool::new(false));
+        {
+            let mut state = supervisor.state.lock().unwrap();
+            state.lifecycle = MinerLifecycle::Running;
+            state.run_id = 2;
+            state.effective_config = Some(cfg.clone());
+            state.session_shutdown = Some(Arc::clone(&session_shutdown));
+        }
+        let (reply, received) = crossbeam_channel::bounded(1);
+        supervisor
+            .thread_changes_tx
+            .send(ThreadChangeRequest {
+                max_threads: 8,
+                run_id: 2,
+                threads: 2,
+                memory: Some(Arc::new(
+                    crate::miner::thread_control::ThreadMemoryGuard::new(&cfg, vec![]),
+                )),
+                rejection: Some(reply),
+                quit_requested: Arc::new(AtomicBool::new(false)),
+            })
+            .unwrap();
+        assert!(supervisor.apply_pending_thread_change().is_err());
+        assert!(received.try_recv().unwrap().contains("Not enough RAM"));
+        assert!(!session_shutdown.load(Ordering::SeqCst));
+        let state = supervisor.state.lock().unwrap();
+        assert!(state.staged_config.is_none());
+        assert_eq!(
+            state.effective_config.as_ref().unwrap().threads,
+            cfg.threads
+        );
+        assert_eq!(state.metrics.restart_requests, 0);
+    }
+
+    #[test]
     fn stale_thread_requests_cannot_stop_or_modify_a_new_session() {
         let cfg = crate::miner::tests::test_config();
         let supervisor = MinerSupervisor::new(cfg.clone(), Arc::new(AtomicBool::new(false)));
@@ -2646,6 +2702,8 @@ mod tests {
             .thread_changes_tx
             .send(ThreadChangeRequest {
                 max_threads: 8,
+                memory: None,
+                rejection: None,
                 run_id: 1,
                 threads: 1,
                 quit_requested: Arc::new(AtomicBool::new(false)),
@@ -2666,6 +2724,8 @@ mod tests {
             .thread_changes_tx
             .send(ThreadChangeRequest {
                 max_threads: 8,
+                memory: None,
+                rejection: None,
                 run_id: 0,
                 threads: 1,
                 quit_requested: Arc::new(AtomicBool::new(false)),

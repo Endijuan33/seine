@@ -13,7 +13,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Terminal;
 
 use super::thread_control::{ThreadChangeRequest, ThreadControl};
@@ -126,6 +126,7 @@ pub struct TuiStateInner {
     pub thread_control: Option<ThreadControl>,
     pub thread_change_pending: bool,
     pub thread_notice: Option<String>,
+    thread_rejection: Option<crossbeam_channel::Receiver<String>>,
     pub refresh_secs: u64,
     pub sse_enabled: bool,
     pub backends_desc: String,
@@ -179,6 +180,7 @@ impl TuiStateInner {
             thread_control: None,
             thread_change_pending: false,
             thread_notice: None,
+            thread_rejection: None,
             refresh_secs: 0,
             sse_enabled: false,
             backends_desc: String::new(),
@@ -201,6 +203,20 @@ impl TuiStateInner {
         self.log_entries.push_back(entry);
     }
 
+    pub(super) fn poll_thread_rejection(&mut self) -> bool {
+        if let Some(message) = self
+            .thread_rejection
+            .as_ref()
+            .and_then(|rx| rx.try_recv().ok())
+        {
+            self.thread_change_pending = false;
+            self.thread_notice = Some(message);
+            self.thread_rejection = None;
+            return true;
+        }
+        false
+    }
+
     /// Returns true only for an explicit quit. No backend work runs on the UI thread.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
         if key.kind != KeyEventKind::Press {
@@ -214,21 +230,37 @@ impl TuiStateInner {
             }
             return true;
         }
+        self.poll_thread_rejection();
+        if !matches!(
+            key.code,
+            KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Char('-')
+        ) {
+            return false;
+        }
         let Some(control) = self.thread_control.as_ref() else {
+            self.thread_notice =
+                Some("Thread controls unavailable: no active CPU backend.".to_string());
             return false;
         };
         if self.thread_change_pending {
+            self.thread_notice = Some("Thread change in progress; please wait.".to_string());
             return false;
         }
         let threads = match key.code {
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 if control.current_threads >= control.max_threads {
+                    self.thread_notice = Some(format!(
+                        "Thread limit: {} (RAM/CPU cap). Cannot add a worker.",
+                        control.max_threads
+                    ));
                     return false;
                 }
                 control.current_threads + 1
             }
             KeyCode::Char('-') => {
                 if control.current_threads <= 1 {
+                    self.thread_notice =
+                        Some("Minimum: 1 CPU thread. Cannot reduce further.".to_string());
                     return false;
                 }
                 control.current_threads - 1
@@ -238,7 +270,10 @@ impl TuiStateInner {
         if threads == control.current_threads {
             return false;
         }
+        let (rejection, receiver) = crossbeam_channel::bounded(1);
         let request = ThreadChangeRequest {
+            memory: control.memory.clone(),
+            rejection: Some(rejection),
             max_threads: control.max_threads.max(control.current_threads),
             run_id: control.run_id,
             threads,
@@ -247,8 +282,9 @@ impl TuiStateInner {
         self.thread_notice = Some(match control.sender.try_send(request) {
             Ok(()) => {
                 self.thread_change_pending = true;
+                self.thread_rejection = Some(receiver);
                 format!(
-                    "Restarting: {} -> {threads} threads...",
+                    "Checking RAM: {} -> {threads} threads...",
                     control.current_threads
                 )
             }
@@ -350,6 +386,25 @@ const UPDATE_STYLE: Style = Style::new()
 const BLOCK_MARKER_GLYPH: &str = "♦";
 
 fn draw_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
+    // Give feedback its own wrapped rows: inline notices were clipped by the
+    // two-column config panel and by narrow terminals.
+    let area = if let Some(notice) = &state.thread_notice {
+        let height = (notice.chars().count().div_ceil(area.width.max(1) as usize) as u16 + 1)
+            .min(area.height.saturating_sub(1));
+        frame.render_widget(
+            Paragraph::new(notice.as_str())
+                .style(VALUE_STYLE)
+                .wrap(Wrap { trim: true }),
+            Rect { height, ..area },
+        );
+        Rect {
+            y: area.y + height,
+            height: area.height - height,
+            ..area
+        }
+    } else {
+        area
+    };
     let wide = area.width >= 80;
     let config_two_columns = config_uses_two_columns(area.width);
 
@@ -437,9 +492,6 @@ fn draw_compact_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiSta
             state.height
         )),
     ];
-    if let Some(notice) = &state.thread_notice {
-        lines.insert(1, Line::from(notice.clone()));
-    }
     if let Some(latest) = &state.update_available {
         lines.push(Line::from(Span::styled(
             format!("Update {latest} available"),
@@ -903,16 +955,10 @@ fn draw_config_runtime_panel(frame: &mut ratatui::Frame, area: Rect, state: &Tui
     ]);
     let mut line2 = thread_line(state);
     line2.spans.insert(0, Span::raw("  "));
-    if let Some(notice) = &state.thread_notice {
-        line2
-            .spans
-            .push(Span::styled(format!("  {notice}"), VALUE_STYLE));
-    } else {
-        line2.spans.push(Span::styled("  Backends: ", LABEL_STYLE));
-        line2
-            .spans
-            .push(Span::styled(state.backends_desc.clone(), VALUE_STYLE));
-    }
+    line2.spans.push(Span::styled("  Backends: ", LABEL_STYLE));
+    line2
+        .spans
+        .push(Span::styled(state.backends_desc.clone(), VALUE_STYLE));
     let config_block = Block::default()
         .title(Span::styled(" CONFIG ", TITLE_STYLE))
         .borders(Borders::ALL)
@@ -1326,6 +1372,7 @@ mod tests {
         state.thread_control = Some(ThreadControl {
             run_id: 42,
             sender,
+            memory: None,
             current_threads: 2,
             max_threads: 4,
             quit_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1352,7 +1399,7 @@ mod tests {
             assert!(state.thread_change_pending);
             for (width, height) in [(80, 12), (120, 34)] {
                 let text = render_text(&state, width, height);
-                assert!(text.contains("Restarting: 2 ->"));
+                assert!(text.contains("Checking RAM: 2 ->"));
                 assert!(text.contains("Threads: 2"));
             }
             // Do not enqueue another restart while the first is being applied.
@@ -1371,6 +1418,15 @@ mod tests {
             press(&mut state, KeyCode::Char(key));
             assert!(receiver.is_empty());
             assert!(!state.thread_change_pending);
+            assert!(state
+                .thread_notice
+                .as_ref()
+                .unwrap()
+                .contains(if key == '+' {
+                    "Thread limit:"
+                } else {
+                    "Minimum:"
+                }));
         }
         let (mut state, receiver) = controlled_state();
         state.thread_control.as_mut().unwrap().current_threads = 6;
@@ -1394,6 +1450,32 @@ mod tests {
             press(&mut state, code);
         }
         assert!(receiver.is_empty());
+    }
+
+    #[test]
+    fn ram_rejection_is_visible_and_unblocks_retry() {
+        let (mut state, receiver) = controlled_state();
+        press(&mut state, KeyCode::Char('+'));
+        let request = receiver.try_recv().unwrap();
+        let reason = super::super::thread_control::validate_headroom(3, 2)
+            .unwrap_err()
+            .to_string();
+        request.rejection.unwrap().send(reason.clone()).unwrap();
+        state.poll_thread_rejection();
+        assert!(!state.thread_change_pending);
+        assert_eq!(state.threads, 2);
+        for (width, height) in [(40, 18), (80, 12), (160, 34)] {
+            let text = render_text(&state, width, height);
+            // Whitespace can change at word wrap; no words may be clipped.
+            assert!(text
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains(&reason));
+        }
+        press(&mut state, KeyCode::Char('-'));
+        assert_eq!(receiver.try_recv().unwrap().threads, 1);
+        assert!(state.thread_change_pending);
     }
 
     #[test]
@@ -1525,3 +1607,7 @@ mod tests {
         assert_eq!(color, Color::Rgb(215, 165, 95));
     }
 }
+
+#[cfg(test)]
+#[path = "thread_showcase.rs"]
+mod thread_showcase;

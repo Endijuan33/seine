@@ -274,6 +274,18 @@ pub(crate) fn run_with_thread_control(
     let resolved_cfg = resolve_mining_config(cfg, &crate::shortname::ShortnameResolver::default())?;
     let cfg = &resolved_cfg;
 
+    if cfg.cpu_manual_memory_check && !cfg.cpu_autotune_threads {
+        let requested = cfg
+            .backend_specs
+            .iter()
+            .filter(|spec| spec.kind == BackendKind::Cpu)
+            .map(|spec| spec.cpu_threads.unwrap_or(cfg.threads))
+            .max()
+            .unwrap_or(0);
+        let (_, available) = crate::config::cpu_autotune_capacity(cfg, 0);
+        thread_control::validate_headroom(requested, available)?;
+    }
+
     // Phase 1: Build NVIDIA backends and start compilation in background threads.
     // NvidiaBackend::new() only depends on NVIDIA-specific config, not CPU autotune.
     let per_backend_event_capacity = cfg
@@ -501,6 +513,7 @@ pub(crate) fn run_with_thread_control(
 
     // Phase 3: Build and activate non-NVIDIA backends synchronously.
     // CPU/Metal start is fast. Non-NVIDIA get IDs 1..M, NVIDIA get IDs M+1..M+N.
+    let mut cpu_memory_backends = Vec::new();
     let mut adaptive_backends = Vec::new();
     let non_nvidia_instances: Vec<(BackendSpec, Arc<dyn PowBackend>)> = cfg
         .backend_specs
@@ -531,6 +544,7 @@ pub(crate) fn run_with_thread_control(
                     } else {
                         CpuBackend::with_tuning(threads, affinity, tuning)
                     });
+                    cpu_memory_backends.push(Arc::clone(&backend));
                     if cfg.cpu_autotune_threads {
                         adaptive_backends.push(Arc::clone(&backend));
                     }
@@ -640,6 +654,10 @@ pub(crate) fn run_with_thread_control(
                                 .unwrap_or(1),
                         )
                     };
+                    control.memory = Some(Arc::new(thread_control::ThreadMemoryGuard::new(
+                        cfg,
+                        cpu_memory_backends.clone(),
+                    )));
                     s.thread_control = Some(control);
                 }
             }
@@ -3705,6 +3723,7 @@ pub(crate) mod tests {
             }],
             threads: 1,
             cpu_auto_threads_cap: 1,
+            cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,
             cpu_memory_reserve_percent: 5,
             cpu_affinity: crate::config::CpuAffinityMode::Off,

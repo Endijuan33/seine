@@ -2748,6 +2748,7 @@ mod tests {
             }],
             threads: 1,
             cpu_auto_threads_cap: 1,
+            cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,
             cpu_memory_reserve_percent: 5,
             cpu_affinity: crate::config::CpuAffinityMode::Off,
