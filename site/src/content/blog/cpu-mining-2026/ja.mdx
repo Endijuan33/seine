@@ -12,7 +12,7 @@ faq:
     a: 'メモリハードなハッシュは試行のたびに数ギガバイトの高速メモリを必要とするので、ハッシュ計算専用に作ったチップでも各コアの隣に大量の RAM が必要になります。デスクトップ、ノートパソコン、サーバーにはすでに十分な RAM と高速なメモリコントローラーが搭載されているので、人々が持っているハードウェアがアルゴリズムの必要とするものに近くなります。'
   - q: 'CPU とグラフィックカードで同時にマイニングできますか？'
     a: 'はい。Windows または Linux で seine を使って Blocknet をマイニングする場合にできます。seine はプロセッサーと検出したすべての NVIDIA グラフィックカードで同時にマイニングし、ハッシュレートが合算されます。プロセッサーはマイニングしながら、各カードは初回起動時に調整するので、始める前に設定することは何もありません。'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: reviewed
 ---
 
@@ -68,10 +68,10 @@ Blocknet は 4 つすべてを満たしています。[デフォルトでプラ�
 | ハードウェア | チップ | スレッド | ハッシュレート |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 サーバー | 32 | 49.4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14 サーバー | 24 | 35.7 H/s |
+| Arm サーバー | AWS Graviton4 | 32 | 39.3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14 サーバー | 32 | 38.2 H/s |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s |
-| Arm サーバー | AWS Graviton4 | 16 | 21.5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s |
 
 Apple M4 Max の行はノートパソコンで、強力なメモリシステムがいかに Argon2id に適しているかを示しています。サーバーの行は 2 MiB のヒュージページを使った AWS のマシンで測定しました。購入のアドバイスと RAM の容量の決め方は [Blocknet マイニングハードウェアガイド](/ja/blog/blocknet-mining-hardware-hashrate/)で、Apple シリコンについては [Mac ガイド](/ja/blog/mine-blocknet-on-mac/)で詳しく説明しています。
 

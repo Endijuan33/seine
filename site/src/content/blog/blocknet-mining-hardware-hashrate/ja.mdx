@@ -11,7 +11,7 @@ faq:
     a: 'seine は Windows 版と Linux 版で NVIDIA グラフィックカードを使ってマイニングし、検出したすべてのカードをプロセッサーと並行して使います。Windows では CUDA ランタイムが同梱されているので、NVIDIA ドライバーだけが必要です。Linux ではドライバーと NVRTC ライブラリをインストールしてください。初回起動時に各カードを調整し、その結果を記憶します。'
   - q: 'Blocknet のマイニングでメモリ帯域幅が重要なのはなぜですか？'
     a: 'Blocknet のハッシュは 1 回ごとに 2 GiB のメモリブロックを丸ごと書き込み、その全体からデータを読み戻します。これはどのプロセッサーのキャッシュよりもはるかに大きな量です。そのためハッシュレートは、メモリシステムがデータを動かす速さで決まります。メモリ帯域幅が大きく、多くのスレッドを動かせるだけの RAM を持つマシンが最も速くマイニングできます。'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ translation: reviewed
 ## Blocknet マイニングに最適なハードウェアは？
 
 <Answer>
-Blocknet マイニングに最適なハードウェアは、高いメモリ帯域幅と、スレッドごとに 2 GB を確保できる十分な RAM を兼ね備えたものです。seine の測定では、AMD EPYC Zen 5 サーバーが 32 スレッドで 49.4 H/s とトップで、AMD EPYC Zen 4 と Apple M4 Max が続きます。NVIDIA グラフィックカードを使えば、そのハッシュレートがさらに上乗せされます。
+Blocknet マイニングに最適なハードウェアは、高いメモリ帯域幅と、スレッドごとに 2 GB を確保できる十分な RAM を兼ね備えたものです。seine の測定では、AMD EPYC Zen 5 サーバーが 32 スレッドで 49.4 H/s とトップで、AWS Graviton4 と AMD EPYC Zen 4 が続きます。NVIDIA グラフィックカードを使えば、そのハッシュレートがさらに上乗せされます。
 </Answer>
 
 Blocknet のプルーフ・オブ・ワークは、ハッシュごとに 2 GiB のメモリブロックを使う Argon2id です。そのため[メモリハード](/ja/blog/argon2id-proof-of-work-explained/)であり、ハッシュレートはコア数と同じくらいメモリ帯域幅とレイテンシー、そして 2 GiB のブロックを RAM に同時にいくつ収められるかに左右されます。下の表の上位マシンに共通しているのは、強力なメモリシステムです。
@@ -32,10 +32,10 @@ Blocknet のプルーフ・オブ・ワークは、ハッシュごとに 2 GiB �
 | ハードウェア | チップ | スレッド | ハッシュレート | マイニング用メモリ |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 サーバー | 32 | 49.4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14 サーバー | 24 | 35.7 H/s | 48 GiB |
+| Arm サーバー | AWS Graviton4 | 32 | 39.3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14 サーバー | 32 | 38.2 H/s | 64 GiB |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s | 32 GiB |
-| Arm サーバー | AWS Graviton4 | 16 | 21.5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s | 64 GiB |
 
 サーバーの行は 2 MiB のヒュージページを使った AWS のクラウドマシン、M4 Max の行は 48 GB の MacBook Pro で測定しました。各数値は完了したハッシュ数を経過時間で割ったもので、複数回の実行の平均です。測定期間は 2026 年 7 月から 10 月です。Zen 5 の結果は、128 GiB の RAM を搭載した 32 コアの EPYC 9R45 マシンである AWS m8a.8xlarge で、seine v0.2.22 を使って 4 回実行した平均です。
 

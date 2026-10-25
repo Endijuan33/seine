@@ -11,7 +11,7 @@ faq:
     a: 'Bellek yoğun bir hash her deneme için gigabaytlarca hızlı bellek ister, bu yüzden yalnızca hash için üretilmiş bir çip bile her çekirdeğin yanında büyük miktarda RAM''e ihtiyaç duyar. Masaüstü bilgisayarlar, dizüstüler ve sunucular zaten bol RAM ve hızlı bellek denetleyicileriyle gelir; bu da insanların sahip olduğu donanımı algoritmanın ihtiyacına yaklaştırır.'
   - q: 'CPU''nuz ve ekran kartınızla aynı anda madencilik yapabilir misiniz?'
     a: 'Evet, Windows veya Linux''ta seine ile Blocknet madenciliği yaparken. seine işlemcide ve algıladığı her NVIDIA ekran kartında aynı anda madencilik yapar ve hashrate''ler toplanır. İşlemciyi madencilik yaparken, her kartı ise ilk açılışta ayarlar; bu yüzden başlamadan önce yapılandırmanız gereken hiçbir şey yoktur.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: draft
 ---
 
@@ -67,10 +67,10 @@ Bunlar, her donanım nesli için seine ile ölçülen en iyi sonuçlardır:
 | Donanım | Tam çip | İş parçacığı | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 sunucu | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14 sunucu | 24 | 35,7 H/s |
+| Arm sunucu | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14 sunucu | 32 | 38,2 H/s |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30,9 H/s |
-| Arm sunucu | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 Apple M4 Max satırı bir dizüstü bilgisayardır ve güçlü bir bellek sisteminin Argon2id'ye ne kadar uygun olduğunu gösterir. Sunucu satırları 2 MiB'lık huge pages ile AWS makinelerinde çalıştırıldı. [Blocknet madencilik donanımı rehberi](/tr/blog/blocknet-mining-hardware-hashrate/) satın alma önerilerini ve RAM boyutlandırmayı ayrıntılı olarak ele alır; [Mac rehberi](/tr/blog/mine-blocknet-on-mac/) ise Apple Silicon'u anlatır.
 

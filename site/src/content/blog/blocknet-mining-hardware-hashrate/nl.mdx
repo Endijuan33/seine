@@ -11,7 +11,7 @@ faq:
     a: 'seine minet op NVIDIA-videokaarten met de downloads voor Windows en Linux, en gebruikt elke kaart die het vindt naast de processor. Op Windows zit de CUDA-runtime erbij, dus je hebt alleen de NVIDIA-driver nodig. Installeer op Linux de driver en de NVRTC-bibliotheken. De eerste start stemt elke kaart af en onthoudt het resultaat.'
   - q: 'Waarom is geheugenbandbreedte belangrijk voor Blocknet-minen?'
     a: 'Elke Blocknet-hash schrijft een volledig geheugenblok van 2 GiB en leest gegevens terug van overal in dat blok, veel meer dan een processorcache kan bevatten. De hashrate hangt daarom af van hoe snel het geheugensysteem gegevens verplaatst. Computers met meer geheugenbandbreedte en genoeg RAM voor veel threads minen het snelst.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: draft
 ---
 
@@ -20,7 +20,7 @@ Deze gids laat zien welke computers Blocknet het snelst minen met seine, hoeveel
 ## Wat is de beste hardware voor Blocknet-minen?
 
 <Answer>
-De beste hardware voor Blocknet-minen combineert een hoge geheugenbandbreedte met genoeg RAM voor 2 GB per thread. In de metingen van seine staat een AMD EPYC Zen 5-server bovenaan met 49,4 H/s op 32 threads, gevolgd door AMD EPYC Zen 4 en de Apple M4 Max. NVIDIA-videokaarten tellen hun hashrate daar nog bij op.
+De beste hardware voor Blocknet-minen combineert een hoge geheugenbandbreedte met genoeg RAM voor 2 GB per thread. In de metingen van seine staat een AMD EPYC Zen 5-server bovenaan met 49,4 H/s op 32 threads, gevolgd door AWS Graviton4 en de AMD EPYC Zen 4. NVIDIA-videokaarten tellen hun hashrate daar nog bij op.
 </Answer>
 
 De proof of work van Blocknet is Argon2id met een geheugenblok van 2 GiB per hash. Dat maakt hem [geheugenintensief](/nl/blog/argon2id-proof-of-work-explained/): de hashrate hangt evenveel af van geheugenbandbreedte en latentie als van het aantal cores, en van hoeveel van die blokken van 2 GiB tegelijk in het RAM passen. Een sterk geheugensysteem is wat de snelste computers in de tabel hieronder gemeen hebben.
@@ -32,10 +32,10 @@ Dit zijn de beste resultaten die met seine zijn gemeten, per hardwaregeneratie. 
 | Hardware | Exacte chip | Threads | Hashrate | Mininggeheugen |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45-server | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14-server | 24 | 35,7 H/s | 48 GiB |
+| Arm-server | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14-server | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro met 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Arm-server | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 De serverrijen draaiden op AWS-cloudmachines met huge pages van 2 MiB, en de rij van de M4 Max op een MacBook Pro met 48 GB. Elk cijfer is het aantal voltooide hashes gedeeld door de verstreken tijd, gemiddeld over herhaalde runs, gemeten tussen juli en oktober 2026. Het Zen 5-resultaat is het gemiddelde van vier runs met seine v0.2.22 op een AWS m8a.8xlarge, een EPYC 9R45-machine met 32 cores en 128 GiB RAM.
 

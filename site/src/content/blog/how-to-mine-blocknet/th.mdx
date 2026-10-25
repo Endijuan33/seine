@@ -9,7 +9,7 @@ faq:
     a: 'พูล bntpool.com จ่ายเงินด้วย PPLNS ในช่วงเวลาหกชั่วโมง รางวัลของบล็อกจะจ่ายได้เมื่อบล็อกนั้นอยู่ลึก 60 บล็อกแล้ว ซึ่งใช้เวลาประมาณห้าชั่วโมงเมื่อมีบล็อกทุกห้านาที และจะส่งยอดเงินเมื่อถึง 0.1 BNT คุณจึงควรได้รับเงินครั้งแรกหลายชั่วโมงหลังจากแชร์แรกได้รับการยอมรับ'
   - q: 'ขุด Blocknet ด้วย CPU และ GPU พร้อมกันได้ไหม?'
     a: 'ได้ บน Windows และ Linux โปรแกรมขุด seine ใช้ทุกคอร์ของ CPU และการ์ดจอ NVIDIA ทุกใบในเครื่องพร้อมกัน โดยแฮชเรตของทั้งสองส่วนรวมกัน โปรแกรมปรับจูนหน่วยประมวลผลและการ์ดแต่ละใบแยกกันขณะทำงาน เพื่อให้คุณใช้ฮาร์ดแวร์ทั้งหมดได้เต็มที่โดยไม่ต้องเปลี่ยนการตั้งค่า'
-sourceHash: e2ca14b83379
+sourceHash: ad835df628e2
 translation: draft
 ---
 
@@ -69,10 +69,10 @@ translation: draft
 | ฮาร์ดแวร์ | เธรด | แฮชเรต |
 |---|---|---|
 | AMD EPYC · Zen 5 (EPYC 9R45) | 32 | 49.4 H/s |
-| AMD EPYC · Zen 4 (EPYC 9R14) | 24 | 35.7 H/s |
+| เซิร์ฟเวอร์ Arm (AWS Graviton4) | 32 | 39.3 H/s |
+| AMD EPYC · Zen 4 (EPYC 9R14) | 32 | 38.2 H/s |
 | Apple M4 Max (48 GB MacBook Pro) | 16 | 30.9 H/s |
-| เซิร์ฟเวอร์ Arm (AWS Graviton4) | 16 | 21.5 H/s |
-| Intel Xeon (Sapphire Rapids 8488C) | 12 | 13.1 H/s |
+| Intel Xeon (Sapphire Rapids 8488C) | 32 | 26.0 H/s |
 
 ผลของ CPU ทุกตัวที่ทดสอบอยู่ใน[หน้าประสิทธิภาพ](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md) และ[คู่มือฮาร์ดแวร์ขุด Blocknet](/th/blog/blocknet-mining-hardware-hashrate/) อธิบายว่า RAM และแบนด์วิดท์หน่วยความจำกำหนดตัวเลขเหล่านี้อย่างไร
 

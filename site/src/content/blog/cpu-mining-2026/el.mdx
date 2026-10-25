@@ -11,7 +11,7 @@ faq:
     a: 'Ένα memory-hard hash χρειάζεται gigabyte γρήγορης μνήμης για κάθε προσπάθεια, οπότε ένα chip φτιαγμένο μόνο για hashing θα εξακολουθούσε να χρειάζεται πολλή RAM δίπλα σε κάθε πυρήνα. Οι επιτραπέζιοι υπολογιστές, τα laptop και οι διακομιστές διαθέτουν ήδη αρκετή RAM και γρήγορους ελεγκτές μνήμης, επομένως το hardware που έχει ήδη ο κόσμος είναι κοντά σε αυτό που χρειάζεται ο αλγόριθμος.'
   - q: 'Μπορείτε να κάνετε εξόρυξη με CPU και κάρτα γραφικών ταυτόχρονα;'
     a: 'Ναι, στην εξόρυξη Blocknet με το seine σε Windows ή Linux. Το seine κάνει εξόρυξη ταυτόχρονα στον επεξεργαστή και σε κάθε κάρτα γραφικών NVIDIA που εντοπίζει, και τα hashrate αθροίζονται. Ρυθμίζει τον επεξεργαστή όσο κάνει εξόρυξη και κάθε κάρτα στην πρώτη της εκκίνηση, οπότε δεν χρειάζεται να ρυθμίσετε τίποτα πριν αρχίσετε.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: draft
 ---
 
@@ -67,10 +67,10 @@ translation: draft
 | Hardware | Ακριβές chip | Νήματα | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 server | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14 server | 24 | 35,7 H/s |
+| Διακομιστής Arm | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14 server | 32 | 38,2 H/s |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30,9 H/s |
-| Διακομιστής Arm | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 Η γραμμή Apple M4 Max αφορά laptop, δείχνοντας πόσο καλά ταιριάζει ένα ισχυρό σύστημα μνήμης στο Argon2id. Οι γραμμές διακομιστών μετρήθηκαν σε υπολογιστές AWS με huge pages 2 MiB. Ο [οδηγός hardware για εξόρυξη Blocknet](/el/blog/blocknet-mining-hardware-hashrate/) καλύπτει αναλυτικά τις αγορές και το μέγεθος RAM, ενώ ο [οδηγός για Mac](/el/blog/mine-blocknet-on-mac/) καλύπτει το Apple Silicon.
 

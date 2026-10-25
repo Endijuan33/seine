@@ -11,7 +11,7 @@ faq:
     a: '記憶體密集型雜湊每次嘗試都需要數 GB 的高速記憶體，所以專為雜湊設計的晶片仍然要在每個核心旁邊配備大量記憶體。桌上型電腦、筆記型電腦與伺服器出廠時就有充足的記憶體與高速記憶體控制器，因此人們已有的硬體本來就接近演算法所需。'
   - q: '可以同時用 CPU 與顯示卡挖礦嗎？'
     a: '可以，在 Windows 或 Linux 上用 seine 挖 Blocknet 時就能做到。seine 會同時在處理器與偵測到的每張 NVIDIA 顯示卡上挖礦，算力相加。它在挖礦時調校處理器，並在每張顯示卡首次啟動時為其調校，所以開始之前不需要任何設定。'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: reviewed
 ---
 
@@ -67,10 +67,10 @@ Blocknet 四個問題都能答好。它是一種[預設隱私](/zh-hant/blog/blo
 | 硬體 | 具體晶片 | 執行緒 | 算力 |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 伺服器 | 32 | 49.4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14 伺服器 | 24 | 35.7 H/s |
+| Arm 伺服器 | AWS Graviton4 | 32 | 39.3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14 伺服器 | 32 | 38.2 H/s |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s |
-| Arm 伺服器 | AWS Graviton4 | 16 | 21.5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s |
 
 Apple M4 Max 這一列是一台筆記型電腦，說明強大的記憶體系統與 Argon2id 非常契合。伺服器各列在啟用 2 MiB 大分頁的 AWS 機器上執行。[Blocknet 挖礦硬體指南](/zh-hant/blog/blocknet-mining-hardware-hashrate/)深入介紹了選購建議與記憶體規劃，[Mac 指南](/zh-hant/blog/mine-blocknet-on-mac/)介紹了 Apple Silicon。
 

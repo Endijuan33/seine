@@ -11,7 +11,7 @@ faq:
     a: 'Een geheugenintensieve hash heeft voor elke poging gigabytes snel geheugen nodig, dus een chip die alleen voor hashen is gebouwd, zou nog steeds grote hoeveelheden RAM naast elke core nodig hebben. Desktops, laptops en servers hebben al veel RAM en snelle geheugencontrollers, waardoor de hardware die mensen bezitten dicht bij komt wat het algoritme nodig heeft.'
   - q: 'Kun je tegelijk met je CPU en je videokaart minen?'
     a: 'Ja, als je Blocknet minet met seine op Windows of Linux. seine minet tegelijk op de processor en op elke NVIDIA-videokaart die het vindt, en de hashrates tellen op. Het stemt de processor af terwijl het minet en elke kaart bij de eerste start, dus er valt niets in te stellen voordat je begint.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: draft
 ---
 
@@ -67,10 +67,10 @@ Dit zijn de beste resultaten die met seine zijn gemeten, per hardwaregeneratie:
 | Hardware | Exacte chip | Threads | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45-server | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14-server | 24 | 35,7 H/s |
+| Arm-server | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14-server | 32 | 38,2 H/s |
 | Apple M4 Max | MacBook Pro met 48 GB | 16 | 30,9 H/s |
-| Arm-server | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 De rij van de Apple M4 Max is een laptop, wat laat zien hoe goed een sterk geheugensysteem bij Argon2id past. De serverrijen draaiden op AWS-machines met huge pages van 2 MiB. De [hardwaregids voor Blocknet-minen](/nl/blog/blocknet-mining-hardware-hashrate/) behandelt koopadvies en de juiste hoeveelheid RAM uitgebreid, en de [Mac-gids](/nl/blog/mine-blocknet-on-mac/) behandelt Apple Silicon.
 

@@ -11,7 +11,7 @@ faq:
     a: 'seine, Windows ve Linux indirmeleriyle NVIDIA ekran kartlarında madencilik yapar ve algıladığı her kartı işlemciyle birlikte kullanır. Windows''ta CUDA çalışma zamanı dahildir, bu yüzden yalnızca NVIDIA sürücüsüne ihtiyacınız olur. Linux''ta sürücüyü ve NVRTC kütüphanelerini kurun. İlk açılışta her kart ayarlanır ve sonuç hatırlanır.'
   - q: 'Blocknet madenciliğinde bellek bant genişliği neden önemlidir?'
     a: 'Her Blocknet hash''i 2 GiB''lık bir bellek bloğunun tamamını yazar ve bloğun her yerinden veri geri okur; bu, herhangi bir işlemci önbelleğinin tutabileceğinden çok daha fazladır. Bu yüzden hashrate, bellek sisteminin veriyi ne kadar hızlı taşıdığına bağlıdır. Bellek bant genişliği yüksek ve çok sayıda iş parçacığına yetecek RAM''e sahip makineler en hızlı madencilik yapar.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ Bu rehber, seine ile hangi makinelerin Blocknet madenciliğini en hızlı yaptı
 ## Blocknet madenciliği için en iyi donanım hangisi?
 
 <Answer>
-En iyi Blocknet madencilik donanımı, yüksek bellek bant genişliğini iş parçacığı başına 2 GB'a yetecek RAM ile birleştirir. seine'in ölçümlerinde bir AMD EPYC Zen 5 sunucu 32 iş parçacığında 49,4 H/s ile önde gelir; onu AMD EPYC Zen 4 ve Apple M4 Max izler. NVIDIA ekran kartları da kendi hashrate'lerini bunun üzerine ekler.
+En iyi Blocknet madencilik donanımı, yüksek bellek bant genişliğini iş parçacığı başına 2 GB'a yetecek RAM ile birleştirir. seine'in ölçümlerinde bir AMD EPYC Zen 5 sunucu 32 iş parçacığında 49,4 H/s ile önde gelir; onu AWS Graviton4 ve AMD EPYC Zen 4 izler. NVIDIA ekran kartları da kendi hashrate'lerini bunun üzerine ekler.
 </Answer>
 
 Blocknet'in iş kanıtı, hash başına 2 GiB'lık bir bellek bloğu kullanan Argon2id'dir. Bu onu [bellek yoğun](/tr/blog/argon2id-proof-of-work-explained/) kılar: hashrate, çekirdek sayısı kadar bellek bant genişliğine ve gecikmesine, ayrıca bu 2 GiB'lık bloklardan kaçının aynı anda RAM'e sığdığına bağlıdır. Aşağıdaki tablodaki en iyi makinelerin ortak noktası güçlü bir bellek sistemidir.
@@ -32,10 +32,10 @@ Bunlar, her donanım nesli için seine ile ölçülen en iyi sonuçlardır. Son 
 | Donanım | Tam çip | İş parçacığı | Hashrate | Madencilik belleği |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 sunucu | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14 sunucu | 24 | 35,7 H/s | 48 GiB |
+| Arm sunucu | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14 sunucu | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30,9 H/s | 32 GiB |
-| Arm sunucu | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Sunucu satırları 2 MiB'lık huge pages ile AWS bulut makinelerinde, M4 Max satırı ise 48 GB'lık bir MacBook Pro'da çalıştırıldı. Her değer, tamamlanan hash sayısının geçen süreye bölünmesiyle elde edilir, tekrarlanan çalıştırmaların ortalamasıdır ve Temmuz ile Ekim 2026 arasında ölçülmüştür. Zen 5 sonucu, 128 GiB RAM'li, 32 çekirdekli bir EPYC 9R45 makinesi olan AWS m8a.8xlarge üzerinde seine v0.2.22 ile yapılan dört çalıştırmanın ortalamasıdır.
 

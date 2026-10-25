@@ -11,7 +11,7 @@ faq:
     a: 'seine는 Windows와 Linux 다운로드에서 NVIDIA 그래픽 카드로 채굴하며, 감지한 모든 카드를 프로세서와 함께 사용합니다. Windows에는 CUDA 런타임이 포함되어 있으므로 NVIDIA 드라이버만 있으면 됩니다. Linux에서는 드라이버와 NVRTC 라이브러리를 설치하세요. 첫 실행에서 카드마다 튜닝하고 결과를 기억합니다.'
   - q: 'Blocknet 채굴에서 메모리 대역폭이 왜 중요합니까?'
     a: 'Blocknet 해시 하나는 2 GiB 메모리 블록 전체를 쓰고 그 전체에서 데이터를 다시 읽는데, 이는 어떤 프로세서 캐시보다도 훨씬 큽니다. 따라서 해시레이트는 메모리 시스템이 데이터를 얼마나 빨리 옮기는지에 달려 있습니다. 메모리 대역폭이 높고 많은 스레드를 돌릴 만큼 RAM이 충분한 컴퓨터가 가장 빠르게 채굴합니다.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ translation: reviewed
 ## Blocknet 채굴에 가장 좋은 하드웨어는 무엇입니까?
 
 <Answer>
-Blocknet 채굴에 가장 좋은 하드웨어는 높은 메모리 대역폭과 스레드당 2 GB를 감당할 만큼 충분한 RAM을 함께 갖춘 하드웨어입니다. seine의 측정에서는 AMD EPYC Zen 5 서버가 32 스레드로 49.4 H/s를 기록해 1위이고, AMD EPYC Zen 4와 Apple M4 Max가 뒤를 잇습니다. NVIDIA 그래픽 카드는 여기에 해시레이트를 더해 줍니다.
+Blocknet 채굴에 가장 좋은 하드웨어는 높은 메모리 대역폭과 스레드당 2 GB를 감당할 만큼 충분한 RAM을 함께 갖춘 하드웨어입니다. seine의 측정에서는 AMD EPYC Zen 5 서버가 32 스레드로 49.4 H/s를 기록해 1위이고, AWS Graviton4와 AMD EPYC Zen 4가 뒤를 잇습니다. NVIDIA 그래픽 카드는 여기에 해시레이트를 더해 줍니다.
 </Answer>
 
 Blocknet의 작업 증명은 해시마다 2 GiB 메모리 블록을 쓰는 Argon2id입니다. 그래서 Blocknet은 [메모리 하드](/ko/blog/argon2id-proof-of-work-explained/) 알고리즘입니다. 해시레이트는 코어 수만큼이나 메모리 대역폭과 지연 시간, 그리고 2 GiB 블록을 RAM에 한 번에 몇 개 올릴 수 있는지에 좌우됩니다. 아래 표의 상위 컴퓨터들은 모두 강력한 메모리 시스템을 갖추고 있습니다.
@@ -32,10 +32,10 @@ Blocknet의 작업 증명은 해시마다 2 GiB 메모리 블록을 쓰는 Argon
 | 하드웨어 | 정확한 칩 | 스레드 | 해시레이트 | 채굴 메모리 |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 서버 | 32 | 49.4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14 서버 | 24 | 35.7 H/s | 48 GiB |
+| Arm 서버 | AWS Graviton4 | 32 | 39.3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14 서버 | 32 | 38.2 H/s | 64 GiB |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s | 32 GiB |
-| Arm 서버 | AWS Graviton4 | 16 | 21.5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s | 64 GiB |
 
 서버 항목은 2 MiB 휴즈 페이지를 쓴 AWS 클라우드 머신에서, M4 Max 항목은 48 GB MacBook Pro에서 측정했습니다. 각 수치는 완료한 해시 수를 경과 시간으로 나눈 값을 반복 실행으로 평균한 것이며, 2026년 7월부터 10월 사이에 측정했습니다. Zen 5 결과는 RAM 128 GiB를 갖춘 32코어 EPYC 9R45 머신인 AWS m8a.8xlarge에서 seine v0.2.22로 네 번 실행한 평균입니다.
 

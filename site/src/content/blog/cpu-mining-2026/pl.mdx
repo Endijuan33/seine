@@ -11,7 +11,7 @@ faq:
     a: 'Hash wymagający dużo pamięci potrzebuje przy każdej próbie gigabajtów szybkiej pamięci, więc układ zbudowany wyłącznie do haszowania nadal potrzebowałby dużo RAM obok każdego rdzenia. Komputery stacjonarne, laptopy i serwery mają już mnóstwo RAM i szybkie kontrolery pamięci, dzięki czemu sprzęt, który ludzie już mają, jest bliski temu, czego potrzebuje algorytm.'
   - q: 'Czy można kopać jednocześnie na CPU i karcie graficznej?'
     a: 'Tak, kopiąc Blocknet z seine w systemie Windows lub Linux. seine kopie jednocześnie na procesorze i na każdej wykrytej karcie graficznej NVIDIA, a hashrate się sumuje. Procesor dostraja podczas kopania, a każdą kartę przy pierwszym uruchomieniu, więc przed startem nie trzeba niczego konfigurować.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: draft
 ---
 
@@ -67,10 +67,10 @@ To najlepsze wyniki zmierzone z seine dla każdej generacji sprzętu:
 | Sprzęt | Dokładny układ | Wątki | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | serwer EPYC 9R45 | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | serwer EPYC 9R14 | 24 | 35,7 H/s |
+| Serwer Arm | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | serwer EPYC 9R14 | 32 | 38,2 H/s |
 | Apple M4 Max | MacBook Pro 48 GB | 16 | 30,9 H/s |
-| Serwer Arm | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 Wiersz Apple M4 Max to laptop, co pokazuje, jak dobrze mocny system pamięci pasuje do Argon2id. Wiersze serwerowe zmierzono na maszynach AWS z huge pages 2 MiB. [Poradnik o sprzęcie do kopania Blocknet](/pl/blog/blocknet-mining-hardware-hashrate/) szczegółowo omawia porady zakupowe i dobór RAM, a [poradnik dla Maca](/pl/blog/mine-blocknet-on-mac/) opisuje Apple Silicon.
 

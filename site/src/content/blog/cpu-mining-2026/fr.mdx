@@ -11,7 +11,7 @@ faq:
     a: 'Un hash gourmand en mémoire a besoin de gigaoctets de mémoire rapide à chaque tentative, si bien qu''une puce conçue uniquement pour hacher aurait quand même besoin de grandes quantités de RAM à côté de chaque cœur. Les ordinateurs de bureau, les portables et les serveurs sont déjà livrés avec beaucoup de RAM et des contrôleurs mémoire rapides, ce qui rapproche le matériel que les gens possèdent de ce dont l''algorithme a besoin.'
   - q: 'Peut-on miner avec son CPU et sa carte graphique en même temps ?'
     a: 'Oui, quand vous minez Blocknet avec seine sous Windows ou Linux. seine mine à la fois sur le processeur et sur toutes les cartes graphiques NVIDIA qu''il détecte, et les hashrates s''additionnent. Il optimise le processeur pendant qu''il mine et chaque carte lors de son premier lancement : il n''y a donc rien à configurer avant de commencer.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: draft
 ---
 
@@ -67,10 +67,10 @@ Voici les meilleurs résultats mesurés avec seine pour chaque génération de m
 | Matériel | Puce exacte | Threads | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | Serveur EPYC 9R45 | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | Serveur EPYC 9R14 | 24 | 35,7 H/s |
+| Serveur Arm | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | Serveur EPYC 9R14 | 32 | 38,2 H/s |
 | Apple M4 Max | MacBook Pro 48 GB | 16 | 30,9 H/s |
-| Serveur Arm | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 La ligne Apple M4 Max correspond à un portable, ce qui montre à quel point un système mémoire solide convient à Argon2id. Les lignes serveur ont été mesurées sur des machines AWS avec des huge pages de 2 MiB. Le [guide du matériel de minage Blocknet](/fr/blog/blocknet-mining-hardware-hashrate/) approfondit les conseils d'achat et le dimensionnement de la RAM, et le [guide Mac](/fr/blog/mine-blocknet-on-mac/) couvre Apple Silicon.
 

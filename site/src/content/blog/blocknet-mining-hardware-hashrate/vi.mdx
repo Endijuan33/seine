@@ -11,7 +11,7 @@ faq:
     a: 'seine đào trên card đồ họa NVIDIA với bản tải cho Windows và Linux, dùng mọi card nó phát hiện được cùng với bộ xử lý. Trên Windows, CUDA runtime đã được kèm sẵn, nên bạn chỉ cần driver NVIDIA. Trên Linux, hãy cài driver và các thư viện NVRTC. Lần chạy đầu tiên tinh chỉnh từng card và ghi nhớ kết quả.'
   - q: 'Vì sao băng thông bộ nhớ quan trọng khi đào Blocknet?'
     a: 'Mỗi lần băm Blocknet ghi trọn một khối bộ nhớ 2 GiB và đọc lại dữ liệu từ khắp khối đó, lớn hơn rất nhiều so với dung lượng cache của bất kỳ bộ xử lý nào. Vì thế hashrate phụ thuộc vào tốc độ hệ thống bộ nhớ chuyển dữ liệu. Những máy có băng thông bộ nhớ cao hơn và đủ RAM cho nhiều luồng sẽ đào nhanh nhất.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ Hướng dẫn này cho bạn biết máy nào đào Blocknet nhanh nhất với
 ## Phần cứng tốt nhất để đào Blocknet là gì?
 
 <Answer>
-Phần cứng đào Blocknet tốt nhất kết hợp băng thông bộ nhớ cao với đủ RAM để mỗi luồng có 2 GB. Trong các phép đo của seine, một máy chủ AMD EPYC Zen 5 dẫn đầu với 49,4 H/s trên 32 luồng, tiếp theo là AMD EPYC Zen 4 và Apple M4 Max. Card đồ họa NVIDIA cộng thêm hashrate của chúng.
+Phần cứng đào Blocknet tốt nhất kết hợp băng thông bộ nhớ cao với đủ RAM để mỗi luồng có 2 GB. Trong các phép đo của seine, một máy chủ AMD EPYC Zen 5 dẫn đầu với 49,4 H/s trên 32 luồng, tiếp theo là AWS Graviton4 và AMD EPYC Zen 4. Card đồ họa NVIDIA cộng thêm hashrate của chúng.
 </Answer>
 
 Proof of Work của Blocknet là Argon2id với một khối bộ nhớ 2 GiB cho mỗi lần băm. Điều đó khiến nó [memory-hard](/vi/blog/argon2id-proof-of-work-explained/): hashrate phụ thuộc vào băng thông và độ trễ bộ nhớ nhiều như vào số nhân, và vào việc RAM chứa được bao nhiêu khối 2 GiB cùng lúc. Một hệ thống bộ nhớ mạnh là điểm chung của những máy đứng đầu bảng dưới đây.
@@ -32,10 +32,10 @@ Proof of Work của Blocknet là Argon2id với một khối bộ nhớ 2 GiB ch
 | Phần cứng | Chip cụ thể | Luồng | Hashrate | Bộ nhớ đào |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | Máy chủ EPYC 9R45 | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | Máy chủ EPYC 9R14 | 24 | 35,7 H/s | 48 GiB |
+| Máy chủ Arm | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | Máy chủ EPYC 9R14 | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Máy chủ Arm | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Các dòng máy chủ chạy trên máy đám mây AWS với huge pages 2 MiB, còn dòng M4 Max chạy trên MacBook Pro 48 GB. Mỗi con số là số lần băm hoàn thành chia cho thời gian đã trôi qua, lấy trung bình qua nhiều lần chạy lặp lại, đo trong khoảng từ tháng 7 đến tháng 10 năm 2026. Kết quả Zen 5 là trung bình của bốn lần chạy với seine v0.2.22 trên AWS m8a.8xlarge, một máy EPYC 9R45 32 nhân với 128 GiB RAM.
 

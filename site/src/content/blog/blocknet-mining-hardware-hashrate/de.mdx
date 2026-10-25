@@ -11,7 +11,7 @@ faq:
     a: 'seine mint mit den Downloads für Windows und Linux auf NVIDIA-Grafikkarten und nutzt jede erkannte Karte zusätzlich zum Prozessor. Unter Windows ist die CUDA-Runtime enthalten, du brauchst also nur den NVIDIA-Treiber. Unter Linux installierst du den Treiber und die NVRTC-Bibliotheken. Der erste Start optimiert jede Karte und merkt sich das Ergebnis.'
   - q: 'Warum ist die Speicherbandbreite beim Blocknet-Mining wichtig?'
     a: 'Jeder Blocknet-Hash schreibt einen kompletten 2-GiB-Speicherblock und liest Daten von überall daraus zurück, weit mehr, als irgendein Prozessor-Cache fasst. Die Hashrate hängt daher davon ab, wie schnell das Speichersystem Daten bewegt. Am schnellsten minen Rechner mit hoher Speicherbandbreite und genug RAM für viele Threads.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ Diese Anleitung zeigt, welche Rechner Blocknet mit seine am schnellsten minen, w
 ## Was ist die beste Hardware für Blocknet-Mining?
 
 <Answer>
-Die beste Hardware für Blocknet-Mining verbindet hohe Speicherbandbreite mit genug RAM für 2 GB pro Thread. In den Messungen mit seine führt ein AMD-EPYC-Zen-5-Server mit 49,4 H/s auf 32 Threads, gefolgt von AMD EPYC Zen 4 und dem Apple M4 Max. NVIDIA-Grafikkarten addieren ihre Hashrate obendrauf.
+Die beste Hardware für Blocknet-Mining verbindet hohe Speicherbandbreite mit genug RAM für 2 GB pro Thread. In den Messungen mit seine führt ein AMD-EPYC-Zen-5-Server mit 49,4 H/s auf 32 Threads, gefolgt von AWS Graviton4 und dem AMD EPYC Zen 4. NVIDIA-Grafikkarten addieren ihre Hashrate obendrauf.
 </Answer>
 
 Blocknets Proof of Work ist Argon2id mit einem 2-GiB-Speicherblock pro Hash. Das macht ihn [speicherintensiv](/de/blog/argon2id-proof-of-work-explained/): Die Hashrate hängt genauso stark von Speicherbandbreite und Latenz ab wie von der Anzahl der Kerne, und davon, wie viele dieser 2-GiB-Blöcke gleichzeitig in den RAM passen. Ein starkes Speichersystem ist das, was die Spitzenrechner in der Tabelle unten gemeinsam haben.
@@ -32,10 +32,10 @@ Das sind die besten mit seine gemessenen Ergebnisse für jede Hardware-Generatio
 | Hardware | Genauer Chip | Threads | Hashrate | Mining-Speicher |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC-9R45-Server | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC-9R14-Server | 24 | 35,7 H/s | 48 GiB |
+| Arm-Server | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC-9R14-Server | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro mit 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Arm-Server | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Die Server-Zeilen liefen auf AWS-Cloud-Rechnern mit 2-MiB-Huge-Pages, die M4-Max-Zeile auf einem MacBook Pro mit 48 GB. Jeder Wert ist die Zahl der fertigen Hashes geteilt durch die verstrichene Zeit, gemittelt über wiederholte Läufe, gemessen zwischen Juli und Oktober 2026. Das Zen-5-Ergebnis ist der Mittelwert aus vier Läufen mit seine v0.2.22 auf einer AWS m8a.8xlarge, einem EPYC-9R45-Rechner mit 32 Kernen und 128 GiB RAM.
 

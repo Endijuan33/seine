@@ -11,7 +11,7 @@ faq:
     a: '内存密集型哈希每次尝试都需要数 GB 的高速内存，所以专为哈希设计的芯片仍然要在每个核心旁边配备大量内存。台式机、笔记本电脑和服务器出厂时就带有充足的内存和高速内存控制器，因此人们已有的硬件本来就接近算法所需。'
   - q: '可以同时用 CPU 和显卡挖矿吗？'
     a: '可以，在 Windows 或 Linux 上用 seine 挖 Blocknet 时就能做到。seine 会同时在处理器和检测到的每张 NVIDIA 显卡上挖矿，算力相加。它在挖矿时调优处理器，并在每张显卡首次启动时为其调优，所以开始之前无需任何配置。'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: reviewed
 ---
 
@@ -67,10 +67,10 @@ Blocknet 四个问题都能答好。它是一种[默认隐私](/zh-hans/blog/blo
 | 硬件 | 具体芯片 | 线程 | 算力 |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 服务器 | 32 | 49.4 H/s |
-| AMD EPYC · Zen 4 | EPYC 9R14 服务器 | 24 | 35.7 H/s |
+| Arm 服务器 | AWS Graviton4 | 32 | 39.3 H/s |
+| AMD EPYC · Zen 4 | EPYC 9R14 服务器 | 32 | 38.2 H/s |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s |
-| Arm 服务器 | AWS Graviton4 | 16 | 21.5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s |
 
 Apple M4 Max 这一行是一台笔记本电脑，说明强大的内存系统与 Argon2id 非常契合。服务器各行在启用 2 MiB 大页内存的 AWS 机器上运行。[Blocknet 挖矿硬件指南](/zh-hans/blog/blocknet-mining-hardware-hashrate/)深入介绍了选购建议和内存规划，[Mac 指南](/zh-hans/blog/mine-blocknet-on-mac/)介绍了 Apple Silicon。
 

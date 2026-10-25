@@ -11,7 +11,7 @@ faq:
     a: 'W wersjach dla systemów Windows i Linux seine kopie na kartach graficznych NVIDIA, używając każdej wykrytej karty razem z procesorem. W systemie Windows środowisko uruchomieniowe CUDA jest dołączone, więc potrzebujesz tylko sterownika NVIDIA. W systemie Linux zainstaluj sterownik i biblioteki NVRTC. Przy pierwszym uruchomieniu seine dostraja każdą kartę i zapamiętuje wynik.'
   - q: 'Dlaczego przepustowość pamięci ma znaczenie przy kopaniu Blocknet?'
     a: 'Każdy hash Blocknet zapisuje pełny blok pamięci 2 GiB i odczytuje dane z całego tego obszaru, znacznie więcej, niż mieści jakakolwiek pamięć podręczna procesora. Hashrate zależy więc od tego, jak szybko system pamięci przesyła dane. Najszybciej kopią komputery z większą przepustowością pamięci i wystarczającą ilością RAM na wiele wątków.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: draft
 ---
 
@@ -20,7 +20,7 @@ Ten poradnik pokazuje, które komputery kopią Blocknet najszybciej z seine, ile
 ## Jaki jest najlepszy sprzęt do kopania Blocknet?
 
 <Answer>
-Najlepszy sprzęt do kopania Blocknet łączy wysoką przepustowość pamięci z ilością RAM wystarczającą na 2 GB na wątek. W pomiarach seine prowadzi serwer AMD EPYC Zen 5 z 49,4 H/s na 32 wątkach, a za nim są AMD EPYC Zen 4 i Apple M4 Max. Karty graficzne NVIDIA dokładają do tego swój hashrate.
+Najlepszy sprzęt do kopania Blocknet łączy wysoką przepustowość pamięci z ilością RAM wystarczającą na 2 GB na wątek. W pomiarach seine prowadzi serwer AMD EPYC Zen 5 z 49,4 H/s na 32 wątkach, a za nim są AWS Graviton4 i AMD EPYC Zen 4. Karty graficzne NVIDIA dokładają do tego swój hashrate.
 </Answer>
 
 Proof of work Blocknet to Argon2id z blokiem pamięci 2 GiB na każdy hash. To sprawia, że jest [wymagający dużo pamięci](/pl/blog/argon2id-proof-of-work-explained/): hashrate zależy w takim samym stopniu od przepustowości i opóźnień pamięci, jak od liczby rdzeni, a także od tego, ile takich bloków 2 GiB mieści się naraz w RAM. Mocny system pamięci to cecha wspólna najlepszych komputerów z poniższej tabeli.
@@ -32,10 +32,10 @@ To najlepsze wyniki zmierzone z seine dla każdej generacji sprzętu. Ostatnia k
 | Sprzęt | Dokładny układ | Wątki | Hashrate | Pamięć do kopania |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | serwer EPYC 9R45 | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | serwer EPYC 9R14 | 24 | 35,7 H/s | 48 GiB |
+| Serwer Arm | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | serwer EPYC 9R14 | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Serwer Arm | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Wiersze serwerowe zmierzono na maszynach w chmurze AWS z huge pages 2 MiB, a wiersz M4 Max na MacBooku Pro z 48 GB. Każda wartość to liczba ukończonych hashy podzielona przez czas, uśredniona z powtarzanych pomiarów wykonanych między lipcem a październikiem 2026 roku. Wynik Zen 5 to średnia z czterech pomiarów z seine v0.2.22 na AWS m8a.8xlarge, 32-rdzeniowej maszynie z EPYC 9R45 i 128 GiB RAM.
 

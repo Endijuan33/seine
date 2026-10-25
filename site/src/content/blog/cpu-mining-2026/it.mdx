@@ -11,7 +11,7 @@ faq:
     a: 'Un hash memory-hard richiede gigabyte di memoria veloce per ogni tentativo, quindi un chip costruito solo per calcolare hash avrebbe comunque bisogno di grandi quantità di RAM accanto a ogni core. Desktop, laptop e server hanno già molta RAM e controller di memoria veloci, il che avvicina l''hardware che le persone possiedono a ciò di cui l''algoritmo ha bisogno.'
   - q: 'Si può minare con CPU e scheda grafica contemporaneamente?'
     a: 'Sì, quando mini Blocknet con seine su Windows o Linux. seine mina contemporaneamente sul processore e su tutte le schede grafiche NVIDIA che rileva, e gli hashrate si sommano. Ottimizza il processore mentre mina e ogni scheda al primo avvio, quindi non c''è nulla da configurare prima di iniziare.'
-sourceHash: cad8d124dba2
+sourceHash: 67d582c389a6
 translation: reviewed
 ---
 
@@ -67,10 +67,10 @@ Questi sono i migliori risultati misurati con seine per ogni generazione di hard
 | Hardware | Chip esatto | Thread | Hashrate |
 |---|---|---|---|
 | AMD EPYC · Zen 5 | Server EPYC 9R45 | 32 | 49,4 H/s |
-| AMD EPYC · Zen 4 | Server EPYC 9R14 | 24 | 35,7 H/s |
+| Server Arm | AWS Graviton4 | 32 | 39,3 H/s |
+| AMD EPYC · Zen 4 | Server EPYC 9R14 | 32 | 38,2 H/s |
 | Apple M4 Max | MacBook Pro da 48 GB | 16 | 30,9 H/s |
-| Server Arm | AWS Graviton4 | 16 | 21,5 H/s |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s |
 
 La riga dell'Apple M4 Max è un laptop, il che mostra quanto un sistema di memoria potente si adatti ad Argon2id. Le righe dei server sono state misurate su macchine AWS con huge pages da 2 MiB. La [guida all'hardware per il mining di Blocknet](/it/blog/blocknet-mining-hardware-hashrate/) approfondisce i consigli d'acquisto e il dimensionamento della RAM, e la [guida per Mac](/it/blog/mine-blocknet-on-mac/) copre Apple Silicon.
 

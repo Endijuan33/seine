@@ -11,7 +11,7 @@ faq:
     a: 'seine mina con tarjetas gráficas NVIDIA en las descargas para Windows y Linux, y usa todas las tarjetas que detecta junto con el procesador. En Windows se incluye el runtime de CUDA, así que solo necesitas el controlador de NVIDIA. En Linux, instala el controlador y las bibliotecas NVRTC. El primer inicio ajusta cada tarjeta y recuerda el resultado.'
   - q: '¿Por qué importa el ancho de banda de memoria para minar Blocknet?'
     a: 'Cada hash de Blocknet escribe un bloque de memoria completo de 2 GiB y vuelve a leer datos de todo él, mucho más de lo que cabe en cualquier caché de procesador. Por eso la tasa de hash depende de lo rápido que el sistema de memoria mueve los datos. Los equipos con más ancho de banda de memoria y RAM suficiente para muchos hilos son los que más rápido minan.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ Esta guía muestra qué equipos minan Blocknet más rápido con seine, cuántos 
 ## ¿Cuál es el mejor hardware para minar Blocknet?
 
 <Answer>
-El mejor hardware para minar Blocknet combina un ancho de banda de memoria alto con RAM suficiente para 2 GB por hilo. En las mediciones de seine, un servidor AMD EPYC Zen 5 lidera con 49,4 H/s con 32 hilos, seguido de AMD EPYC Zen 4 y del Apple M4 Max. Además, las tarjetas gráficas NVIDIA suman su propia tasa de hash.
+El mejor hardware para minar Blocknet combina un ancho de banda de memoria alto con RAM suficiente para 2 GB por hilo. En las mediciones de seine, un servidor AMD EPYC Zen 5 lidera con 49,4 H/s con 32 hilos, seguido de AWS Graviton4 y del AMD EPYC Zen 4. Además, las tarjetas gráficas NVIDIA suman su propia tasa de hash.
 </Answer>
 
 La prueba de trabajo de Blocknet es Argon2id con un bloque de memoria de 2 GiB por hash. Eso la hace [intensiva en memoria](/es/blog/argon2id-proof-of-work-explained/): la tasa de hash depende tanto del ancho de banda y la latencia de la memoria como del número de núcleos, y de cuántos de esos bloques de 2 GiB caben a la vez en la RAM. Un sistema de memoria potente es lo que tienen en común los mejores equipos de la tabla siguiente.
@@ -32,10 +32,10 @@ Estos son los mejores resultados medidos con seine para cada generación de hard
 | Hardware | Chip exacto | Hilos | Tasa de hash | Memoria de minería |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | Servidor EPYC 9R45 | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | Servidor EPYC 9R14 | 24 | 35,7 H/s | 48 GiB |
+| Servidor Arm | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | Servidor EPYC 9R14 | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro de 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Servidor Arm | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Las filas de servidores se ejecutaron en máquinas en la nube de AWS con huge pages de 2 MiB, y la fila del M4 Max en un MacBook Pro de 48 GB. Cada cifra es el número de hashes completados dividido entre el tiempo transcurrido, promediado sobre varias ejecuciones, medido entre julio y octubre de 2026. El resultado de Zen 5 es la media de cuatro ejecuciones con seine v0.2.22 en una AWS m8a.8xlarge, una máquina EPYC 9R45 de 32 núcleos con 128 GiB de RAM.
 

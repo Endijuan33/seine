@@ -11,7 +11,7 @@ faq:
     a: 'seine menambang dengan kartu grafis NVIDIA pada unduhan Windows dan Linux, memakai setiap kartu yang terdeteksi bersama prosesor. Di Windows, runtime CUDA sudah disertakan, jadi Anda hanya butuh driver NVIDIA. Di Linux, pasang driver dan pustaka NVRTC. Peluncuran pertama menyetel setiap kartu dan mengingat hasilnya.'
   - q: 'Mengapa bandwidth memori penting untuk menambang Blocknet?'
     a: 'Setiap hash Blocknet menulis satu blok memori 2 GiB penuh dan membaca kembali data dari seluruh bagiannya, jauh lebih banyak dari yang bisa ditampung cache prosesor mana pun. Karena itu hashrate bergantung pada seberapa cepat sistem memori memindahkan data. Komputer dengan bandwidth memori lebih besar dan RAM yang cukup untuk banyak thread menambang paling cepat.'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ Panduan ini menunjukkan komputer mana yang menambang Blocknet paling cepat denga
 ## Apa perangkat keras terbaik untuk menambang Blocknet?
 
 <Answer>
-Perangkat keras terbaik untuk menambang Blocknet menggabungkan bandwidth memori yang tinggi dengan RAM yang cukup untuk 2 GB per thread. Dalam pengukuran seine, server AMD EPYC Zen 5 memimpin dengan 49,4 H/s pada 32 thread, diikuti AMD EPYC Zen 4 dan Apple M4 Max. Kartu grafis NVIDIA menambahkan hashrate-nya di atas itu.
+Perangkat keras terbaik untuk menambang Blocknet menggabungkan bandwidth memori yang tinggi dengan RAM yang cukup untuk 2 GB per thread. Dalam pengukuran seine, server AMD EPYC Zen 5 memimpin dengan 49,4 H/s pada 32 thread, diikuti AWS Graviton4 dan AMD EPYC Zen 4. Kartu grafis NVIDIA menambahkan hashrate-nya di atas itu.
 </Answer>
 
 Proof of work Blocknet adalah Argon2id dengan blok memori 2 GiB per hash. Itu membuatnya [memory-hard](/id/blog/argon2id-proof-of-work-explained/): hashrate bergantung pada bandwidth dan latensi memori sama besarnya dengan jumlah core, dan pada berapa banyak blok 2 GiB itu yang muat di RAM sekaligus. Sistem memori yang kuat adalah kesamaan komputer-komputer teratas di tabel berikut.
@@ -32,10 +32,10 @@ Berikut hasil terbaik yang diukur dengan seine untuk setiap generasi perangkat k
 | Perangkat keras | Chip spesifik | Thread | Hashrate | Memori penambangan |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | Server EPYC 9R45 | 32 | 49,4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | Server EPYC 9R14 | 24 | 35,7 H/s | 48 GiB |
+| Server Arm | AWS Graviton4 | 32 | 39,3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | Server EPYC 9R14 | 32 | 38,2 H/s | 64 GiB |
 | Apple M4 Max | MacBook Pro 48 GB | 16 | 30,9 H/s | 32 GiB |
-| Server Arm | AWS Graviton4 | 16 | 21,5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13,1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26,0 H/s | 64 GiB |
 
 Baris server dijalankan di mesin cloud AWS dengan huge pages 2 MiB, dan baris M4 Max di MacBook Pro 48 GB. Setiap angka adalah jumlah hash yang selesai dibagi waktu yang berlalu, dirata-ratakan dari beberapa kali pengujian, diukur antara Juli dan Oktober 2026. Hasil Zen 5 adalah rata-rata empat kali pengujian dengan seine v0.2.22 di AWS m8a.8xlarge, mesin EPYC 9R45 32 core dengan RAM 128 GiB.
 

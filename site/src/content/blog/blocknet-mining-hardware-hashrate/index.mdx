@@ -20,7 +20,7 @@ This guide shows which machines mine Blocknet fastest with seine, how many threa
 ## What is the best hardware for Blocknet mining?
 
 <Answer>
-The best Blocknet mining hardware combines high memory bandwidth with enough RAM for 2 GB per thread. In seine's measurements, an AMD EPYC Zen 5 server leads at 49.4 H/s on 32 threads, followed by AMD EPYC Zen 4 and the Apple M4 Max. NVIDIA graphics cards add their hashrate on top.
+The best Blocknet mining hardware combines high memory bandwidth with enough RAM for 2 GB per thread. In seine's measurements, an AMD EPYC Zen 5 server leads at 49.4 H/s on 32 threads, followed by AWS Graviton4 and AMD EPYC Zen 4. NVIDIA graphics cards add their hashrate on top.
 </Answer>
 
 Blocknet's proof of work is Argon2id with a 2 GiB memory block per hash. That makes it [memory-hard](/blog/argon2id-proof-of-work-explained/): hashrate depends as much on memory bandwidth and latency as on core count, and on how many of those 2 GiB blocks fit in RAM at once. A strong memory system is what the top machines in the table below have in common.
@@ -32,10 +32,10 @@ These are the best results measured with seine for each hardware generation. The
 | Hardware | Exact chip | Threads | Hashrate | Mining memory |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 server | 32 | 49.4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14 server | 24 | 35.7 H/s | 48 GiB |
+| Arm server | AWS Graviton4 | 32 | 39.3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14 server | 32 | 38.2 H/s | 64 GiB |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s | 32 GiB |
-| Arm server | AWS Graviton4 | 16 | 21.5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s | 64 GiB |
 
 The server rows ran on AWS cloud machines with 2 MiB huge pages, and the M4 Max row on a 48 GB MacBook Pro. Each figure is completed hashes divided by elapsed time, averaged over repeated runs, measured between July and October 2026. The Zen 5 result is the mean of four runs with seine v0.2.22 on an AWS m8a.8xlarge, a 32-core EPYC 9R45 machine with 128 GiB of RAM.
 

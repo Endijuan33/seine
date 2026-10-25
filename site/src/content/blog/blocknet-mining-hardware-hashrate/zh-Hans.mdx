@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 和 Linux 版本使用 NVIDIA 显卡挖矿，会在处理器之外同时使用检测到的每一张显卡。在 Windows 上已内置 CUDA 运行库，只需安装 NVIDIA 驱动。在 Linux 上需安装驱动和 NVRTC 库。首次启动时会为每张显卡调优并记住结果。'
   - q: '为什么内存带宽对挖 Blocknet 很重要？'
     a: '每次 Blocknet 哈希都要写满一整块 2 GiB 的内存，并从其中各处读回数据，远远超出任何处理器缓存的容量。因此算力取决于内存系统搬运数据的速度。内存带宽更高、内存足够运行更多线程的机器挖得最快。'
-sourceHash: 1c00a363e28e
+sourceHash: ecf2c85971db
 translation: reviewed
 ---
 
@@ -20,7 +20,7 @@ translation: reviewed
 ## 挖 Blocknet 用什么硬件最好？
 
 <Answer>
-最适合挖 Blocknet 的硬件，要同时具备高内存带宽和足够的内存（每个线程 2 GB）。在 seine 的实测中，AMD EPYC Zen 5 服务器以 32 个线程、49.4 H/s 领先，其次是 AMD EPYC Zen 4 和 Apple M4 Max。NVIDIA 显卡的算力还可以叠加在此之上。
+最适合挖 Blocknet 的硬件，要同时具备高内存带宽和足够的内存（每个线程 2 GB）。在 seine 的实测中，AMD EPYC Zen 5 服务器以 32 个线程、49.4 H/s 领先，其次是 AWS Graviton4 和 AMD EPYC Zen 4。NVIDIA 显卡的算力还可以叠加在此之上。
 </Answer>
 
 Blocknet 的工作量证明是 Argon2id，每次哈希使用一块 2 GiB 的内存。这让它成为[内存密集型](/zh-hans/blog/argon2id-proof-of-work-explained/)算法：算力既取决于核心数，也同样取决于内存带宽和延迟，以及内存中能同时容纳多少个 2 GiB 内存块。下表中排名靠前的机器，共同点就是强大的内存系统。
@@ -32,10 +32,10 @@ Blocknet 的工作量证明是 Argon2id，每次哈希使用一块 2 GiB 的内�
 | 硬件 | 具体芯片 | 线程数 | 算力 | 挖矿内存 |
 |---|---|---|---|---|
 | AMD EPYC · Zen 5 | EPYC 9R45 服务器 | 32 | 49.4 H/s | 64 GiB |
-| AMD EPYC · Zen 4 | EPYC 9R14 服务器 | 24 | 35.7 H/s | 48 GiB |
+| Arm 服务器 | AWS Graviton4 | 32 | 39.3 H/s | 64 GiB |
+| AMD EPYC · Zen 4 | EPYC 9R14 服务器 | 32 | 38.2 H/s | 64 GiB |
 | Apple M4 Max | 48 GB MacBook Pro | 16 | 30.9 H/s | 32 GiB |
-| Arm 服务器 | AWS Graviton4 | 16 | 21.5 H/s | 32 GiB |
-| Intel Xeon | Sapphire Rapids 8488C | 12 | 13.1 H/s | 24 GiB |
+| Intel Xeon | Sapphire Rapids 8488C | 32 | 26.0 H/s | 64 GiB |
 
 服务器结果是在启用 2 MiB 大页的 AWS 云服务器上测得的，M4 Max 结果来自一台 48 GB 的 MacBook Pro。每个数字都是完成的哈希数除以实际耗时，取多次运行的平均值，测试时间为 2026 年 7 月至 10 月。Zen 5 结果是 seine v0.2.22 在 AWS m8a.8xlarge 上四次运行的平均值，该机器配备 32 核 EPYC 9R45 和 128 GiB 内存。
 
