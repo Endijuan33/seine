@@ -42,8 +42,9 @@ thin keyword-permutation pages, which Google's scaled-content policy penalizes.
    keyword-map row or without reviewed, current translations. Pushing to `master` deploys.
 8. **After publishing.** Google reads `sitemap.xml` (the domain property is verified in Search
    Console) and IndexNow notifies Bing on each deploy; request indexing for a new post with URL
-   inspection in Search Console if you want it sooner. Submit Chinese pages to Baidu Ziyuan,
-   and link to the post from somewhere relevant (README, release notes, pool FAQ, a reply on X). After 4-8 weeks, read the Search Console queries and
+   inspection in Search Console if you want it sooner. There is no Baidu Ziyuan account (it
+   needs a mainland phone number), so Chinese pages rely on Bing China via IndexNow, Google and
+   Baidu's own crawling. Link to the post from somewhere relevant (README, release notes, pool FAQ, a reply on X). After 4-8 weeks, read the Search Console queries and
    strengthen what ranks 5-20 rather than adding near-duplicates.
 
 ## Post format

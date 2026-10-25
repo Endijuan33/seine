@@ -49,7 +49,8 @@ Zen 5, laptop mining.
 
 ## Off-site work that matters as much as posts
 
-- Get Blocknet and seine listed on miningpoolstats, hashrate.no, whattomine and Kryptex.
+- Get Blocknet and seine listed on miningpoolstats, hashrate.no, whattomine and Kryptex (deferred
+  by the owner on 2026-10-25; requests go out from the owner's accounts).
 - Ask upstream for a "Mine" link from blocknetcrypto.com to seineminer.com.
 - Give bntpool.com a crawlable title and description ("Blocknet mining pool").
 - Rewrite the seine and blocknet-pool GitHub descriptions with "Blocknet miner/pool".
