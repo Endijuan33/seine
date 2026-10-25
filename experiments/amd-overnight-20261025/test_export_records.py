@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import unittest
+import hashlib
 
-from export_records import records
+from export_records import apply_review, records
 
 
 def fixture():
@@ -27,6 +28,26 @@ def fixture():
 
 
 class RecordTests(unittest.TestCase):
+    def test_review_cannot_bypass_numerical_gate_or_change_evidence(self):
+        data = fixture()
+        for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
+            data[phase] = {'comparison': {'paired_geometric_delta_pct': 0.5}}
+        review = {'decision': 'accept_challenger_order',
+                  'result_manifest_sha256': hashlib.sha256(b'evidence').hexdigest(),
+                  'binary_provenance': data['binary_provenance']}
+        for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
+            review[phase + '_comparison'] = data[phase]['comparison']
+        with self.assertRaises(AssertionError):
+            apply_review(data, b'evidence', review)
+        data['numerical_gain_gate_passed'] = True
+        with self.assertRaises(AssertionError):
+            apply_review(data, b'other', review)
+        apply_review(data, b'evidence', review)
+        self.assertTrue(data['landing_status'].startswith('Accepted'))
+        data['numerical_gain_gate_passed'] = False
+        apply_review(data, b'evidence', {**review, 'decision': 'reject_challenger_order'})
+        self.assertTrue(data['landing_status'].startswith('Rejected'))
+
     def test_ratio_of_totals_and_scope_preserve_lower_bound(self):
         result = records(fixture())
         self.assertEqual(len(result['records']), 4)

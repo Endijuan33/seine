@@ -2,11 +2,25 @@
 """Export audited automatic-tuning observations for tables and website graphs."""
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 import statistics
 
 from analyze_productive import analyze
+
+
+def apply_review(analysis, manifest_bytes, review):
+    """Bind acceptance/rejection to the complete audited experiment, not a partial pair."""
+    assert review['decision'] in ('accept_challenger_order', 'reject_challenger_order')
+    assert review['result_manifest_sha256'] == hashlib.sha256(manifest_bytes).hexdigest()
+    assert review['binary_provenance'] == analysis['binary_provenance']
+    for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
+        assert review[phase + '_comparison'] == analysis[phase]['comparison']
+    accepted = review['decision'] == 'accept_challenger_order'
+    assert not accepted or analysis['numerical_gain_gate_passed']
+    analysis['landing_status'] = ('Accepted challenger ordering for AMD family 1Ah/model 02h'
+                                  if accepted else 'Rejected challenger-order experiment')
 
 
 def records(analysis):
@@ -68,10 +82,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('collected', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--review', type=Path, help='Explicit decision bound to the full evidence and frozen builds')
     args = parser.parse_args()
     # The full audit requires all cold/warm pairs, reference checks and completed
     # lifecycle evidence. It cannot export a cherry-picked partial campaign.
-    result = records(analyze(args.collected))
+    analysis = analyze(args.collected)
+    if args.review:
+        apply_review(analysis, (args.collected / 'results/manifest.json').read_bytes(),
+                     json.loads(args.review.read_text()))
+    result = records(analysis)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'benchmark-records.json').write_text(json.dumps(result, indent=2) + '\n')
     columns = ('id', 'hardware', 'phase', 'role', 'selection', 'cpu_profile', 'page_mode', 'metric_scope',
