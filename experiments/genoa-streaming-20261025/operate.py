@@ -93,7 +93,10 @@ def main():
             break
         assert time.monotonic() < wait_until, 'quota did not become free; no server launched'
         print('Waiting for quota:', used, '/', quota, flush=True)
-        time.sleep(30)
+        # Other owned campaigns reuse the entire quota between short gaps.
+        # Observe free capacity promptly without touching their instances. This
+        # changes only pre-launch waiting, never the frozen measurement protocol.
+        time.sleep(5)
     started = time.time()
     save('operation.json', {'status': 'launching', 'started_at': started, 'cap_usd': 3.25})
     lease_created = False
