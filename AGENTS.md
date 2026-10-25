@@ -45,6 +45,8 @@ This file preserves the full engineering reference for AI agents doing optimizat
 
 ### CPU Backend Tuning
 
+- Experimental joint-policy follow-up: candidate counts finish the eligible kernel sweep before count sampling. Kernel retry cooldowns are scoped to backend membership and count; full backing still scopes winner caches. Cache schema 3 includes membership. The outer deadline includes all challenger comparisons, count confirmations, one retry cooldown and switch slack. This branch does not include the separate parked-slot/PID or ARM SHA3 changes. Native cold/cached throughput validation is required before promotion.
+
 - `avx512-256-stream` is a distinct CPU kernel with a 64 KiB recent-block ring
   and non-temporal arena stores. It preserves the full 2 GiB arena. ISA support
   requires AVX2 + AVX-512F/VL; automatic trials additionally require validated

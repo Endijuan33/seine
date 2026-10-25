@@ -2,6 +2,27 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 joint tuning on v0.2.22: isolated integration
+
+Ports the count/kernel crossover policy and per-context retry fix from PR46/47
+onto v0.2.22, preserving the merged EPYC multi-challenger sweep and hardware
+eligibility. Excludes the old branch's unmerged ARM and worker/PID provisioning
+changes. Stopped backends no longer contribute hashes or block acknowledgements;
+cache schema 3 includes stable membership and the eligible candidate set.
+
+Kernel cooldowns are keyed by membership/count, independent of page backing.
+Count comparisons pause while their kernel context is cooling or being sampled.
+Pressure, allocation failure, disconnection, changed backing and bounded trial
+deadlines still discard outer evidence and restore the original configuration.
+The outer budget now covers two A/B/A cycles per eligible challenger, six count
+windows, a retry cooldown and switch slack. A synthetic three-path regression
+requires more than the former 900-second limit and confirms the streaming winner
+only after the second outer comparison.
+
+Validation before native runs: 507 CPU workspace tests passed (499 miner, five
+kernel, three integration), five existing resource tests ignored. Focused adaptive
+tests: 53 passed, two ignored. No native performance gain is claimed yet.
+
 ## Conventions
 
 - Attempt numbers are historical labels and may repeat across platform-specific sections (`x86_64` vs `Apple`).
