@@ -20,6 +20,12 @@ tests. Frozen executable SHA-256 values are recorded before rental launch.
 CPU-only portable Rust 1.93.0 release builds use the same toolchain and flags.
 This is throughput validation, not a package-energy or whole-system H/W test.
 
+`frozen-builds.json` records the measured revisions, build settings and binary
+checksums. To reconstruct the measured candidate after branch rebases, check out
+its recorded control revision and apply `candidate-runtime.patch`. The patch
+checksum is recorded in the same JSON; applying it to the control reproduces
+every runtime/library/build-file difference in the measured candidate.
+
 ## Frozen protocol
 
 One exclusively owned `c7a.8xlarge` in us-east-1, 32 vCPUs (one thread per
