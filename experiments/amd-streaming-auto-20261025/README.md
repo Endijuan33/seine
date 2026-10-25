@@ -75,6 +75,43 @@ convergence. After a confirmed winner, it runs at least 360 seconds total and
 another 30 seconds after caching, then checks a 90-second exact-context restart.
 It uses a fresh cache and the same hard desktop deadline and memory ceiling.
 
+## Takeover results (2026-10-25, after Codex usage ran out)
+
+Both checks used the same binary (`f7ef9fdc…`) and were launched through the gpuq
+Windows runner, which starts processes hidden (`CreateNoWindow`), rather than
+`powershell.exe` from WSL. `takeover_daemon.py` resolves its own gpuq job id and
+then runs `daemon_probe.py` unchanged. Evidence and SHA-256 lists are in the
+ignored `data/amd-streaming-auto-20261025/functional-results/` and `daemon-results/`.
+
+- **Functional restore/park/recovery: passed.** The unmodified load-run cache
+  restored `avx512-256-stream` 2.2 s into a warm restart. A 95%-reserve start
+  parked at 0 hashes, waiting for RAM, without changing the cache. A recovery
+  restart restored streaming at 2.0 s and mined. Codex's 02:10 UTC attempt was
+  interrupted before its recovery phase and is kept separately.
+- **Long daemon retry probe: failed. No streaming winner in 1,021 s.** Kernel
+  trials ran at 2 s (avx2: no gain), 100 s (streaming: reported "no confirmed
+  gain"), 496 s (avx2: no gain) and 594 s (streaming: first cycle passed, second
+  cycle "confirmation was noisy"). Steady 5-second rates on the busy desktop
+  wander between about 6.4 and 7.5 H/s, and the 5% baseline-drift gate tripped.
+
+**Open blocker: the 100 s streaming trial.** Global 5-second stats show about
+7.7 H/s before, 10.1 during and 7.6 after the candidate window. That's about +30%
+with about 2% drift, which `comparison()` should score as `Gain`. Yet the tuner
+logged "no confirmed gain". Two findings:
+
+1. `Tuner::tick` logs "keeping current kernel; no confirmed gain" for every
+   first-cycle non-gain, including `Comparison::Inconclusive` (drift above 5%).
+   The message cannot distinguish a real loss from a drifted baseline.
+2. The tuner logs no A/B/A sample values, so this run cannot show whether its
+   windows fell outside the visible streaming interval or whether per-backend
+   snapshot hashes undercount the streaming kernel.
+
+Fixed-kernel evidence still shows streaming about 46% faster on this desktop. In
+three productive cold runs, automatic selection confirmed it once (the CPU-load
+run). Do not promote Ryzen eligibility on this evidence. Next step: log each
+trial's three samples and the comparison outcome, fix the message for
+`Inconclusive`, then rerun this probe.
+
 ## Integration and handoff
 
 The research session owns PR50 joint tuning in `seine-cpu-followups`; do not alter

@@ -153,7 +153,7 @@ class Campaign:
         self.check();episode=self.out/label;episode.mkdir(); cache.mkdir(exist_ok=True)
         server=Server(('127.0.0.1',0))
         threading.Thread(target=server.serve_forever,daemon=True).start()
-        args=[str(self.exe),'--mode','pool','--pool-url',f'127.0.0.1:{server.server_address[1]}','--address',address(),'--pool-worker','native-validation','--backend','cpu','--cpu-page-mode','regular','--cpu-affinity','auto','--cpu-autotune-min-threads','8','--cpu-autotune-max-threads','16','--cpu-autotune-config',str(cache/'tuning.json'),'--data-dir',str(cache/'config'),'--ui','plain','--stats-secs','5']
+        args=[str(self.exe),'--mode','pool','--pool-url',f'127.0.0.1:{server.server_address[1]}','--address',address(),'--pool-worker','native-validation','--backend','cpu','--cpu-page-mode','regular','--cpu-affinity','auto','--cpu-autotune-min-threads','8','--cpu-autotune-max-threads',str(getattr(self,'worker_max',16)),'--cpu-autotune-config',str(cache/'tuning.json'),'--data-dir',str(cache/'config'),'--ui','plain','--stats-secs','5']
         if reserve is not None:args+=['--cpu-memory-reserve-percent',str(reserve)]
         before={p.name:json.loads(p.read_text()) for p in cache.glob('tuning.json*') if p.suffix=='.json'}
         start=time.monotonic(); p=None; burners=[]; snapshots=[]
