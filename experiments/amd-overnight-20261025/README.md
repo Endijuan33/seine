@@ -70,6 +70,12 @@ CPU-heavy work on the measured host. Keep original and follow-up phases separate
 
 ## Reporting
 
+`frozen-builds.json` records the measured revisions, build settings and binary
+checksums. To reconstruct the measured candidate after branch rebases, check out
+its recorded control revision and apply `candidate-runtime.patch`. The patch
+checksum is recorded in the same JSON; applying it to the control reproduces
+every runtime/library/build-file difference in the measured candidate.
+
 Export machine-readable records with exact hardware/memory settings, source and
 binary identities, worker/kernel/page configuration, metric scope, repetitions,
 variability and raw evidence checksums. CPU package watts exclude unmeasured DRAM
