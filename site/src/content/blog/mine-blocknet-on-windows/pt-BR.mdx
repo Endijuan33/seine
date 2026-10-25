@@ -9,7 +9,7 @@ faq:
     a: 'Por padrão, o seine salva o endereço de pagamento, o pool e o nome do rig em seine-data/seine.config.json, dentro da pasta de onde você o executa. Execute-o a partir da mesma pasta extraída para reutilizar essas configurações. A opção data-dir permite escolher outro diretório quando necessário.'
   - q: 'Preciso ativar páginas grandes do Windows antes de começar a minerar?'
     a: 'Não. O seine tenta usar páginas grandes automaticamente e usa páginas normais quando elas não estão disponíveis. Você pode começar a minerar com as configurações padrão. Para a configuração opcional de páginas grandes, conceda à sua conta de mineração o direito Bloquear páginas na memória, depois saia e entre novamente na sessão antes de reiniciar o seine.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ Na primeira execução, o seine ajusta cada GPU e memoriza as configurações. O
 A inicialização normal já tenta usar páginas grandes e recorre a páginas normais quando necessário. Para preparar páginas grandes no Windows Pro, Enterprise ou Education, abra `secpol.msc`, acesse **Políticas Locais → Atribuição de Direitos de Usuário → Bloquear páginas na memória** e adicione a conta que executa o seine. Saia e entre novamente na sessão para que a nova sessão receba esse direito.
 
 O [guia de páginas grandes](/pt-br/blog/huge-pages-blocknet-mining/) detalha essa configuração opcional. Depois de entrar novamente, inicie o seine normalmente e confira no log de inicialização o modo de páginas selecionado. Mantenha o modo automático padrão enquanto estabelece sua primeira configuração funcional e depois compare as medições no mesmo PC se alterar as configurações de páginas.
+
+[Windows bloqueou seu minerador? Verifique o download](/pt-br/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Baixe o seine para Windows" text="Extraia o ZIP, informe seu endereço de pagamento e comece a minerar no bntpool.com com ajuste automático de CPU e NVIDIA." />

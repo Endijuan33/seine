@@ -12,7 +12,7 @@ faq:
     a: Start seine with the backend option set to nvidia. It creates an NVIDIA backend for each detected card. Add the nvidia-devices option to select particular device indices. Check the Devices panel after startup to confirm that the intended GPUs are present and hashing.
   - q: Where can I see whether my GPU shares are accepted?
     a: The mining dashboard shows submitted, rejected and accepted shares, and its log identifies the backend for share events. Check the NVIDIA device row for its local hashrate, then look for accepted share messages from that backend. Use the pool tracking guide to check credited work.
-related: [how-to-mine-blocknet, mine-blocknet-on-windows, seine-dashboard-explained]
+related: [how-to-mine-blocknet, mine-blocknet-on-windows, seine-dashboard-explained, antivirus-flags-crypto-miner]
 ---
 
 Seine mines Blocknet on your NVIDIA GPU alongside the CPU. This guide covers Windows and Linux setup, card selection, accepted shares and a measured RTX 5090 comparison. The commands describe seine v0.2.26 and the current Argon2id network as of October 2026.
@@ -106,5 +106,7 @@ Read the startup log for that backend: it distinguishes ongoing preparation from
 For the current Argon2id workload, each active GPU lane needs a 2 GiB arena plus runtime overhead. Seine sizes GPU work using available device memory and allocation checks. Leave lane overrides unset; advertised VRAM alone does not determine how many lanes are available during a desktop session.
 
 If the device is hashing but the pool shows zero, follow the [pool hashrate checklist](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate) for address, connection and accepted-share checks.
+
+[Windows blocked your miner? Verify the download](/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Download seine for NVIDIA mining" text="Choose the Windows or Linux x86_64 archive and start with automatic CPU and NVIDIA GPU selection." />

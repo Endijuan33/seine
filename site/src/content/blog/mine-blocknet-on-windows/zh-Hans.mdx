@@ -9,7 +9,7 @@ faq:
     a: '默认情况下，seine 将收款地址、矿池和矿机名称保存在启动目录下的 seine-data/seine.config.json 中。从同一个解压目录运行即可复用这些设置。需要其他目录时，可以使用 data-dir 选项指定。'
   - q: '开始挖矿前需要启用 Windows 大页吗？'
     a: '不需要。seine 会自动尝试使用大页，无法使用时则采用普通页。你可以直接使用默认设置开始挖矿。如需进行可选的大页设置，请为挖矿账户授予“锁定内存页”权限，然后注销并重新登录，再重启 seine。'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ seine 默认同时使用 CPU 和受支持的 NVIDIA 显卡。安装当前版本�
 正常启动时，程序已经会尝试大页，并在需要时回退到普通页。要在 Windows Pro、Enterprise 或 Education 上准备大页，请打开 `secpol.msc`，进入**本地策略 → 用户权限分配 → 锁定内存页**，添加运行 seine 的账户。注销并重新登录，让新的登录会话获得该权限。
 
 [大页指南](/zh-hans/blog/huge-pages-blocknet-mining/)详细介绍了这一可选设置。重新登录后，照常启动 seine，并查看启动日志中的页模式。建立第一个可正常工作的配置时，保持默认自动模式；之后若修改页设置，请在同一台 PC 上比较测量结果。
+
+[Windows 拦截矿工程序？验证下载文件](/zh-hans/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="下载 Windows 版 seine" text="解压 ZIP，输入收款地址，即可在 bntpool.com 开始挖矿，CPU 和 NVIDIA 都会自动调优。" />

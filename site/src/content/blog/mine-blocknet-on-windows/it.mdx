@@ -9,7 +9,7 @@ faq:
     a: 'Per impostazione predefinita, seine salva l’indirizzo di pagamento, il pool e il nome del rig in seine-data/seine.config.json, all’interno della cartella da cui lo avvii. Eseguilo dalla stessa cartella estratta per riutilizzare queste impostazioni. L’opzione data-dir permette di scegliere un’altra directory quando necessario.'
   - q: 'Servono le pagine grandi di Windows prima di iniziare a minare?'
     a: 'No. seine prova automaticamente a usare le pagine grandi e utilizza pagine normali quando non sono disponibili. Puoi iniziare a minare con le impostazioni predefinite. Per la configurazione facoltativa delle pagine grandi, assegna al tuo account di mining il diritto Blocco di pagine in memoria, poi disconnettiti e accedi di nuovo prima di riavviare seine.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ Al primo avvio, seine ottimizza ogni GPU e ne ricorda le impostazioni. Anche l�
 L’avvio normale tenta già di usare le pagine grandi e ripiega sulle pagine normali. Per predisporre le pagine grandi su Windows Pro, Enterprise o Education, apri `secpol.msc`, vai a **Criteri locali → Assegnazione diritti utente → Blocco di pagine in memoria** e aggiungi l’account che esegue seine. Disconnettiti e accedi di nuovo, così la nuova sessione riceverà il diritto.
 
 La [guida alle pagine grandi](/it/blog/huge-pages-blocknet-mining/) descrive nel dettaglio questa configurazione facoltativa. Dopo il nuovo accesso, avvia seine normalmente e controlla nel log di avvio la modalità delle pagine selezionata. Mantieni la modalità automatica predefinita mentre realizzi la tua prima configurazione funzionante, poi confronta le misurazioni sullo stesso PC se modifichi le impostazioni delle pagine.
+
+[Windows blocca il miner? Verifica il download](/it/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Scarica seine per Windows" text="Estrai lo ZIP, inserisci il tuo indirizzo di pagamento e inizia a minare su bntpool.com con ottimizzazione automatica di CPU e NVIDIA." />

@@ -2,7 +2,7 @@
 title: '如何使用 NVIDIA GPU 挖掘 Blocknet'
 description: '使用 seine 在 NVIDIA GPU 上挖掘 Blocknet。了解 Windows 或 Linux 的設定方式、CPU 與 GPU 同時挖礦、裝置算力檢查及啟動問題排查。'
 tags: ['挖礦指南', 'NVIDIA', 'GPU']
-sourceHash: 38f1fa410262
+sourceHash: 6a693c616f37
 translation: draft
 faq:
   - q: 'seine 能同時使用 CPU 和 NVIDIA GPU 嗎？'
@@ -106,5 +106,7 @@ NVIDIA 後端顯示為 `nvidia#1`、`nvidia#2` 等，CPU 則有獨立的一列�
 對於目前的 Argon2id 工作負載，每個作用中的 GPU 通道需要 2 GiB 記憶體區域，以及額外的執行階段開銷。seine 根據可用裝置記憶體及記憶體配置檢查來決定 GPU 工作規模。不要手動覆寫通道數；僅憑標示的 VRAM 容量，無法判斷使用桌面期間有多少通道可用。
 
 如果裝置正在計算雜湊，但礦池顯示為零，請按照[礦池算力檢查清單](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate)檢查地址、連線及已接受的份額。
+
+[Windows 封鎖挖礦程式？驗證下載檔案](/zh-hant/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="下載 seine，使用 NVIDIA 挖礦" text="選擇 Windows 或 Linux x86_64 壓縮檔，從自動選擇 CPU 和 NVIDIA GPU 開始。" />

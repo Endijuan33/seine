@@ -9,7 +9,7 @@ faq:
     a: 'Por defecto, seine guarda la dirección de pago, el pool y el nombre del rig en seine-data/seine.config.json, dentro de la carpeta desde la que lo ejecutas. Ejecútalo desde la misma carpeta extraída para reutilizar esos ajustes. La opción data-dir permite elegir otro directorio cuando lo necesites.'
   - q: '¿Necesito las páginas grandes de Windows antes de empezar a minar?'
     a: 'No. seine intenta usar páginas grandes automáticamente y utiliza páginas normales si no están disponibles. Puedes empezar a minar con los ajustes predeterminados. Para configurar páginas grandes de forma opcional, concede a tu cuenta de minería el permiso Bloquear páginas en la memoria y después cierra y vuelve a iniciar sesión antes de reiniciar seine.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ En el primer arranque, seine ajusta cada GPU y recuerda su configuración. El aj
 El arranque normal ya intenta usar páginas grandes y recurre a páginas normales cuando no están disponibles. Para preparar las páginas grandes en Windows Pro, Enterprise o Education, abre `secpol.msc`, ve a **Directivas locales → Asignación de derechos de usuario → Bloquear páginas en la memoria** y añade la cuenta que ejecuta seine. Cierra y vuelve a iniciar sesión para que la nueva sesión reciba el permiso.
 
 La [guía de páginas grandes](/es/blog/huge-pages-blocknet-mining/) detalla esta configuración opcional. Después de volver a iniciar sesión, ejecuta seine normalmente y comprueba en el registro de arranque el modo de páginas seleccionado. Mantén el modo automático predeterminado mientras consigues tu primera configuración funcional y compara después las mediciones en el mismo PC si cambias los ajustes de páginas.
+
+[¿Windows bloqueó tu minero? Verifica la descarga](/es/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Descarga seine para Windows" text="Extrae el ZIP, introduce tu dirección de pago y empieza a minar en bntpool.com con ajuste automático de CPU y NVIDIA." />

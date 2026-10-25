@@ -2,7 +2,7 @@
 title: 'Como minerar Blocknet com uma GPU NVIDIA'
 description: 'Minere Blocknet com uma GPU NVIDIA usando seine. Configure Windows ou Linux, use CPU e GPU, confira o hashrate e resolva problemas na inicialização.'
 tags: ['Guia de mineração', 'NVIDIA', 'GPU']
-sourceHash: 38f1fa410262
+sourceHash: 6a693c616f37
 translation: draft
 faq:
   - q: 'O seine pode usar a CPU e a GPU NVIDIA juntas?'
@@ -106,5 +106,7 @@ Leia o log de inicialização desse backend: ele distingue uma preparação em a
 Na carga Argon2id atual, cada lane de GPU ativo precisa de uma área de 2 GiB mais a memória adicional de execução. O seine dimensiona o trabalho da GPU usando a memória disponível e as verificações de alocação. Deixe os ajustes manuais de lanes sem definir; a VRAM anunciada, sozinha, não determina quantos lanes estão disponíveis durante uma sessão de desktop.
 
 Se o dispositivo calcula hashes, mas o pool mostra zero, siga a [lista de verificação do hashrate do pool](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate) para conferir endereço, conexão e shares aceitos.
+
+[Windows bloqueou seu minerador? Verifique o download](/pt-br/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Baixe o seine para minerar com NVIDIA" text="Escolha o arquivo para Windows ou Linux x86_64 e comece com seleção automática de CPU e GPU NVIDIA." />

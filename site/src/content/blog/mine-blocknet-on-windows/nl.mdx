@@ -9,7 +9,7 @@ faq:
     a: 'Standaard bewaart seine het uitbetalingsadres, de pool en de naam van de rig in seine-data/seine.config.json onder de map waaruit je het programma start. Start het vanuit dezelfde uitgepakte map om die instellingen opnieuw te gebruiken. Met de optie data-dir kun je zo nodig een andere map kiezen.'
   - q: 'Heb ik grote geheugenpagina’s in Windows nodig voordat ik begin met minen?'
     a: 'Nee. seine probeert automatisch grote geheugenpagina’s te gebruiken en gebruikt gewone pagina’s als die niet beschikbaar zijn. Je kunt met de standaardinstellingen beginnen met minen. Voor de optionele instelling van grote pagina’s geef je je miningaccount het recht Pagina’s in het geheugen vergrendelen. Meld je daarna af en weer aan voordat je seine opnieuw start.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ Bij de eerste start stemt seine elke GPU af en onthoudt de instellingen. Ook de 
 Bij het normale opstarten probeert het programma al grote geheugenpagina’s te gebruiken en valt het terug op gewone pagina’s. Om grote pagina’s op Windows Pro, Enterprise of Education in te stellen, open je `secpol.msc`, ga je naar **Lokaal beleid → Toewijzing van gebruikersrechten → Pagina’s in het geheugen vergrendelen** en voeg je het account toe dat seine uitvoert. Meld je af en weer aan, zodat de nieuwe aanmeldsessie dat recht krijgt.
 
 De [handleiding voor grote geheugenpagina’s](/nl/blog/huge-pages-blocknet-mining/) behandelt deze optionele instelling in detail. Start seine na het opnieuw aanmelden normaal en controleer in het opstartlogboek welke paginamodus is geselecteerd. Behoud de standaard automatische modus terwijl je je eerste werkende installatie opzet en vergelijk daarna metingen op dezelfde pc als je de pagina-instellingen wijzigt.
+
+[Windows blokkeert je miner? Controleer de download](/nl/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Download seine voor Windows" text="Pak de ZIP uit, voer je uitbetalingsadres in en begin met minen op bntpool.com met automatische afstemming van CPU en NVIDIA." />

@@ -2,7 +2,7 @@
 title: 'NVIDIA GPUでBlocknetをマイニングする方法'
 description: 'seineでNVIDIA GPUを使ってBlocknetをマイニング。Windows・Linuxの設定、CPUとの併用、ハッシュレートの確認、起動時の問題への対処を解説します。'
 tags: ['マイニングガイド', 'NVIDIA', 'GPU']
-sourceHash: 38f1fa410262
+sourceHash: 6a693c616f37
 translation: draft
 faq:
   - q: 'seineはCPUとNVIDIA GPUを同時に使えますか？'
@@ -106,5 +106,7 @@ NVIDIAバックエンドは`nvidia#1`、`nvidia#2`などと表示され、CPUに
 現在のArgon2idの処理では、稼働するGPUレーンごとに2 GiBのメモリ領域とランタイムの追加メモリが必要です。seineは、利用可能なデバイスメモリとメモリ割り当ての確認結果に基づいてGPUの作業量を決めます。レーン数は手動で上書きせずに使用してください。公称VRAM容量だけでは、デスクトップを使用している間に利用できるレーン数は決まりません。
 
 デバイスがハッシュを計算しているのにプールがゼロと表示する場合は、[プールのハッシュレート確認リスト](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate)に沿って、アドレス、接続、受理されたシェアを確認してください。
+
+[Windowsがマイナーをブロックしたら](/ja/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="NVIDIAでのマイニングにseineをダウンロード" text="WindowsまたはLinux x86_64のアーカイブを選び、CPUとNVIDIA GPUの自動選択で始めましょう。" />

@@ -9,7 +9,7 @@ faq:
     a: 'Theo mặc định, seine lưu địa chỉ nhận thưởng, pool và tên máy đào trong seine-data/seine.config.json, bên dưới thư mục bạn dùng để khởi chạy. Hãy chạy từ cùng thư mục đã giải nén để dùng lại các thiết lập đó. Tùy chọn data-dir cho phép chọn thư mục khác khi cần.'
   - q: 'Tôi có cần bật large pages của Windows trước khi bắt đầu đào không?'
     a: 'Không. seine tự động thử dùng large pages và dùng trang thông thường khi không khả dụng. Bạn có thể bắt đầu đào với thiết lập mặc định. Để tùy chọn thiết lập large pages, hãy cấp quyền Lock pages in memory cho tài khoản đào, rồi đăng xuất và đăng nhập lại trước khi khởi động lại seine.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ Theo mặc định, seine dùng đồng thời CPU và các card NVIDIA được
 Khi khởi chạy bình thường, phần mềm đã thử dùng large pages và chuyển sang trang thông thường nếu cần. Để chuẩn bị large pages trên Windows Pro, Enterprise hoặc Education, mở `secpol.msc`, vào **Local Policies → User Rights Assignment → Lock pages in memory** và thêm tài khoản chạy seine. Đăng xuất rồi đăng nhập lại để phiên đăng nhập mới nhận quyền này.
 
 [Hướng dẫn large pages](/vi/blog/huge-pages-blocknet-mining/) trình bày chi tiết thiết lập tùy chọn này. Sau khi đăng nhập lại, chạy seine như thường và xem nhật ký khởi động để biết chế độ trang được chọn. Giữ chế độ tự động mặc định khi thiết lập lần đầu cho hoạt động, rồi so sánh số đo trên cùng PC nếu bạn đổi thiết lập trang.
+
+[Windows chặn phần mềm đào? Kiểm tra bản tải xuống](/vi/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Tải seine cho Windows" text="Giải nén ZIP, nhập địa chỉ nhận thưởng và bắt đầu đào trên bntpool.com với CPU và NVIDIA được tự động tinh chỉnh." />

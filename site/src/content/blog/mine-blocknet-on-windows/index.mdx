@@ -10,7 +10,7 @@ faq:
     a: By default, seine saves the payout address, pool and rig name in seine-data/seine.config.json beneath the folder you launch it from. Run it from the same extracted folder to reuse those settings. The data-dir option lets you choose a different directory when you need one.
   - q: Do I need Windows large pages before I start mining?
     a: No. Seine tries large pages automatically and uses regular pages when they are unavailable. You can start mining with the default settings. For an optional large-page setup, grant your mining account Lock pages in memory, then sign out and back in before restarting seine.
-related: [mine-blocknet-nvidia-gpu, blocknet-wallet-for-mining, seine-dashboard-explained, huge-pages-blocknet-mining]
+related: [mine-blocknet-nvidia-gpu, antivirus-flags-crypto-miner, seine-dashboard-explained, huge-pages-blocknet-mining]
 ---
 
 This guide takes you from the Windows ZIP download to accepted shares on bntpool.com. You will check the archive, extract the files, enter your payout address, and confirm that your CPU and any supported NVIDIA cards are mining. The commands below use PowerShell and native Windows.
@@ -87,5 +87,7 @@ On first launch, seine tunes each GPU and remembers its settings. CPU tuning als
 Normal startup already tries large pages and falls back to regular pages. To prepare large pages on Windows Pro, Enterprise or Education, open `secpol.msc`, go to **Local Policies → User Rights Assignment → Lock pages in memory**, and add the account that runs seine. Sign out and back in so the new logon session receives the right.
 
 The [large-pages guide](/blog/huge-pages-blocknet-mining/) covers this optional setup in detail. After signing back in, launch seine normally and check its startup log for the selected page mode. Keep the default automatic mode while establishing your first working setup, then compare measurements on the same PC if you change page settings.
+
+[Windows blocked your miner? Verify the download](/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Download seine for Windows" text="Extract the ZIP, enter your payout address, and start mining on bntpool.com with automatic CPU and NVIDIA tuning." />

@@ -9,7 +9,7 @@ faq:
     a: 'Domyślnie seine zapisuje adres wypłat, pulę i nazwę koparki w pliku seine-data/seine.config.json wewnątrz folderu, z którego go uruchamiasz. Uruchamiaj go z tego samego wypakowanego folderu, aby ponownie korzystać z tych ustawień. Opcja data-dir pozwala wybrać inny katalog, gdy jest to potrzebne.'
   - q: 'Czy przed rozpoczęciem kopania potrzebuję dużych stron pamięci w Windows?'
     a: 'Nie. seine automatycznie próbuje użyć dużych stron pamięci i korzysta ze zwykłych stron, jeśli duże są niedostępne. Możesz zacząć kopać z ustawieniami domyślnymi. Aby opcjonalnie skonfigurować duże strony, przyznaj kontu używanemu do kopania uprawnienie Blokowanie stron w pamięci, a następnie wyloguj się i zaloguj ponownie przed ponownym uruchomieniem seine.'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ Przy pierwszym uruchomieniu seine dostraja każdą kartę GPU i zapamiętuje jej
 Zwykłe uruchomienie już próbuje użyć dużych stron pamięci i w razie potrzeby korzysta ze zwykłych stron. Aby przygotować duże strony w Windows Pro, Enterprise lub Education, otwórz `secpol.msc`, przejdź do **Zasady lokalne → Przypisywanie praw użytkownika → Blokowanie stron w pamięci** i dodaj konto uruchamiające seine. Wyloguj się i zaloguj ponownie, aby nowa sesja otrzymała to uprawnienie.
 
 [Poradnik dużych stron pamięci](/pl/blog/huge-pages-blocknet-mining/) szczegółowo opisuje tę opcjonalną konfigurację. Po ponownym zalogowaniu uruchom seine normalnie i sprawdź wybrany tryb stron w dzienniku startowym. Zachowaj domyślny tryb automatyczny podczas przygotowywania pierwszej działającej konfiguracji, a następnie porównaj pomiary na tym samym komputerze, jeśli zmienisz ustawienia stron.
+
+[Windows blokuje minera? Sprawdź pobrany plik](/pl/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Pobierz seine dla Windows" text="Wypakuj ZIP, wpisz adres wypłat i zacznij kopać na bntpool.com z automatycznym dostrajaniem CPU i NVIDIA." />

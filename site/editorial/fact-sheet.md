@@ -551,3 +551,14 @@ they supplement the earlier source snapshot above.
   This is a named-session setup example, without economics, maximum-throughput
   or other-card claims. Source: `batches/2026-10-nvidia-guide/research.md` and its
   six raw reports, paired comparison, host metadata and accepted-GPU-share record.
+
+## Windows release verification (October 25, 2026)
+
+The official seine v0.2.26 Windows ZIP has SHA-256
+`75adac2aa25626b547f18e85b4ff20e4b6a9cf2872bc641ca2220229ffa364a5`.
+Native Windows PowerShell verification matched the separate release checksum
+asset. That asset checks archives; the identically named manifest inside the ZIP
+checks extracted files (`.github/workflows/release.yml:105-110,138`). Matching a
+hash verifies correspondence to that reference, not a malware verdict. See
+`batches/2026-10-download-verification/research.md` for primary Microsoft sources,
+actual command output, capture provenance and failure-case checks.

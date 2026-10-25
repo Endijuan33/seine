@@ -2,7 +2,7 @@
 title: 'Jak kopać Blocknet na karcie NVIDIA'
 description: 'Kop Blocknet na GPU NVIDIA z seine. Skonfiguruj Windows lub Linux, używaj CPU i GPU, sprawdzaj hashrate urządzeń i rozwiązuj problemy przy uruchamianiu.'
 tags: ['Poradnik kopania', 'NVIDIA', 'GPU']
-sourceHash: 38f1fa410262
+sourceHash: 6a693c616f37
 translation: draft
 faq:
   - q: 'Czy seine może używać CPU i GPU NVIDIA jednocześnie?'
@@ -106,5 +106,7 @@ Przeczytaj dziennik uruchamiania tego backendu: rozróżnia trwające przygotowa
 Przy obecnym obciążeniu Argon2id każdy aktywny lane GPU wymaga obszaru 2 GiB oraz dodatkowej pamięci środowiska wykonawczego. seine dobiera rozmiar pracy GPU na podstawie dostępnej pamięci urządzenia i sprawdzania przydziału. Nie nadpisuj ręcznie liczby lanes; sama reklamowana pojemność VRAM nie określa, ile lanes jest dostępnych podczas sesji pulpitu.
 
 Jeśli urządzenie oblicza hashe, ale pula pokazuje zero, skorzystaj z [listy kontrolnej hashrate puli](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate), aby sprawdzić adres, połączenie i zaakceptowane udziały.
+
+[Windows blokuje minera? Sprawdź pobrany plik](/pl/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="Pobierz seine do kopania na NVIDIA" text="Wybierz archiwum dla Windows lub Linux x86_64 i zacznij z automatycznym wyborem CPU oraz GPU NVIDIA." />

@@ -2,7 +2,7 @@
 title: 'NVIDIA GPU로 Blocknet 채굴하기'
 description: 'seine으로 NVIDIA GPU에서 Blocknet을 채굴하세요. Windows·Linux 설정, CPU 병행 사용, 해시레이트 확인과 시작 오류 해결 안내.'
 tags: ['채굴 가이드', 'NVIDIA', 'GPU']
-sourceHash: 38f1fa410262
+sourceHash: 6a693c616f37
 translation: draft
 faq:
   - q: 'seine은 CPU와 NVIDIA GPU를 함께 사용할 수 있나요?'
@@ -106,5 +106,7 @@ NVIDIA 백엔드는 `nvidia#1`, `nvidia#2` 등으로 표시되며 CPU에는 별�
 현재 Argon2id 작업에서는 활성 GPU 레인마다 2 GiB 메모리 영역과 추가 런타임 메모리가 필요합니다. seine은 사용 가능한 장치 메모리와 메모리 할당 검사 결과로 GPU 작업 규모를 결정합니다. 레인 수는 수동으로 지정하지 마세요. 명시된 VRAM 용량만으로는 데스크톱을 사용하는 동안 이용할 수 있는 레인 수가 정해지지 않습니다.
 
 장치가 해시를 계산하는데 풀에서 0으로 표시된다면, [풀 해시레이트 점검 목록](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate)에 따라 주소, 연결, 승인된 셰어를 확인하세요.
+
+[Windows가 채굴기를 차단했나요?](/ko/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="NVIDIA 채굴을 위한 seine 다운로드" text="Windows 또는 Linux x86_64 압축 파일을 선택하고 CPU와 NVIDIA GPU 자동 선택으로 시작하세요." />

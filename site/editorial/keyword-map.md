@@ -54,6 +54,8 @@ explain the collision to readers (owner decision 2026-10-25: assume the reader k
 | mine blocknet on windows | `/blog/mine-blocknet-on-windows/` | Install and verify the Windows ZIP, run native PowerShell commands, complete first-run prompts and confirm accepted shares | Windows Blocknet miner, seine Windows setup, Blocknet NVIDIA Windows, 在 Windows 上挖 Blocknet |
 | blocknet gpu mining; blocknet NVIDIA mining; mine blocknet RTX 5090 | `/blog/mine-blocknet-nvidia-gpu/` | Prepare the NVIDIA runtime, choose GPU-only or CPU-plus-GPU mining, verify accepted GPU shares, and compare the measured RTX 5090 modes | NVIDIA Blocknet setup, Blocknet GPU VRAM, CPU and GPU mining together |
 
+| windows defender crypto miner; antivirus blocks miner; verify seine download | `/blog/antivirus-flags-crypto-miner/` | Identify a blocked-download warning, verify the exact official Windows archive and gather evidence for an unresolved detection | SmartScreen miner warning, seine SHA-256, miner quarantine |
+
 ## Boundaries
 
 | Broad owner | Narrow owner | Boundary |
@@ -92,3 +94,5 @@ The Windows guide owns the native Windows ZIP/checksum/PowerShell walkthrough. T
 The NVIDIA guide owns card selection, NVIDIA runtime diagnosis, accepted GPU-share verification and the dated RTX 5090 comparison. The Windows guide owns ZIP/checksum/PowerShell setup, the dashboard guide owns the panel tour, and bntpool.com owns pool-credit tracking. No RTX 4090 performance or other unmeasured card result is claimed.
 
 The hardware comparison guide also presents the dated RTX 5090 results with the original method and evidence, as part of its per-chip coverage. Its shared measurement section has 8.2% wording overlap with the NVIDIA guide; runtime setup, commands and troubleshooting remain in the NVIDIA guide, linked from the hardware article.
+
+The download-verification guide owns warning identification, archive integrity checks and detection reports. The Windows guide retains the normal installation flow and its brief checksum step; the NVIDIA guide owns runtime and device setup. Neither file integrity nor the software category is presented as an antivirus verdict. Both setup guides link to the new troubleshooting owner.

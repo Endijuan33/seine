@@ -9,7 +9,7 @@ faq:
     a: '預設情況下，seine 將收款地址、礦池和礦機名稱儲存在啟動目錄下的 seine-data/seine.config.json。從同一個解壓縮目錄執行即可沿用這些設定。需要其他目錄時，可以使用 data-dir 選項指定。'
   - q: '開始挖礦前需要啟用 Windows 大型分頁嗎？'
     a: '不需要。seine 會自動嘗試使用大型分頁，無法使用時則採用一般分頁。你可以直接使用預設設定開始挖礦。如需進行選用的大型分頁設定，請為挖礦帳戶授予「鎖定記憶體分頁」權限，然後登出並重新登入，再重新啟動 seine。'
-sourceHash: 5e817e74835d
+sourceHash: 3eebcb8784e8
 translation: draft
 ---
 
@@ -87,5 +87,7 @@ seine 預設同時使用 CPU 和支援的 NVIDIA 顯示卡。安裝目前版本�
 正常啟動時，程式已經會嘗試大型分頁，並在需要時改用一般分頁。若要在 Windows Pro、Enterprise 或 Education 上準備大型分頁，請開啟 `secpol.msc`，進入**本機原則 → 使用者權限指派 → 鎖定記憶體分頁**，加入執行 seine 的帳戶。登出並重新登入，讓新的登入工作階段取得該權限。
 
 [大型分頁指南](/zh-hant/blog/huge-pages-blocknet-mining/)詳細介紹了這項選用設定。重新登入後，照常啟動 seine，並查看啟動記錄中的分頁模式。建立第一個可正常運作的設定時，保持預設自動模式；之後若修改分頁設定，請在同一台 PC 上比較測量結果。
+
+[Windows 封鎖挖礦程式？驗證下載檔案](/zh-hant/blog/antivirus-flags-crypto-miner/)
 
 <CTA target="seine" title="下載 Windows 版 seine" text="解壓縮 ZIP，輸入收款地址，即可在 bntpool.com 開始挖礦，CPU 和 NVIDIA 都會自動調校。" />
