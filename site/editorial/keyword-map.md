@@ -52,6 +52,7 @@ explain the collision to readers (owner decision 2026-10-25: assume the reader k
 | seed phrase explained | `/blog/seed-phrase-explained/` | Explain what a wallet seed (recovery) phrase is, how it becomes keys, how to store it and why never to share it, with Blocknet's 12-word seed as the example | what is a seed phrase, recovery phrase, mnemonic phrase, 12-word seed, how to store seed phrase, BIP39 explained, blocknet recovery seed, 助记词是什么 / 助記詞是什麼 |
 
 | mine blocknet on windows | `/blog/mine-blocknet-on-windows/` | Install and verify the Windows ZIP, run native PowerShell commands, complete first-run prompts and confirm accepted shares | Windows Blocknet miner, seine Windows setup, Blocknet NVIDIA Windows, 在 Windows 上挖 Blocknet |
+| blocknet gpu mining; blocknet NVIDIA mining; mine blocknet RTX 5090 | `/blog/mine-blocknet-nvidia-gpu/` | Prepare the NVIDIA runtime, choose GPU-only or CPU-plus-GPU mining, verify accepted GPU shares, and compare the measured RTX 5090 modes | NVIDIA Blocknet setup, Blocknet GPU VRAM, CPU and GPU mining together |
 
 ## Boundaries
 
@@ -87,3 +88,5 @@ bntpool.com's blog (blocknet-pool repo, `frontend/blog/`) owns pool-side jobs (j
 PPLNS payouts, miner stats, the reward schedule, the fair launch). Don't target those here.
 
 The Windows guide owns the native Windows ZIP/checksum/PowerShell walkthrough. The general mining guide remains the cross-platform overview; the huge-pages guide owns detailed page setup.
+
+The NVIDIA guide owns card selection, NVIDIA runtime diagnosis, accepted GPU-share verification and the dated RTX 5090 comparison. The Windows guide owns ZIP/checksum/PowerShell setup, the dashboard guide owns the panel tour, and bntpool.com owns pool-credit tracking. No RTX 4090 performance or other unmeasured card result is claimed.

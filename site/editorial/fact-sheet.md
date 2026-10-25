@@ -422,7 +422,7 @@ Caveats and other numbers:
 - Streaming-kernel auto-selection currently covers only "the validated Turin CPU identity" (AMD family 26, model 2).
   - The Zen 4 9R14 number used the streaming kernel in a benchmark. Whether seine auto-selects it on Zen 4 is not stated. See §7.
   - Source: `seine@master:CHANGELOG.md:12-17`, `docs/guides/autotuning.md:39-41` (checked 2026-10-25)
-- NVIDIA GPU hashrates are **not** presented in the README or PERFORMANCE.md. Do not publish GPU H/s. See §6.
+- NVIDIA results must use a dated, named-host measurement. The owner authorized the October 25 NVIDIA setup guide with a fresh GPU-only/CPU-plus-GPU comparison; see the new evidence below. Do not extrapolate its RTX 5090 result to other cards or reuse the older WSL figure as a current result.
 
 ---
 
@@ -443,7 +443,7 @@ From the Blocknet marketing kit, close to verbatim:
 From owner preferences for seine marketing:
 - Use the highest measured number per generation, with familiar names.
 - Say "threads", not "workers".
-- Leave out weak showings: "the RTX 5090 at ~9 H/s was removed as poor for its cost".
+- Earlier hardware-buying copy omitted the old RTX 5090 result. The October 25 NVIDIA setup guide is a newly authorized, measured same-host mode comparison; it makes no card-buying, economics or maximum-throughput claim.
 - No "faster every release" copy.
 - Source: owner preference, stated 2026-10-24/25
 
@@ -487,7 +487,7 @@ Added by this sheet from the evidence:
 - **Zen 4 streaming auto-selection:** the 35.7 H/s used the streaming kernel, but automatic eligibility is stated only for Turin (Zen 5).
 - **GPU economics:** an internal RTX 5090 benchmark shows ~8.9 H/s steady state (WSL, March 2026). That is below a 9950X3D CPU (10.3 H/s).
   - Source: `seine@master:docs/NVIDIA_5090_TUNING.md:107-113`
-  - The owner removed it from marketing. The "Your GPU is welcome here" tagline (`taglines.md:29`) is true but invites comparisons.
+  - This historical result remains excluded from current marketing. The newly authorized October 25 NVIDIA guide uses fresh native-Windows paired measurements, documented in `batches/2026-10-nvidia-guide/research.md`, with no economics claim.
 - **Energy / power per H/s:** `seine@master:docs/CPU_ENERGY.md` exists but was not reviewed for this sheet.
 - **Launch-date phrasing:** "launched February 2026" is supported by genesis (2026-02-15 EST). The official site gives no launch date ("block 1" only).
 - **"Blocknet ID" product name:** confirm the official name of the blocknet.id service ("Blocknet ID" vs "short names") for consistent capitalization.
@@ -541,3 +541,13 @@ they supplement the earlier source snapshot above.
   allocations; advertised VRAM divided by 2 GiB is not a guaranteed lane count.
   Sources: `src/config.rs:130,370,1155–1158`;
   `src/backend/nvidia.rs:530–585,2874–2882,3350–3358`.
+
+- **Fresh NVIDIA mode comparison, October 25, 2026:** native Windows 11, seine
+  v0.2.26, RTX 5090, Ryzen 9 9950X3D, 125.4 GiB usable RAM, driver 610.88.
+  Three interleaved pairs, each with one 20-second warmup and three measured
+  20-second backend rounds: GPU-only **7.338482 H/s (7.3 rounded)**;
+  CPU-plus-GPU **12.881818 H/s (12.9 rounded)**. Automatic settings selected 13 GPU
+  lanes and 6/7/7 CPU threads; regular Windows pages; existing desktop apps open.
+  This is a named-session setup example, without economics, maximum-throughput
+  or other-card claims. Source: `batches/2026-10-nvidia-guide/research.md` and its
+  six raw reports, paired comparison, host metadata and accepted-GPU-share record.

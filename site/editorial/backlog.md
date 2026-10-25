@@ -12,7 +12,6 @@ proof of work changes.
 
 | # | Slug | Primary cluster | Search job | Evidence needed |
 |---|---|---|---|---|
-| 1 | `mine-blocknet-nvidia-gpu` | blocknet gpu mining; mine blocknet rtx 4090 / 5090 | Can my NVIDIA card mine Blocknet, how much does it add, how much VRAM | Per-card H/s; CPU+GPU totals; corrects the "GPUs don't help" claim ranking today |
 | 2 | `argon2id-vs-randomx` | randomx vs argon2; blocknet vs monero mining | How Argon2id differs from RandomX for a Monero miner, and which machines suit which | Same-machine XMRig vs seine runs on 4-6 hosts |
 | 3 | `how-much-ram-to-mine-blocknet` | ram per thread mining; argon2id 2gb per thread | How many threads my RAM allows, and why a 1 GB VPS fails | Thread-scaling on 2-channel vs 12-channel machines |
 | 4 | `blocknet-mining-pools` | blocknet pool; blocknet mining pool list | Which pools exist and how fees and payouts compare | Dated table of every pool; disclose that we run bntpool.com |
@@ -48,8 +47,4 @@ Covered 2026-10-25: zero pool hashrate and connection errors now belong to the e
 [bntpool tracking guide](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate),
 including all 20 languages. Do not create a competing Seine article.
 
-Prepared 2026-10-25: `mine-blocknet-nvidia-gpu/index.mdx` is an unpublished English
-setup/troubleshooting draft. See `batches/2026-10-nvidia-guide/research.md` for the
-source ledger, CLI verification, overlap assessment, and remaining NVIDIA capture
-and measurement work. This does not establish a traffic winner or complete the
-per-card benchmark requirement in row 1.
+Published 2026-10-25: `mine-blocknet-nvidia-gpu` owns NVIDIA setup, runtime diagnosis, accepted-share verification and the measured RTX 5090 GPU-only/CPU-plus-GPU comparison. See `batches/2026-10-nvidia-guide/research.md`. Other cards, including RTX 4090, still need their own measurements before adding results.
