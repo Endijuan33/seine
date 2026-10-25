@@ -1,8 +1,9 @@
 # Turin productive kernel-sample windows
 
 Prepared on 2026-10-25 while separate frozen Turin and Genoa validations were
-running. **Experimental branch only; no native measurement or shipping change
-yet.** Earlier candidate-order and streaming-ring experiments retain priority.
+running. **Experimental branch only; native validation is running and no
+short-sample policy has shipped.** Earlier candidate-order, streaming-ring and
+page-size measurements completed and were archived before admission.
 
 ## Hypothesis and candidate
 
@@ -115,3 +116,26 @@ extension reserves USD 13.20 for Cherry and USD 3.25 for AWS (USD 16.45 total),
 with provider deletion before **14:25 EDT**. Its admission requires all prior
 evidence collected, settings restored, and the complete four-hour allowance
 plus collection/deletion margin. Existing measurements retain their deadlines.
+
+## Collection and graph export
+
+The full native protocol started at **10:07 EDT** on 2026-10-25 after the prior
+archives were checked. The frozen build record describes preparation-time status;
+it is not an outcome report. Both instrumented binary identities remain unchanged.
+
+After collection, run the complete archive/decision/resource audit with the system
+Python, then export JSON and CSV records for all four cold and four cached runs per
+build. An optional explicit adoption review binds the exact raw decision audit,
+archive, manifest, binary provenance, resource evidence and numerical comparisons.
+Acceptance cannot override the preregistered numerical gate. Rejected experiments
+remain exportable and clearly labeled; partial campaigns cannot be exported.
+
+```sh
+/usr/bin/python3 experiments/amd-trial-windows-20261025/analyze.py COLLECTED results.json
+/usr/bin/python3 experiments/amd-trial-windows-20261025/export_records.py COLLECTED OUTPUT --review adoption-review.json
+```
+
+These records describe startup-through-shutdown completed-hash lower bounds.
+They include sample-policy identity and raw-audit counts, retain unmeasured power
+fields as null, and must not be combined with fixed-kernel or package-energy
+measurements as if they shared a measurement scope.
