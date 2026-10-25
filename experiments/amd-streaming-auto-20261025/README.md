@@ -27,6 +27,9 @@ checks Gaming Mode, and has a 45-minute controller deadline. It uses ordinary
 pages and a kill-on-close Windows Job Object with a 40 GiB aggregate commitment
 ceiling. Mining arenas never exceed 32 GiB. Each native benchmark has a separate
 180-second deadline; every child is task-owned and stopped in `finally`.
+This reservation additionally ends before 2026-10-25 02:24 UTC so the research
+session can collect and clean its expiring cloud rentals. Admission requires at
+least 35 minutes remaining; a late queue start is rejected before hashing.
 
 1. Four alternating pairs compare streaming at eight spread physical cores and
    sixteen physical cores: 20-second warmup, two 20-second measured rounds.

@@ -7,6 +7,7 @@ coverage here uses an explicit high reserve on restart, not an OS stress test.
 import argparse
 import ctypes as C
 from ctypes import wintypes as W
+import datetime
 import hashlib
 import json
 import math
@@ -90,6 +91,8 @@ class Campaign:
     def __init__(self, root, jobid):
         self.root=root; self.out=root/'results'; self.out.mkdir(exist_ok=False)
         self.jobid=jobid; self.started=time.monotonic(); self.children=[]
+        self.stop_before=datetime.datetime.fromisoformat(json.loads((root/'deadline.json').read_text())['stop_before_utc']).timestamp()
+        assert self.stop_before-time.time()>=2100, 'Insufficient clean time before research collection deadline'
         self.exe=root/'target/release/seine.exe'
         self.sha=hashlib.sha256(self.exe.read_bytes()).hexdigest()
         self.job=K.CreateJobObjectW(None,None); assert self.job
@@ -99,7 +102,7 @@ class Campaign:
         self.check()
         assert memory()['available']>=42*GI, memory()
         save(self.out/'protocol.json',{'binary_sha256':self.sha,'job_id':jobid,'memory_before':memory(),
-             'job_memory_ceiling_bytes':40*GI,'deadline_seconds':2700,'source_commit':json.loads((root/'source.json').read_text())['commit'],
+             'job_memory_ceiling_bytes':40*GI,'deadline_seconds':2700,'stop_before_epoch':self.stop_before,'source_commit':json.loads((root/'source.json').read_text())['commit'],
              'confirmation':'Four AB/BA pairs,8 spread vs16 physical,streaming,20s warmup+2x20s measured',
              'ccd_screen':'Two reversed passes,8 spread vs8 cached CCD vs8 frequency CCD,streaming,10s warmup+20s measured',
              'productive':'Cold default-auto with min8/max16 bound, cached restart, cold CPU-load episode, high-reserve restart; each below600s donation grace',
@@ -107,6 +110,7 @@ class Campaign:
 
     def check(self):
         assert time.monotonic()-self.started < 2700, '45-minute total deadline'
+        assert time.time()<self.stop_before, 'Desktop must be released before cloud collection'
         state=json.loads((Path(os.environ['LOCALAPPDATA'])/'GpuQ/operator-state.json').read_text(encoding='utf-8-sig'))
         age=time.time()*1000-state['updatedAtUnixMs']
         assert state['schemaVersion']==3 and -5000<=age<60000 and not state['gamingActive'], 'Gaming reservation/state stale'
