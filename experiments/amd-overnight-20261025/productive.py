@@ -59,6 +59,7 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     samples = []
     observation_start = None
+    observation_start_epoch = None
     stop_timing = {}
     before = counters()
     (out / 'identity.json').write_text(json.dumps({
@@ -86,6 +87,7 @@ def main():
             '--ui', 'plain', '--stats-secs', '5']
         (out / 'command.json').write_text(json.dumps(command, indent=2) + '\n')
         observation_start = time.monotonic()
+        observation_start_epoch = time.time()
         life.command(command)
         end = time.monotonic() + args.seconds
         while time.monotonic() < end:
@@ -97,6 +99,7 @@ def main():
             sample['meminfo'] = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
             text = log.read_text(errors='replace') if log.exists() else ''
             sample['completed_hashes'] = max([0] + [int(n) for n in re.findall(r'\bhashes=(\d+)', text)])
+            sample['streaming_confirmations_seen'] = text.count('confirmed faster avx512-256-stream')
             sample['thread_cpu_masks'] = {}
             for status in (Path('/proc') / str(sample['pid']) / 'task').glob('*/status'):
                 try:
@@ -162,6 +165,7 @@ def main():
     elapsed = stop_timing['stopped_at_monotonic'] - observation_start
     (out / 'productive-window.json').write_text(json.dumps({
         'completed_hashes_lower_bound': final_hashes,
+        'observation_start_epoch': observation_start_epoch,
         'elapsed_start_request_through_stopped_seconds': elapsed,
         'completed_hps_lower_bound': final_hashes / elapsed,
         'scope': ('Cached-restart' if args.cache_source else 'Cold-cache') + ' real pool runtime including startup, productive trials and shutdown; log counters may omit final unreported hashes. Not a fixed-kernel throughput benchmark.'}, indent=2) + '\n')
