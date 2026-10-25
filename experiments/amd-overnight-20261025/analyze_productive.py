@@ -27,6 +27,7 @@ def analyze(root):
         assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
     outcome = read(out / 'outcome.json')
     assert outcome['status'] == 'COMPLETE' and outcome['settings_restored'] and not outcome['cleanup_failures']
+    assert (out / 'lifecycle/COMPLETE').exists()
     protocol = read(out / 'protocol.json')
     assert protocol['cold_seconds'] == 1200 and protocol['warm_seconds'] == 180
     expected_order = [[binary, pair] for pair in range(1, 5)

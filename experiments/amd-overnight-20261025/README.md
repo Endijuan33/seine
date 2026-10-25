@@ -60,6 +60,10 @@ drift gate, retry, ISA check or resource-pressure safeguard.
   Otherwise retain the experiment without changing the shipping policy.
 - Run reference/unit gates and resource interruption/restart recovery before
   landing an accepted policy. Restore swap and page pools after each controller.
+  After the cold/cached matrix, run the existing black-box lifecycle checks on
+  four CPUs with ordinary pages: memory pressure, parking, CPU contention,
+  cached restart under a temporary one-arena budget, recovery and explicit
+  opt-out. Allow 1,350 seconds for this phase within a four-hour controller limit.
 
 Do not overlap package-energy samples with builds, archive compression or other
 CPU-heavy work on the measured host. Keep original and follow-up phases separate.

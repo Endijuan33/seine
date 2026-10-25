@@ -55,7 +55,7 @@ def main():
     args = parser.parse_args()
     os.chdir(ROOT)
     assert os.geteuid() == 0
-    assert time.time() + 12600 + 120 < args.deadline_epoch
+    assert time.time() + 14400 + 120 < args.deadline_epoch
     fields = {r['field'].rstrip(':'): r['data'] for r in json.loads(
         subprocess.check_output(['lscpu', '-J'], text=True))['lscpu']}
     assert fields['Vendor ID'] == 'AuthenticAMD'
@@ -111,6 +111,9 @@ def main():
                         '--label', label, '--seconds', '180', '--cache-source',
                         str(OUT / f'joint-{binary}-{pair}')], 300, args.deadline_epoch)
             assert (OUT / label / 'COMPLETE').exists()
+        run('resource-lifecycle', [sys.executable, '-B', 'lifecycle.py', '--binary', 'candidate',
+            '--initial-seconds', '600', '--page', 'regular', '--cpus', '0-3'], 1350, args.deadline_epoch)
+        assert (OUT / 'lifecycle/COMPLETE').exists()
         delta = {k: v - before[k] for k, v in counters().items()}
         save('vm-checks.json', delta)
         assert all(delta[k] == 0 for k in ('pswpin', 'pswpout', 'oom_kill'))
@@ -124,7 +127,7 @@ def main():
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         cleanup = []
-        for label in labels:
+        for label in labels + ['lifecycle-first', 'lifecycle-restart', 'lifecycle-optout', 'cpu-load']:
             unit = 'seine-overnight-' + label + '.service'
             try:
                 subprocess.run(['systemctl', 'stop', unit], capture_output=True, timeout=30)
