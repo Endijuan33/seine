@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 與 Linux 版本使用 NVIDIA 顯示卡挖礦，會在處理器之外同時使用偵測到的每一張顯示卡。在 Windows 上已內建 CUDA 執行環境，只需安裝 NVIDIA 驅動程式。在 Linux 上需安裝驅動程式與 NVRTC 函式庫。首次啟動時會為每張顯示卡調校並記住結果。'
   - q: '為什麼記憶體頻寬對挖 Blocknet 很重要？'
     a: '每次 Blocknet 雜湊都要寫滿一整塊 2 GiB 的記憶體，並從其中各處讀回資料，遠遠超出任何處理器快取的容量。因此算力取決於記憶體系統搬運資料的速度。記憶體頻寬較高、記憶體足以執行更多執行緒的電腦挖得最快。'
-sourceHash: 6a825deafb78
+sourceHash: 7b9d1f92727f
 translation: reviewed
 ---
 
@@ -111,3 +111,5 @@ seine 也會把執行緒數限制在處理器的邏輯核心數以內，所以�
 <Note>
 這些結果針對 Blocknet 目前的 Argon2id 工作量證明。根據 [blocknetcrypto.com](https://blocknetcrypto.com/#faraday) 的說明，Blocknet 計畫在 2027-02-16 前後進行名為 Faraday 的網路升級，屆時將採用更輕量的工作量證明。請讓 seine 保持在最新版本：它會在啟動時以及每 12 小時檢查一次新版本。
 </Note>
+
+<CTA target="seine" title="看看你的電腦能挖多少" text="seine 在挖礦時依你的硬體自動調校。下載它，看看你的算力。" />

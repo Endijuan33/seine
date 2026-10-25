@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 和 Linux 版本使用 NVIDIA 显卡挖矿，会在处理器之外同时使用检测到的每一张显卡。在 Windows 上已内置 CUDA 运行库，只需安装 NVIDIA 驱动。在 Linux 上需安装驱动和 NVRTC 库。首次启动时会为每张显卡调优并记住结果。'
   - q: '为什么内存带宽对挖 Blocknet 很重要？'
     a: '每次 Blocknet 哈希都要写满一整块 2 GiB 的内存，并从其中各处读回数据，远远超出任何处理器缓存的容量。因此算力取决于内存系统搬运数据的速度。内存带宽更高、内存足够运行更多线程的机器挖得最快。'
-sourceHash: 6a825deafb78
+sourceHash: 7b9d1f92727f
 translation: reviewed
 ---
 
@@ -111,3 +111,5 @@ seine 还会把线程数限制在处理器的逻辑核心数以内，所以实�
 <Note>
 这些结果针对 Blocknet 当前的 Argon2id 工作量证明。据 [blocknetcrypto.com](https://blocknetcrypto.com/#faraday) 介绍，Blocknet 计划在 2027-02-16 前后进行名为 Faraday 的网络升级，届时将采用更轻量的工作量证明。请保持 seine 为最新版本：它会在启动时以及每 12 小时检查一次新版本。
 </Note>
+
+<CTA target="seine" title="看看你的机器能挖多少" text="seine 在挖矿时根据你的硬件自动调优。下载它，看看你的算力。" />

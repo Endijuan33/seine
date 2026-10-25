@@ -22,7 +22,8 @@ Then, by task:
 
 - **New post:** take the top unclaimed topic in `site/editorial/backlog.md` unless the user
   named one. Write the intent sentence (README step 1), make the batch folder, research, and
-  draft `site/src/content/blog/<slug>/index.mdx` with `draft: true`. From `site/`, run
+  draft `site/src/content/blog/<slug>/index.mdx` with `draft: true`, ending with one
+  `<CTA target="seine|pool" title="…" text="…" />` written for the post. From `site/`, run
   `npm run check -- <slug> --strict` and `npm run overlap -- <slug>` until clean. Leave it as a
   draft and report the intent sentence, the overlap result, and any facts you added to the fact
   sheet. Publishing needs the user's go-ahead.

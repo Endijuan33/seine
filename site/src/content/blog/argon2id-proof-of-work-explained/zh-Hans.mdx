@@ -11,7 +11,7 @@ faq:
     a: 'Argon2id 让内存成为每次哈希中成本最高的部分。每次 Blocknet 哈希需要 2 GiB 高速内存，并在其中搬运数 GB 数据，因此专为哈希打造的芯片仍需为每个核心配备大量内存。节点程序的代码把这一选择描述为用内存密集型工作量证明来抵御 ASIC，确保公平挖矿。'
   - q: '显卡能挖 Blocknet 的 Argon2id 吗？'
     a: '可以。在 Windows 和 Linux 上，seine 会在 CPU 挖矿的同时使用机器上的每张 NVIDIA 显卡，两者的算力会叠加。计算内核在启动时编译，首次启动时会为每张显卡调优并缓存结果，所以开始之前无需任何配置。'
-sourceHash: 6e737e711d66
+sourceHash: efd0f96cbcb7
 translation: reviewed
 ---
 
@@ -94,3 +94,5 @@ Blocknet 在共识代码中固定了 Argon2id 的每一项设置，因此每个�
 这些都无需你自己选择。seine 会用真实的挖矿任务比较你的 CPU 支持的各个计算内核，只在两次确认有提升后才切换，并把胜出者缓存起来供下次启动使用。最佳计算内核取决于线程数、页面大小和 CPU 绑定方式，所以 seine 会在你的机器上实测，而不是写死某个选择。
 
 想让你的内存发挥作用，就[下载 seine](/zh-hans/#download)，运行它，然后粘贴你的地址。其余步骤见[挖矿指南](/zh-hans/blog/how-to-mine-blocknet/)。
+
+<CTA target="seine" title="让你的内存开始挖矿" text="seine 的 Argon2id 计算内核针对 AVX2、AVX-512 和 Arm 调优。免费下载。" />

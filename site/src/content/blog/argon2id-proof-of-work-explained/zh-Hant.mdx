@@ -11,7 +11,7 @@ faq:
     a: 'Argon2id 讓記憶體成為每次雜湊中成本最高的部分。每次 Blocknet 雜湊需要 2 GiB 高速記憶體，並在其中搬移數 GB 資料，因此專為雜湊打造的晶片仍需為每個核心配備大量記憶體。節點程式的程式碼把這個選擇描述為以記憶體密集型工作量證明來抵禦 ASIC，確保公平挖礦。'
   - q: '顯示卡能挖 Blocknet 的 Argon2id 嗎？'
     a: '可以。在 Windows 與 Linux 上，seine 會在 CPU 挖礦的同時使用電腦上的每張 NVIDIA 顯示卡，兩者的算力會相加。運算核心程式在啟動時編譯，第一次啟動時會為每張顯示卡調校並快取結果，所以開始之前無需任何設定。'
-sourceHash: 6e737e711d66
+sourceHash: efd0f96cbcb7
 translation: reviewed
 ---
 
@@ -94,3 +94,5 @@ Blocknet 在共識程式碼中固定了 Argon2id 的每一項設定，因此每�
 這些都無需你自己選擇。seine 會用真實的挖礦工作比較你的 CPU 支援的各個運算核心程式，只在兩次確認有提升後才切換，並把勝出者快取起來供下次啟動使用。最佳運算核心程式取決於執行緒數、分頁大小與 CPU 綁定方式，所以 seine 會在你的電腦上實測，而不是寫死某個選擇。
 
 想讓你的記憶體發揮作用，就[下載 seine](/zh-hant/#download)，執行它，然後貼上你的地址。其餘步驟請見[挖礦指南](/zh-hant/blog/how-to-mine-blocknet/)。
+
+<CTA target="seine" title="讓你的記憶體開始挖礦" text="seine 的 Argon2id 運算核心程式針對 AVX2、AVX-512 與 Arm 調校。免費下載。" />

@@ -79,6 +79,8 @@ fails the build on most of them.
   a post worth ranking over a forum thread.
 - Original evidence wins: our benchmarks, a dashboard screenshot, a measured before/after.
   Say how and when it was measured.
+- Close with one `<CTA>` that fits the post: a seine download for mining topics, bntpool.com for
+  payouts or names, with a title and one sentence about what the reader gets (see README).
 - Link to seine's docs on GitHub for deep reference (performance tables, huge pages, large
   servers) instead of copying them.
 - Chinese translations follow the same rules and stay plain and literal.

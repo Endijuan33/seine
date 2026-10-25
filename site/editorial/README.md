@@ -83,8 +83,15 @@ Body rules (`npm run check` enforces most of them):
   Markdown. MDX treats `{` and `<` as code, so write them as `\{` and `&lt;` in prose.
 - Link to home sections (`/#download`, `/#start`, `/#performance`) and 1-2 other posts as
   `/blog/<slug>/` with the trailing slash. The check fails on internal links that would 404.
-- Don't write an FAQ or "Related reading" section in the body; front matter renders them. The
-  download call to action is added to the end of every post automatically.
+- End the body with exactly one call to action (the check requires it), written for this post:
+
+  ```mdx
+  <CTA target="seine" title="Download seine for macOS" text="One sentence on what the reader gets." />
+  ```
+
+  `target="seine"` sends readers to the download; `target="pool"` sends them to bntpool.com's
+  Get Started page. Translations translate `title` and `text` and keep `target`.
+- Don't write an FAQ or "Related reading" section in the body; front matter renders them.
 
 ## Translations (Simplified and Traditional Chinese)
 

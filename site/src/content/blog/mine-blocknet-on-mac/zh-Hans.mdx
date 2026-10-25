@@ -11,7 +11,7 @@ faq:
     a: '每个挖矿线程都要处理一块 2 GiB 的内存，所以每个线程大约按 2 GB 计算。16 GB 的 Mac 最多可容纳七个线程，32 GB 最多 15 个，64 GB 最多 30 个。seine 会计算空闲内存，并让线程数与你的核心数相匹配。'
   - q: '可以在 Intel Mac 上挖 Blocknet 吗？'
     a: '可以。seine 为 Intel Mac 单独发布了一个压缩包 seine-macos-x86_64.tar.gz，步骤与 Apple 芯片相同。下载后在终端中解压，运行 ./seine，并粘贴你的 Blocknet 地址或 @name。seine 会根据内存确定线程数，并默认在 bntpool.com 上开始挖矿。'
-sourceHash: a6959133be83
+sourceHash: e26c008e1551
 translation: reviewed
 ---
 
@@ -127,3 +127,5 @@ seine 会先询问你的收款地址或 `@shortname`，然后询问矿池。按�
 <Note>
 以上结果针对 Blocknet 当前的 Argon2id 工作量证明。根据 [blocknetcrypto.com](https://blocknetcrypto.com/#faraday)，Blocknet 计划在 2027-02-16 前后进行名为 Faraday 的网络升级，届时工作量证明算法预计会改变。seine 会在启动时以及每 12 小时检查一次新版本，请保持它为最新版本。
 </Note>
+
+<CTA target="seine" title="下载 macOS 版 seine" text="Apple 芯片版本使用 Mac 的 CPU 挖矿，并自动选择线程数。" />
