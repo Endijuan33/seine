@@ -39,8 +39,8 @@ fn candidates_for(
     .collect();
     // Repeated native wins on Turin and Ryzen 9950X3D (family 1Ah, models 02h/44h).
     // Identity limits automatic experiments; the independent ISA/OS support
-    // check remains mandatory. A measured win is still required per worker
-    // count/backing; this does not make streaming the unconditional startup ISA.
+    // check remains mandatory. Turin needs a measured win per worker
+    // count/backing; validated Ryzen also starts on it (`startup_kernel_for`).
     if identity.vendor.as_deref() == Some("AuthenticAMD")
         && identity.family == Some(0x1a)
         && matches!(identity.model, Some(0x02 | 0x44))
@@ -49,6 +49,24 @@ fn candidates_for(
         paths.push(CpuKernel::Avx512256Stream);
     }
     paths
+}
+
+// Validated desktop Zen 5 (Ryzen 9950X3D, family 1Ah, model 44h): native
+// fixed-kernel runs measured streaming 38-46% faster than every uniform kernel
+// at 8 and 16 workers, but live A/B/A trials on a busy desktop rarely clear the
+// baseline-drift gate. Start such contexts on streaming. The other candidates
+// still get the usual two comparisons against it. Lower counts are unmeasured.
+const STARTUP_STREAM_MIN_WORKERS: usize = 8;
+
+fn startup_kernel_for(
+    identity: &crate::runtime_identity::CpuIdentity,
+    candidates: &[CpuKernel],
+) -> Option<CpuKernel> {
+    (identity.vendor.as_deref() == Some("AuthenticAMD")
+        && identity.family == Some(0x1a)
+        && identity.model == Some(0x44)
+        && candidates.contains(&CpuKernel::Avx512256Stream))
+    .then_some(CpuKernel::Avx512256Stream)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -138,6 +156,19 @@ enum Comparison {
     Inconclusive,
 }
 
+// Rates behind each decision, so productive trials can be audited from logs.
+fn rates(samples: &[Sample], base: CpuKernel, candidate: CpuKernel) -> String {
+    samples
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let kernel = if i % 3 == 1 { candidate } else { base };
+            format!("{kernel} {:.2}", s.hps())
+        })
+        .collect::<Vec<_>>()
+        .join(" / ")
+}
+
 fn improves(before: Sample, candidate: Sample, after: Sample) -> bool {
     comparison(before, candidate, after) == Comparison::Gain
 }
@@ -205,11 +236,14 @@ pub(super) struct Tuner {
     // Cached/final winners must finish switching before thread sampling resumes.
     settling: Option<CpuKernel>,
     settle_started: u64,
+    // Identity-validated starting path for uncached contexts, if any.
+    startup: Option<CpuKernel>,
 }
 
 impl Tuner {
     pub(super) fn new(cfg: &Config, host: CpuAutotuneHostFingerprint) -> Self {
         let candidates = candidates();
+        let startup = startup_kernel_for(&crate::runtime_identity::cpu_identity(), &candidates);
         let configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
             cfg.cpu_profile,
@@ -250,6 +284,7 @@ impl Tuner {
             pending: Vec::new(),
             settling: None,
             settle_started: 0,
+            startup,
         }
     }
 
@@ -389,6 +424,25 @@ impl Tuner {
                         message: Some(format!("restoring confirmed {kernel} path for this worker count and memory backing")),
                     };
                 }
+                if let Some(kernel) = self.startup.filter(|k| {
+                    self.candidates.contains(k)
+                        && context
+                            .workers
+                            .iter()
+                            .all(|&w| w >= STARTUP_STREAM_MIN_WORKERS)
+                        && !snapshots.iter().all(|s| s.kernel == *k)
+                }) {
+                    // Compare the remaining paths against it promptly; only a
+                    // completed sweep is cached.
+                    self.checked = Some(context);
+                    self.next_check = now;
+                    self.settling = Some(kernel);
+                    self.settle_started = now;
+                    return Action {
+                        hold_counts: true, kernel: Some(kernel), reset_scores: true,
+                        message: Some(format!("starting {kernel} path validated for this CPU; comparing other paths against it")),
+                    };
+                }
             }
             let base = snapshots[0].kernel;
             if !snapshots.iter().all(|s| s.kernel == base) {
@@ -475,6 +529,7 @@ impl Tuner {
             let trial = self.trial.take().unwrap();
             let stable = comparison(trial.samples[0], trial.samples[1], trial.samples[2])
                 == Comparison::NoConfirmedGain;
+            let measured = rates(&trial.samples, trial.base, trial.candidate);
             if stable {
                 let base = trial.base;
                 self.finish_comparison(trial, base, now);
@@ -484,13 +539,18 @@ impl Tuner {
             }
             return Action {
                 hold_counts: !self.pending.is_empty(),
-                message: Some("keeping current kernel; no confirmed gain".into()),
+                message: Some(if stable {
+                    format!("keeping current kernel; no confirmed gain ({measured} H/s)")
+                } else {
+                    format!("keeping current kernel; baseline drifted, retrying sooner ({measured} H/s)")
+                }),
                 ..Action::default()
             };
         }
         if trial.samples.len() == 6 {
             let trial = self.trial.take().unwrap();
             let outcome = comparison(trial.samples[3], trial.samples[4], trial.samples[5]);
+            let measured = rates(&trial.samples, trial.base, trial.candidate);
             let promoted = outcome == Comparison::Gain;
             let conclusive = outcome != Comparison::Inconclusive;
             let kernel = if promoted {
@@ -511,11 +571,11 @@ impl Tuner {
                 kernel: Some(kernel),
                 reset_scores: promoted,
                 message: Some(if promoted {
-                    format!("confirmed faster {kernel} path in two comparisons")
+                    format!("confirmed faster {kernel} path in two comparisons ({measured} H/s)")
                 } else if conclusive {
-                    format!("keeping {kernel}; gain did not repeat")
+                    format!("keeping {kernel}; gain did not repeat ({measured} H/s)")
                 } else {
-                    format!("keeping {kernel}; confirmation was noisy, retrying sooner")
+                    format!("keeping {kernel}; confirmation was noisy, retrying sooner ({measured} H/s)")
                 }),
             };
         }
@@ -572,13 +632,17 @@ mod tests {
         let mut t = Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
         t.cache.winners.clear();
         t.candidates.retain(|k| *k != CpuKernel::Avx512256Stream);
+        // Independent of whether this test runner is the validated Ryzen.
+        t.startup = None;
         t
     }
 
     #[test]
     fn candidates_are_supported_and_experimental_x86_path_stays_manual() {
         let paths = candidates();
-        assert!(paths.len() <= 2);
+        // Only the identity-gated streaming path may add a third candidate.
+        let streaming = usize::from(paths.contains(&CpuKernel::Avx512256Stream));
+        assert!(paths.len() <= 2 + streaming);
         assert!(paths.iter().all(|path| path.is_supported()));
         assert!(!paths.contains(&CpuKernel::Avx512256));
         assert_eq!(
@@ -894,6 +958,101 @@ mod tests {
             }
         }
         action
+    }
+
+    #[test]
+    fn streaming_startup_requires_validated_ryzen_identity_and_candidate() {
+        use crate::runtime_identity::CpuIdentity;
+        let ryzen = CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x44),
+            ..CpuIdentity::default()
+        };
+        let all = [
+            CpuKernel::Avx512,
+            CpuKernel::Avx2,
+            CpuKernel::Avx512256Stream,
+        ];
+        assert_eq!(
+            startup_kernel_for(&ryzen, &all),
+            Some(CpuKernel::Avx512256Stream)
+        );
+        assert_eq!(startup_kernel_for(&ryzen, &all[..2]), None);
+        for other in [
+            CpuIdentity {
+                model: Some(0x02),
+                ..ryzen.clone()
+            },
+            CpuIdentity {
+                family: Some(0x19),
+                ..ryzen.clone()
+            },
+            CpuIdentity {
+                vendor: Some("GenuineIntel".into()),
+                ..ryzen.clone()
+            },
+            CpuIdentity::default(),
+        ] {
+            assert_eq!(startup_kernel_for(&other, &all), None);
+        }
+    }
+
+    #[test]
+    fn validated_startup_path_is_compared_against_others_from_eight_workers() {
+        let mut t = three_path_tuner();
+        t.startup = Some(CpuKernel::Avx512256Stream);
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512;
+        s.threads = 4;
+        // Below the validated range, start comparisons on the default path.
+        let a = t.tick(1, &[s], true, true);
+        assert_eq!(a.kernel, None);
+        assert_eq!(t.trial.as_ref().map(|t| t.base), Some(CpuKernel::Avx512));
+
+        let mut t = three_path_tuner();
+        t.startup = Some(CpuKernel::Avx512256Stream);
+        s.threads = 8;
+        let a = t.tick(1, &[s], true, true);
+        assert_eq!(a.kernel, Some(CpuKernel::Avx512256Stream));
+        assert!(a.hold_counts && a.reset_scores);
+        assert!(t.cache.winners.is_empty());
+        s.kernel = CpuKernel::Avx512256Stream;
+        s.kernel_generation += 1;
+        let mut now = 2;
+        // Settles, then compares the remaining paths against streaming at once.
+        let a = run_comparison(&mut t, &mut s, &mut now, &[100, 95, 100]);
+        assert_eq!(s.kernel, CpuKernel::Avx512256Stream);
+        assert!(a
+            .message
+            .unwrap()
+            .contains("avx512-256-stream 100.00 / avx512 95.00"));
+        run_comparison(&mut t, &mut s, &mut now, &[100, 90, 100]);
+        assert_eq!(s.kernel, CpuKernel::Avx512256Stream);
+        assert_eq!(t.cache.winners.len(), 1);
+        assert_eq!(t.cache.winners[0].kernel, "avx512-256-stream");
+        let _ = fs::remove_file(&t.path);
+    }
+
+    #[test]
+    fn drifted_baseline_is_reported_separately_from_no_gain() {
+        let mut t = three_path_tuner();
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512;
+        let mut now = 0;
+        let a = run_comparison(&mut t, &mut s, &mut now, &[100, 130, 90]);
+        let message = a.message.unwrap();
+        assert!(
+            message.starts_with("keeping current kernel; baseline drifted"),
+            "{message}"
+        );
+        assert!(
+            message.contains("avx512 100.00 / avx2 130.00 / avx512 90.00"),
+            "{message}"
+        );
+        assert!(t.cache.winners.is_empty());
+        assert_eq!(t.next_check, now + RETRY_SECS);
+        let _ = fs::remove_file(&t.path);
     }
 
     #[test]
