@@ -16,6 +16,11 @@ it after two confirmed gains. In a 32-vCPU AWS VM with a 24-worker ceiling and
 2 MiB huge pages, paired productive runs improved 2.85% during cold discovery
 and 7.99% on cached restarts. No kernel override is required.
 
+**Earlier tuning gains on the tested AMD EPYC 9355P.** Trying the streaming
+kernel earlier confirmed it about 90 seconds sooner and increased completed
+work by 0.68% over four paired 20-minute cold starts, with automatic worker and
+kernel selection on 2 MiB huge pages. Both confirmation cycles remain required.
+
 ## v0.2.25
 
 **Fewer lost shares when the pool is busy.** Shares the pool turns away with

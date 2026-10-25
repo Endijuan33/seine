@@ -52,11 +52,15 @@ its eligibility assertion impossible to pass. The ignored 24-worker EPYC test
 is restricted to the validated Turin identity and still requires an owned host
 with reserved HugeTLB memory; it is not a Genoa validation substitute.
 
-After Genoa eligibility, investigate cold-start discovery cost on Turin: the
-[productive campaign](../experiments/cpu-followups-20261025/joint-native-results.json)
-recorded +3.53% cold versus +19.94% cached. Compare challenger ordering with
-fresh caches and interleaved runs before changing policy. Preserve all
-challengers, confirmation requirements and memory-pressure behavior.
+**Turin challenger ordering is now validated on the EPYC 9355P.** Trying
+streaming before AVX2 confirmed it roughly 90 seconds earlier and improved
+four paired 20-minute cold productive windows by **0.685%**; cached restarts
+were effectively unchanged. Both confirmation cycles and all challengers remain.
+The [complete report](../experiments/amd-overnight-20261025/RESULTS.md) separates
+these automatic results from fixed-kernel energy measurements and retains the
+original failed resource fixture plus its successful, identical-binary retest.
+Next, compare smaller streaming buffers and explicit 1 GiB pages under controlled
+conditions before considering further automatic-policy changes.
 
 ## Rental shortlist
 

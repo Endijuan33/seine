@@ -1,5 +1,11 @@
 # AMD overnight campaign, 2026-10-25
 
+The Turin ordering experiment is complete and accepted. See [results and
+limitations](RESULTS.md), [the bound adoption review](adoption-review.json) and
+[graph records](benchmark-records.json). The original resource fixture failed
+to create reclaim pressure; its unchanged failed archive and the complete
+[same-binary resource supplement](RESOURCE_SUPPLEMENT.md) are audited together.
+
 The user authorized up to ten hours and **USD 25 total**, including the active
 Cherry session and any AWS rentals. The goal began at 04:42:52 EDT; finish all
 collection and rental cleanup before **14:42:52 EDT**. Operational identities,
@@ -21,6 +27,13 @@ SSH material and cumulative spending remain in ignored data directories.
 These reservations total USD 10.45, leaving USD 14.55 unallocated. Reserved
 amounts are exposure limits, not claims of actual billed cost. Keep provider
 charges distinct from account credit and estimated charges.
+
+Subsequent operational reservation, recorded before launching follow-ups:
+eight total Cherry hours (USD 9.60), with provider deletion before **11:35 EDT**,
+for the separately frozen buffer and page-size experiments. With the unchanged
+AWS USD 3.25 reservation, the reserved total is USD 12.85 of USD 25. Delete
+promptly when measurements and evidence collection finish; the reservation is
+an upper bound. The original productive protocol and deadline were unchanged.
 
 ## Turin cold-start challenger ordering: pre-measurement protocol
 

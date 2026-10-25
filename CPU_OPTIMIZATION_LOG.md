@@ -2,6 +2,37 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 Turin challenger ordering — accepted
+
+On the bare-metal EPYC 9355P (32 cores/64 threads, 192 GiB, twelve DDR5-4800
+channels), trying streaming before AVX2 improved four paired 1,200-second cold
+productive windows by **0.685%** (descriptive 95% interval +0.603 to +0.751%).
+Four paired 180-second own-cache restarts changed **−0.092%** (−0.241 to +0.057%).
+All runs used automatic count/kernel selection, the default balanced profile,
+explicit 2 MiB HugeTLB, automatic affinity and the stock 280 W cap. Power was
+unmeasured. Rates are logged completed-hash lower bounds over start through
+shutdown; finite windows and differently timed phases are not steady-state peaks.
+
+First streaming confirmation was observed roughly 90 seconds earlier (10-second
+sampling). All eight cold legs passed two A/B/A cycles; cached legs reused their
+own counts and logged streaming restoration. Selected counts were 47–48, with
+no claim of complete convergence. Three fixed-streaming build-control pairs were
+effectively unchanged (−0.0048%). All 21 full-size reference transitions passed.
+
+The original final resource fixture failed to create actual reclaim, despite
+exercising worker-budget changes. Its FAILED outcome remains preserved. A full
+separate resource retest with the identical binary added bounded allocation and
+passed with 4,190 memory-high events, positive memory PSI, no OOM/swap and restored
+settings. Constrained restart retained the cached count of 3 and grew from 1 to
+2 workers with at least 4 GiB anonymous backing; return to 3 was not demonstrated.
+The helper required bounded supervisor termination after pressure (not an OOM).
+
+Only AuthenticAMD family 1Ah/model 02h ordering changes; all challengers, ISA,
+two-confirmation, cache and resource gates remain. Integration passed 563 CPU-only
+workspace tests (six ignored), scoped Rust 1.93 formatting and 12 Python audit/
+export/helper tests. Four graph records and both archive hashes are preserved in
+[the complete report](experiments/amd-overnight-20261025/RESULTS.md).
+
 ## 2026-10-25 Genoa automatic streaming eligibility — accepted
 
 On an AWS c7a.8xlarge EPYC 9R14 VM (32 guest vCPUs, 64 GiB allocated RAM),
