@@ -17,10 +17,9 @@ import { parse } from 'yaml';
 
 const ROOT = new URL('../', import.meta.url);
 const BLOG = new URL('src/content/blog/', ROOT);
-const LOCALES = [
-    { code: 'zh-Hans', path: 'zh-hans' },
-    { code: 'zh-Hant', path: 'zh-hant' },
-];
+// Every translated locale (src/i18n/locales.ts lists the same set).
+const LOCALES = ['id', 'es', 'de', 'fr', 'pt-BR', 'ru', 'it', 'pl', 'tr', 'vi', 'ar', 'nl', 'uk', 'el', 'ja', 'ko', 'th', 'zh-Hans', 'zh-Hant']
+    .map((code) => ({ code, path: code.toLowerCase() }));
 const HOME_ANCHORS = ['download', 'start', 'performance', 'why'];
 const BLOCKS = ['Answer', 'Note', 'Warning'];
 const ctaCount = (b) => (stripCode(b).match(/<CTA\b/g) ?? []).length;

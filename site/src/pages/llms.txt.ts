@@ -1,4 +1,4 @@
-import { localizePath } from '../i18n/locales';
+import { LOCALES, localizePath } from '../i18n/locales';
 import { useTranslations } from '../i18n/ui';
 import { getPosts } from '../lib/blog';
 import { REPO, SITE_URL } from '../lib/site';
@@ -19,8 +19,7 @@ export async function GET() {
         '## Guides', '',
         ...posts.map((p) => `- [${p.title}](${p.url}): ${p.description}`), '',
         '## Other languages', '',
-        `- [简体中文](${SITE_URL}${localizePath('/', 'zh-Hans')})`,
-        `- [繁體中文](${SITE_URL}${localizePath('/', 'zh-Hant')})`,
+        ...LOCALES.filter((x) => x.code !== 'en').map((x) => `- [${x.endonym}](${SITE_URL}${localizePath('/', x.code)})`),
     ];
     return new Response(lines.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }

@@ -3,7 +3,7 @@ import '../../../styles/blog.css';
 import { localeDef, localeFromParam, localeStaticPaths, localizePath } from '../../../i18n/locales';
 import { useTranslations } from '../../../i18n/ui';
 import Base from '../../../layouts/Base.astro';
-import { getPosts } from '../../../lib/blog';
+import { cardLocale, getPosts } from '../../../lib/blog';
 import { ORGANIZATION, SITE_URL, breadcrumbList, formatDate, isoDate } from '../../../lib/site';
 
 export const getStaticPaths = localeStaticPaths;
@@ -40,7 +40,7 @@ const schema = [
           <h2>{p.title}</h2>
           <p>{p.description}</p>
         </div>
-        {!p.customImage && <img src={`/blog/og/${locale}/${p.slug}-card.jpg`} width="600" height="315" alt="" loading="lazy" decoding="async">}
+        {!p.customImage && <img src={`/blog/og/${cardLocale(locale)}/${p.slug}-card.jpg`} width="600" height="315" alt="" loading="lazy" decoding="async">}
       </a></li>
     ))}
   </ul>

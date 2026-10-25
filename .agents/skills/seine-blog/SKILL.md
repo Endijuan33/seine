@@ -1,6 +1,6 @@
 ---
 name: seine-blog
-description: Plan, research, write, translate (Simplified and Traditional Chinese), check and publish SEO articles for the seineminer.com blog, which covers Blocknet in general (privacy, payment by name, wallet, upgrades) and mining it (seine, bntpool.com, Argon2id, CPU/GPU tuning). Use when asked to write or update a blog post, pick blog topics, translate a post, refresh the keyword map or fact sheet, or audit the site's SEO.
+description: Plan, research, write, translate (19 languages), check and publish SEO articles for the seineminer.com blog, which covers Blocknet in general (privacy, payment by name, wallet, upgrades) and mining it (seine, bntpool.com, Argon2id, CPU/GPU tuning). Use when asked to write or update a blog post, pick blog topics, translate a post, refresh the keyword map or fact sheet, or audit the site's SEO.
 ---
 
 # seineminer.com blog
@@ -27,12 +27,12 @@ Then, by task:
   `npm run check -- <slug> --strict` and `npm run overlap -- <slug>` until clean. Leave it as a
   draft and report the intent sentence, the overlap result, and any facts you added to the fact
   sheet. Publishing needs the user's go-ahead.
-- **Translating:** follow the README's translation section: plain, literal zh-Hans (mainland
-  terms) and zh-Hant (Taiwan terms), localized internal links, `sourceHash` from
-  `npm run check -- --hash <slug>`, and a separate review pass (a fresh agent is best) before
-  `translation: reviewed`.
+- **Translating:** every published post needs all 19 translations; follow
+  `site/editorial/translation-guide.md` (protected values, link prefixes, glossary), set
+  `sourceHash` from `npm run check -- --hash <slug>`, and get a separate review pass (a fresh agent
+  is best) before `translation: reviewed`.
 - **Updating a post:** keep the slug; bump `updated` only for material changes; update the
-  changed passages in both translations and their `sourceHash`; keep the keyword-map row in
+  changed passages in every translation and their `sourceHash`; keep the keyword-map row in
   sync with any retargeting.
 - **Several posts:** keep each to its own search job and cross-link them through `related`.
   Don't produce near-duplicate permutations.

@@ -6,18 +6,22 @@ import type { APIContext } from 'astro';
 import satori from 'satori';
 import sharp from 'sharp';
 import { LOCALES, type Locale } from '../../../../i18n/locales';
-import { getPosts, type Post } from '../../../../lib/blog';
+import { cardLocale, getPosts, type Post } from '../../../../lib/blog';
 
 const W = 1200;
 const H = 630;
 // Paths are relative to site/, where every build runs (bundling breaks import.meta.url paths).
 const fontFile = (pkg: string, file: string) => readFile(resolve('node_modules/@fontsource', pkg, 'files', file));
 const heroFile = resolve('src/assets/hero-square.webp');
-const CJK_FAMILY: Partial<Record<Locale, string>> = { 'zh-Hans': 'Noto Sans SC', 'zh-Hant': 'Noto Sans TC' };
+// Fallback face for glyphs Instrument Sans lacks (CJK, Cyrillic, Greek, Vietnamese, accented Latin),
+// subset to the title's characters. Arabic and Thai reuse the English card (see cardLocale).
+const FALLBACK_FAMILY: Partial<Record<Locale, string>> = { 'zh-Hans': 'Noto Sans SC', 'zh-Hant': 'Noto Sans TC', ja: 'Noto Sans JP', ko: 'Noto Sans KR' };
+const CJK_LOCALES: Locale[] = ['zh-Hans', 'zh-Hant', 'ja', 'ko'];
 
 export async function getStaticPaths() {
     const paths = [];
     for (const l of LOCALES) {
+        if (cardLocale(l.code) !== l.code) continue;
         for (const post of await getPosts(l.code)) {
             for (const name of [post.slug, `${post.slug}-card`]) paths.push({ params: { locale: l.code, name }, props: { post } });
         }
@@ -41,8 +45,8 @@ function loadShared() {
     return shared;
 }
 
-/** A subset of the CJK face covering just `text`, from the Google Fonts text API (build time only). */
-async function cjkFont(family: string, text: string) {
+/** A subset of `family` covering just `text`, from the Google Fonts text API (build time only). */
+async function fallbackFont(family: string, text: string) {
     const css = await (await fetch(`https://fonts.googleapis.com/css2?family=${family.replace(/ /g, '+')}:wght@600&text=${encodeURIComponent(text)}`)).text();
     const url = css.match(/src: url\(([^)]+)\)/)?.[1];
     if (!url) throw new Error(`no ${family} subset for OG card: ${css.slice(0, 200)}`);
@@ -53,9 +57,9 @@ const el = (type: string, style: Record<string, unknown>, children?: unknown) =>
 
 async function card(post: Post) {
     const { fonts, hero } = await loadShared();
-    const family = CJK_FAMILY[post.locale];
-    const allFonts = family ? [...fonts, await cjkFont(family, post.title)] : fonts;
-    const titleSize = post.title.length > (family ? 22 : 48) ? 50 : 60;
+    const family = post.locale === 'en' ? undefined : FALLBACK_FAMILY[post.locale] ?? 'Noto Sans';
+    const allFonts = family ? [...fonts, await fallbackFont(family, post.title)] : fonts;
+    const titleSize = post.title.length > (CJK_LOCALES.includes(post.locale) ? 22 : 48) ? 50 : 60;
     const svg = await satori(
         el('div', { width: W, height: H, display: 'flex', background: '#F4F6F5', fontFamily: `Instrument Sans${family ? `, ${family}` : ''}` }, [
             el('div', { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '64px 56px 56px 64px', borderRight: '1px solid #D7DDDC' }, [

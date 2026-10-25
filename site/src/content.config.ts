@@ -2,12 +2,12 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-// src/content/blog/<slug>/index.mdx is the English source; <slug>/<locale>.mdx (zh-Hans.mdx,
-// zh-Hant.mdx) are its translations. Translations carry only the translated fields plus
+// src/content/blog/<slug>/index.mdx is the English source; <slug>/<locale>.mdx (es.mdx,
+// zh-Hans.mdx, ...) are its translations. Translations carry only the translated fields plus
 // sourceHash; dates, related posts and draft state come from the English file.
 const blog = defineCollection({
     loader: glob({
-        pattern: '*/{index,zh-Hans,zh-Hant}.mdx',
+        pattern: '*/*.mdx',
         base: './src/content/blog',
         generateId: ({ entry }) => entry.replace(/\.mdx$/, ''),
     }),

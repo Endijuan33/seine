@@ -93,38 +93,18 @@ Body rules (`npm run check` enforces most of them):
   Get Started page. Translations translate `title` and `text` and keep `target`.
 - Don't write an FAQ or "Related reading" section in the body; front matter renders them.
 
-## Translations (Simplified and Traditional Chinese)
+## Translations (19 languages)
 
-Every published post exists in English, `zh-Hans` (at `/zh-hans/`) and `zh-Hant` (at
-`/zh-hant/`). A translation sits beside its source as `<slug>/zh-Hans.mdx` and
-`<slug>/zh-Hant.mdx` and carries only translated fields:
+Every published post exists in English and 19 translations, the same set as Sol Incinerator: id,
+es, de, fr, pt-BR, ru, it, pl, tr, vi, ar, nl, uk, el, ja, ko, th, zh-Hans and zh-Hant. A
+translation sits beside its source as `<slug>/<locale>.mdx` and carries only translated fields
+plus `sourceHash` (`npm run check -- --hash <slug>`) and `translation: reviewed` after a separate
+review pass. Follow [`translation-guide.md`](translation-guide.md) (protected values, link
+prefixes, glossary). Any later edit to `index.mdx` changes its hash, and the build fails until
+every translation's changed passages are updated and its `sourceHash` matches again; the draft
+flag isn't part of the hash.
 
-```yaml
----
-title: …
-description: …
-tags: […]
-faq: [...]                  # same number of entries as the source
-sourceHash: 8a26ef5e623a    # npm run check -- --hash <slug>
-translation: reviewed       # draft until a separate review pass
----
-```
-
-1. Translate with the active model; don't call external translation APIs. zh-Hans follows
-   mainland usage (线程, 内存, 软件, 显卡, 默认); zh-Hant follows Taiwan usage (執行緒, 記憶體,
-   軟體, 顯示卡, 預設), not a character conversion of zh-Hans. Keep it plain and literal.
-2. Keep exactly: numbers, chip names, commands, code blocks, external URLs, `@name`, `BNT`,
-   product names, and lowercase "seine". Prefix internal links with the locale
-   (`/zh-hans/#download`, `/zh-hant/blog/<slug>/`).
-3. Do a separate review pass for meaning, omissions, additions and terminology, preferably by a
-   different agent, then set `translation: reviewed`. Don't claim an independent review that
-   didn't happen.
-4. Any later edit to `index.mdx` changes its hash, and the build fails until each translation's
-   changed passages are updated and its `sourceHash` matches again. Re-translate only what
-   changed.
-
-Interface strings live in `src/i18n/ui.ts`. The Chinese catalogs are typed against the English
-keys, so a missing string fails the build.
+Interface strings live in `src/i18n/messages/<locale>.json`; a missing key fails the build.
 
 ## What the build does for SEO
 

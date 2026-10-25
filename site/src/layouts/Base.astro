@@ -8,9 +8,16 @@ import '@fontsource/instrument-sans/latin-600.css';
 import '@fontsource/instrument-sans/latin-700.css';
 import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
+// Polish, Turkish, Vietnamese and the like; other scripts use the system fonts in site.css.
+import '@fontsource/instrument-sans/latin-ext-400.css';
+import '@fontsource/instrument-sans/latin-ext-600.css';
+import '@fontsource/instrument-sans/latin-ext-700.css';
+import '@fontsource/ibm-plex-mono/latin-ext-400.css';
+import '@fontsource/ibm-plex-mono/cyrillic-400.css';
 import '../styles/site.css';
 import { LOCALES, localeDef, localizePath, type Locale } from '../i18n/locales';
 import { useTranslations } from '../i18n/ui';
+import LanguageSuggestion from '../components/LanguageSuggestion.astro';
 import { DEFAULT_IMAGE, REPO, SITE_URL, jsonLd } from '../lib/site';
 
 interface Props {
@@ -36,7 +43,7 @@ const canonical = SITE_URL + localizePath(path, locale);
 const home = localizePath('/', locale);
 ---
 <!doctype html>
-<html lang={def.htmlLang}>
+<html lang={def.htmlLang} dir={def.dir}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -69,6 +76,7 @@ const home = localizePath('/', locale);
 {schema.map((s) => <script type="application/ld+json" set:html={jsonLd(s)} />)}
 </head>
 <body>
+{alternates && <LanguageSuggestion path={path} english={locale === 'en'} />}
 
 <header class="nav">
   <div class="wrap">
@@ -79,12 +87,15 @@ const home = localizePath('/', locale);
       <a class="hide-sm" href={localizePath('/blog/', locale)}>{t('navBlog')}</a>
       <a class="hide-sm" href={REPO}>GitHub</a>
       {alternates && (
-        <span class="langs" role="group" aria-label={t('navLanguage')}>
-          {LOCALES.map((l) => (
-            <a href={localizePath(path, l.code)} hreflang={l.htmlLang} lang={l.htmlLang} title={l.endonym}
-               aria-current={l.code === locale ? 'true' : undefined}>{l.short}</a>
-          ))}
-        </span>
+        <details class="langs">
+          <summary aria-label={t('navLanguage')}>{def.short}</summary>
+          <ul>
+            {LOCALES.map((l) => (
+              <li><a href={localizePath(path, l.code)} hreflang={l.htmlLang} lang={l.htmlLang}
+                     aria-current={l.code === locale ? 'true' : undefined}>{l.endonym}</a></li>
+            ))}
+          </ul>
+        </details>
       )}
     </nav>
   </div>

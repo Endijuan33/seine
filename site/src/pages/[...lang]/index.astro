@@ -2,6 +2,7 @@
 import { Picture } from 'astro:assets';
 import dashboard from '../../assets/dashboard.webp';
 import heroSquare from '../../assets/hero-square.webp';
+import benchmarks from '../../data/benchmarks.json';
 import { localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
 import { useTranslations, type UiKey } from '../../i18n/ui';
 import Base from '../../layouts/Base.astro';
@@ -21,14 +22,8 @@ const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
     { os: 'mac-intel', name: 'dlMacIntel', asset: 'seine-macos-x86_64.tar.gz', detect: 'detectMacIntel' },
 ];
 
-// Best measured hashrate per generation (seine docs/PERFORMANCE.md; Zen 5 from the 32-thread run).
-const bars = [
-    { name: 'AMD EPYC · Zen 5', chip: 'EPYC 9R45', threads: 32, hps: 49.4 },
-    { name: 'AMD EPYC · Zen 4', chip: 'EPYC 9R14', threads: 24, hps: 35.7 },
-    { name: 'Apple M4 Max', chip: '48 GB MacBook Pro', threads: 16, hps: 30.9 },
-    { name: t('perfArm'), chip: 'AWS Graviton4', threads: 16, hps: 21.5 },
-    { name: 'Intel Xeon', chip: 'Sapphire Rapids 8488C', threads: 12, hps: 13.1 },
-];
+// Best measured hashrate per generation lives in src/data/benchmarks.json (one place to update).
+const bars = benchmarks.best.map((b) => ({ name: 'labelKey' in b ? t(b.labelKey as UiKey) : b.label, chip: b.chip, threads: b.threads, hps: b.hps }));
 const top = Math.max(...bars.map((b) => b.hps));
 const specs = bars.slice(0, 4).map((b) => ({ hps: b.hps, label: b.name.replace(' · ', ' ') }));
 

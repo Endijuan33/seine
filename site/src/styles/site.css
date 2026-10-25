@@ -17,10 +17,18 @@
     color-scheme: light;
 }
 /* Prefer the matching script's CJK face for each Chinese locale. */
+/* Per-script fallbacks: Instrument Sans covers Latin; other scripts use good system faces. */
 :lang(zh-Hant) { --sans: "Instrument Sans", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif; }
 :lang(zh-Hans) { --sans: "Instrument Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif; }
+:lang(ja) { --sans: "Instrument Sans", "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif; }
+:lang(ko) { --sans: "Instrument Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+:lang(ru), :lang(uk), :lang(el) { --sans: "Instrument Sans", "Segoe UI", "Helvetica Neue", "Noto Sans", Arial, system-ui, sans-serif; }
+:lang(ar) { --sans: "Geeza Pro", "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, sans-serif; }
+:lang(th) { --sans: "Instrument Sans", "Thonburi", "Leelawadee UI", "Noto Sans Thai", Tahoma, system-ui, sans-serif; }
 /* CJK headings: no Latin tracking, and break at spaces and punctuation rather than mid-word. */
-:lang(zh-Hans) :is(h1, h2, h3), :lang(zh-Hant) :is(h1, h2, h3) { letter-spacing: 0; word-break: keep-all; overflow-wrap: anywhere; }
+:is(:lang(zh-Hans), :lang(zh-Hant), :lang(ja), :lang(ko)) :is(h1, h2, h3) { letter-spacing: 0; word-break: keep-all; overflow-wrap: anywhere; }
+/* Scripts where negative tracking hurts legibility. */
+:is(:lang(ar), :lang(th)) :is(h1, h2, h3, .logo) { letter-spacing: 0; }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -44,9 +52,20 @@ code { font: 0.9em var(--mono); }
 @media (max-width: 720px) { .nav nav .hide-sm { display: none; } }
 
 /* language switcher: plain links, the current one inked */
-.langs { display: flex; gap: 10px; font: 13px/1 var(--mono); }
-.langs a { color: var(--ink-3); }
-.langs a[aria-current="true"] { color: var(--ink); font-weight: 500; }
+.langs { position: relative; font: 13px/1 var(--mono); }
+.langs summary { list-style: none; cursor: pointer; color: var(--ink); padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--radius); }
+.langs summary::-webkit-details-marker { display: none; }
+.langs summary::after { content: " ▾"; color: var(--ink-3); }
+.langs ul { position: absolute; inset-inline-end: 0; top: calc(100% + 6px); margin: 0; padding: 6px 0; list-style: none; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); min-width: 190px; max-height: 70vh; overflow-y: auto; z-index: 20; font: 14px/1.2 var(--sans); }
+.langs li a { display: block; padding: 8px 14px; color: var(--ink-2); text-decoration: none; }
+.langs li a:hover { background: var(--paper-2); color: var(--ink); }
+.langs li a[aria-current="true"] { color: var(--ink); font-weight: 600; }
+
+/* language suggestion banner (components/LanguageSuggestion.astro) */
+.lang-suggest { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 20px; padding: 8px max(24px, env(safe-area-inset-left)); background: var(--paper-2); border-bottom: 1px solid var(--rule); font-size: 15px; color: var(--ink); }
+.lang-suggest-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lang-suggest .btn { padding: 8px 14px; font-size: 14px; cursor: pointer; }
+.lang-suggest button.btn { background: none; font: 600 14px/1 var(--sans); }
 
 /* buttons */
 .btn { display: inline-block; font: 600 15px/1 var(--sans); padding: 15px 20px; border-radius: var(--radius); text-decoration: none; }
@@ -65,14 +84,14 @@ code { font: 0.9em var(--mono); }
 .hero .art img { width: 100%; height: 100%; object-fit: cover; }
 .specs { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
 .specs .wrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.specs .wrap > div { padding: 22px 24px 22px 0; } /* not .specs div: that also hits .wrap and drops its gutter */
-.specs .wrap > div + div { padding-left: 24px; border-left: 1px solid var(--rule); }
+.specs .wrap > div { padding-block: 22px; padding-inline: 0 24px; } /* not .specs div: that also hits .wrap and drops its gutter */
+.specs .wrap > div + div { padding-inline-start: 24px; border-inline-start: 1px solid var(--rule); }
 .specs b { display: block; font: 500 28px/1.1 var(--mono); letter-spacing: -0.02em; }
 .specs span { font-size: 13px; color: var(--ink-3); }
 @media (max-width: 880px) {
     .hero .wrap { grid-template-columns: 1fr; padding-block: 48px 40px; }
     .specs .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .specs .wrap > div:nth-child(3) { padding-left: 0; border-left: 0; }
+    .specs .wrap > div:nth-child(3) { padding-inline-start: 0; border-inline-start: 0; }
     .specs .wrap > div:nth-child(n+3) { border-top: 1px solid var(--rule); }
 }
 
@@ -89,16 +108,16 @@ h2 { margin: 0; font-weight: 600; font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-
 .downloads td { padding: 18px 0; border-top: 1px solid var(--rule); vertical-align: middle; }
 .downloads tr:last-child td { border-bottom: 1px solid var(--rule); }
 .downloads .os { font-weight: 600; font-size: 1.05rem; }
-.downloads .size { font: 14px var(--mono); color: var(--ink-3); text-align: right; white-space: nowrap; padding-right: 20px; }
-.downloads .get { text-align: right; width: 1%; white-space: nowrap; }
+.downloads .size { font: 14px var(--mono); color: var(--ink-3); text-align: end; white-space: nowrap; padding-inline-end: 20px; }
+.downloads .get { text-align: end; width: 1%; white-space: nowrap; }
 .downloads .get a { font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--ink); border-radius: var(--radius); padding: 9px 14px; display: inline-block; }
 .downloads .get a:hover { background: var(--ink); color: var(--paper); }
-.downloads tr.match .os::after { content: attr(data-match); margin-left: 10px; font: 500 12px/1 var(--mono); color: var(--accent); vertical-align: 2px; white-space: nowrap; }
+.downloads tr.match .os::after { content: attr(data-match); margin-inline-start: 10px; font: 500 12px/1 var(--mono); color: var(--accent); vertical-align: 2px; white-space: nowrap; }
 .downloads tr.match .get a { background: var(--ink); color: var(--paper); }
 .dl-foot { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 15px; color: var(--ink-3); }
 .dl-foot a { color: var(--ink-2); }
 @media (max-width: 640px) {
-    .downloads .size { padding-right: 12px; }
+    .downloads .size { padding-inline-end: 12px; }
     .downloads tr.match .os::after { display: block; margin: 6px 0 0; }
 }
 
@@ -126,8 +145,8 @@ h2 { margin: 0; font-weight: 600; font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-
 section.band .bar .track { background: #DCE2E1; }
 .bar .track i { display: block; height: 100%; background: var(--ink); }
 .bar:first-child .track i { background: var(--accent); }
-.bar .v { font: 500 20px var(--mono); text-align: right; letter-spacing: -0.02em; }
-.bar .v small { font-size: 12px; color: var(--ink-3); margin-left: 3px; }
+.bar .v { font: 500 20px var(--mono); text-align: end; letter-spacing: -0.02em; }
+.bar .v small { font-size: 12px; color: var(--ink-3); margin-inline-start: 3px; }
 .perf-foot { margin-top: 18px; font-size: 15px; color: var(--ink-3); }
 .perf-foot a { color: var(--ink-2); }
 @media (max-width: 640px) { .bar { grid-template-columns: 1fr 4rem; } .bar .track { grid-column: 1 / -1; grid-row: 2; } }

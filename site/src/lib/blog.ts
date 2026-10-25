@@ -21,7 +21,10 @@ export type Post = {
     readingMinutes: number;
 };
 
-const CJK = /[㐀-鿿豈-﫿]/g;
+const CJK = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g; // Han, kana, Hangul
+
+/** Social cards can't shape Arabic or Thai, so those locales reuse the English card. */
+export const cardLocale = (locale: Locale): Locale => (locale === 'ar' || locale === 'th' ? 'en' : locale);
 
 /** Reading time: ~230 English words or ~400 CJK characters a minute. */
 export function readingMinutes(body: string): number {
@@ -60,7 +63,7 @@ export async function getPosts(locale: Locale): Promise<Post[]> {
             faq: entry.data.faq,
             related: source.data.related,
             customImage: Boolean(image),
-            image: image ? new URL(image, SITE_URL).href : `${SITE_URL}/blog/og/${locale}/${slug}.jpg`,
+            image: image ? new URL(image, SITE_URL).href : `${SITE_URL}/blog/og/${cardLocale(locale)}/${slug}.jpg`,
             path,
             url: SITE_URL + path,
             readingMinutes: readingMinutes(entry.body ?? ''),
