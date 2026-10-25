@@ -1,0 +1,167 @@
+{
+  "schema": "seine-benchmark-campaign-index/v1",
+  "date": "2026-10-25",
+  "record_count": 29,
+  "datasets": [
+    {
+      "campaign": "cherry-epyc-energy-20261025",
+      "status": "measured_manual_configuration",
+      "default_policy_changed": false,
+      "results": "experiments/cherry-epyc-energy-20261025/RESULTS.md",
+      "records_json": "experiments/cherry-epyc-energy-20261025/benchmark-records.json",
+      "records_csv": "experiments/cherry-epyc-energy-20261025/benchmark-records.csv",
+      "records_json_sha256": "816638a7f42f9b4ccca0bd1dd6cc37a526ad254359e1607a2ed05f69ebc38147",
+      "record_count": 9,
+      "record_ids": [
+        "cherry-9355p-results-8",
+        "cherry-9355p-results-16",
+        "cherry-9355p-results-24",
+        "cherry-9355p-results-32",
+        "cherry-9355p-smt-results-32",
+        "cherry-9355p-smt-results-48",
+        "cherry-9355p-smt-results-64",
+        "cherry-9355p-power-results-baseline",
+        "cherry-9355p-power-results-candidate"
+      ],
+      "metric_scopes": [
+        "whole_invocation"
+      ],
+      "power_scopes": [
+        "cpu_package"
+      ],
+      "selection_modes": [
+        "manual_fixed_configuration"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    },
+    {
+      "campaign": "genoa-streaming-20261025",
+      "status": "accepted_automatic_policy",
+      "default_policy_changed": true,
+      "results": "experiments/genoa-streaming-20261025/RESULTS.md",
+      "records_json": "experiments/genoa-streaming-20261025/benchmark-records.json",
+      "records_csv": "experiments/genoa-streaming-20261025/benchmark-records.csv",
+      "records_json_sha256": "badeefd247a38da578c606adbbfae7a11f9d317a72a47391c4645abab133a444",
+      "record_count": 4,
+      "record_ids": [
+        "genoa-c7a8xlarge-cold_discovery-control",
+        "genoa-c7a8xlarge-cold_discovery-candidate",
+        "genoa-c7a8xlarge-cached_restart-control",
+        "genoa-c7a8xlarge-cached_restart-candidate"
+      ],
+      "metric_scopes": [
+        "completed_hash_lower_bound_from_start_request_through_stopped_service"
+      ],
+      "power_scopes": [
+        "unmeasured"
+      ],
+      "selection_modes": [
+        "automatic_cpu_count_and_kernel_with_24_worker_ceiling"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    },
+    {
+      "campaign": "amd-overnight-20261025",
+      "status": "accepted_automatic_policy",
+      "default_policy_changed": true,
+      "results": "experiments/amd-overnight-20261025/RESULTS.md",
+      "records_json": "experiments/amd-overnight-20261025/benchmark-records.json",
+      "records_csv": "experiments/amd-overnight-20261025/benchmark-records.csv",
+      "records_json_sha256": "989183297719ed5de01232a3ecfd6f0abbfcaca5d37564d840e4a3efd2cb26af",
+      "record_count": 4,
+      "record_ids": [
+        "turin-order-cold_discovery-control",
+        "turin-order-cold_discovery-candidate",
+        "turin-order-cached_restart-control",
+        "turin-order-cached_restart-candidate"
+      ],
+      "metric_scopes": [
+        "completed_hash_lower_bound_from_start_request_through_stopped_service"
+      ],
+      "power_scopes": [
+        "unmeasured"
+      ],
+      "selection_modes": [
+        "automatic_cpu_count_and_kernel"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    },
+    {
+      "campaign": "amd-ring-locality-20261025",
+      "status": "rejected_kernel_candidate",
+      "default_policy_changed": false,
+      "results": "experiments/amd-ring-locality-20261025/RESULTS.md",
+      "records_json": "experiments/amd-ring-locality-20261025/benchmark-records.json",
+      "records_csv": "experiments/amd-ring-locality-20261025/benchmark-records.csv",
+      "records_json_sha256": "c0ba5c10a18fc87536b24997046d6501e36d7c778183cac76596707df9e2cdc5",
+      "record_count": 10,
+      "record_ids": [
+        "screen-32-ring-32-baseline",
+        "screen-32-ring-32-candidate",
+        "screen-32-ring-16-baseline",
+        "screen-32-ring-16-candidate",
+        "screen-64-ring-32-baseline",
+        "screen-64-ring-32-candidate",
+        "screen-64-ring-16-baseline",
+        "screen-64-ring-16-candidate",
+        "confirmation-baseline",
+        "confirmation-candidate"
+      ],
+      "metric_scopes": [
+        "completed_hashes_over_measured_backend_time_including_fence"
+      ],
+      "power_scopes": [
+        "unmeasured"
+      ],
+      "selection_modes": [
+        "fixed_experimental_kernel_and_workers"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    },
+    {
+      "campaign": "amd-page-size-20261025",
+      "status": "measured_manual_configuration",
+      "default_policy_changed": false,
+      "results": "experiments/amd-page-size-20261025/RESULTS.md",
+      "records_json": "experiments/amd-page-size-20261025/benchmark-records.json",
+      "records_csv": "experiments/amd-page-size-20261025/benchmark-records.csv",
+      "records_json_sha256": "e4b661750b75ad30ebe1e23b267033353dc3222ee11f7ba12b61f6c12a511400",
+      "record_count": 2,
+      "record_ids": [
+        "turin-page-size-baseline",
+        "turin-page-size-candidate"
+      ],
+      "metric_scopes": [
+        "whole_invocation"
+      ],
+      "power_scopes": [
+        "cpu_package"
+      ],
+      "selection_modes": [
+        "manual_fixed_configuration"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    }
+  ],
+  "comparison_rules": [
+    "Compare only the interleaved roles within each documented phase and configuration.",
+    "Keep 60-second and 120-second energy series separate, and cold discovery separate from cached restart.",
+    "Ring screens at each worker count and ring variant are separate pairs; do not pool their repeated baselines.",
+    "Automatic productive lower bounds, steady-state backend rates and whole-invocation energy rates are distinct metrics.",
+    "A configured power cap is not measured watts; unmeasured package/wall/DRAM power must stay unmeasured.",
+    "Keep VM allocation separate from bare-metal socket performance; do not fill unknown physical memory fields.",
+    "Manual configuration gains are not zero-configuration shipping improvements.",
+    "A rejected candidate remains research evidence, not an adopted improvement.",
+    "Do not multiply independent gains or sum changes measured against different baselines."
+  ]
+}
