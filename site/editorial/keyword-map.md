@@ -90,3 +90,5 @@ PPLNS payouts, miner stats, the reward schedule, the fair launch). Don't target 
 The Windows guide owns the native Windows ZIP/checksum/PowerShell walkthrough. The general mining guide remains the cross-platform overview; the huge-pages guide owns detailed page setup.
 
 The NVIDIA guide owns card selection, NVIDIA runtime diagnosis, accepted GPU-share verification and the dated RTX 5090 comparison. The Windows guide owns ZIP/checksum/PowerShell setup, the dashboard guide owns the panel tour, and bntpool.com owns pool-credit tracking. No RTX 4090 performance or other unmeasured card result is claimed.
+
+The hardware comparison guide also presents the dated RTX 5090 results with the original method and evidence, as part of its per-chip coverage. Its shared measurement section has 8.2% wording overlap with the NVIDIA guide; runtime setup, commands and troubleshooting remain in the NVIDIA guide, linked from the hardware article.

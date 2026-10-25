@@ -11,7 +11,7 @@ faq:
     a: 'seine mint mit den Downloads für Windows und Linux auf NVIDIA-Grafikkarten und nutzt jede erkannte Karte zusätzlich zum Prozessor. Unter Windows ist die CUDA-Runtime enthalten, du brauchst also nur den NVIDIA-Treiber. Unter Linux installierst du den Treiber und die NVRTC-Bibliotheken. Der erste Start optimiert jede Karte und merkt sich das Ergebnis.'
   - q: 'Warum ist die Speicherbandbreite beim Blocknet-Mining wichtig?'
     a: 'Jeder Blocknet-Hash schreibt einen kompletten 2-GiB-Speicherblock und liest Daten von überall daraus zurück, weit mehr, als irgendein Prozessor-Cache fasst. Die Hashrate hängt daher davon ab, wie schnell das Speichersystem Daten bewegt. Am schnellsten minen Rechner mit hoher Speicherbandbreite und genug RAM für viele Threads.'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Blocknets Proof of Work ist Argon2id mit einem 2-GiB-Speicherblock pro Hash. Das
 Am 25. Oktober 2026 erreichte ein EPYC 9355P mit 32 Kernen und 64 Hardware-Threads sowie 192 GiB auf zwölf DDR5-4800-Speicherkanälen **68,256 H/s**, gerundet **68,3 H/s**. Diese feste manuelle Konfiguration nutzte 64 Mining-Threads, den Streaming-Kernel, 1-GiB-Huge-Pages und ein Package-Leistungslimit von 280 W. Die Rate ist die Summe der abgeschlossenen Hashes geteilt durch die gesamte Laufzeit von vier frischen 120-Sekunden-Aufrufen einschließlich Start und Beenden.
 
 Das [Seitengrößenexperiment](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) dokumentiert die genaue Quellcode-Revision, den SHA-256-Wert der ausführbaren Datei, Prüfungen der Seitenzuweisung und die Messmethode. Die [maschinenlesbaren Datensätze](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) enthalten Konfiguration sowie ursprüngliche Zähler und Nenner. Gemessen wurde ein manuell konfigurierter vollständiger Sockel; die folgenden Cloud- und Mac-Messungen haben jeweils eigene Maschinen und Einstellungen.
+
+## Wie schnell war die RTX 5090 in unserem Test?
+
+Wir haben am 25. Oktober 2026 mit Windows 11, einer NVIDIA GeForce RTX 5090, einem AMD Ryzen 9 9950X3D, 125,4 GiB nutzbarem RAM, seine v0.2.26 und dem NVIDIA-Treiber `610.88` getestet. Wir haben drei abwechselnde Testpaare mit `--bench-kind backend` ausgeführt. Jeder Durchlauf bestand aus einer Aufwärmphase von 20 Sekunden und drei Messrunden von jeweils 20 Sekunden, mit 20 Sekunden zwischen den Durchläufen. Kernel, Registerlimit, Lanes und Threads wurden automatisch eingestellt.
+
+| Modus | Durchschnittliche H/s |
+|---|---|
+| Nur RTX 5090 | 7,3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12,9 |
+
+Die Tabelle zeigt den Mittelwert von drei Durchläufen pro Modus auf diesem Desktop, während die bereits geöffneten Apps geöffnet blieben. Beide Modi verwendeten GPU `0` und denselben NVIDIA-Autotune-Cache. Dies sind lokale Benchmark-Hashraten; angenommene Shares bestätigen die Anrechnung durch den Pool. Die [Messnotizen](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md) dokumentieren die Einstellungen und Einzelergebnisse.
 
 ## Gemessener Vergleich von Cloud-Servern und Mac
 
@@ -86,7 +97,7 @@ Ja. seine mint unter Windows und Linux gleichzeitig auf jedem CPU-Kern und jeder
 - **Linux:** Installiere den NVIDIA-Treiber und die NVRTC-Bibliotheken aus deiner Distribution oder von NVIDIA.
 - **Erster Start:** seine optimiert die Kernel-Einstellungen für jede Karte und speichert das Ergebnis, spätere Starts dauern also nur Sekunden.
 
-Auf [Macs mit Apple Silicon](/de/blog/mine-blocknet-on-mac/) mint seine standardmäßig auf der CPU, dem schnellsten auf dem M4 Max gemessenen Setup. Die [NVIDIA-Anleitung](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md) behandelt Multi-GPU-Rigs und Voraussetzungen.
+Auf [Macs mit Apple Silicon](/de/blog/mine-blocknet-on-mac/) mint seine standardmäßig auf der CPU, dem schnellsten auf dem M4 Max gemessenen Setup. Die [NVIDIA-Anleitung](/de/blog/mine-blocknet-nvidia-gpu/) behandelt Multi-GPU-Rigs und Voraussetzungen.
 
 ## Was optimiert seine automatisch?
 

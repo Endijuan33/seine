@@ -11,7 +11,7 @@ faq:
     a: 'O seine minera com placas de vídeo NVIDIA nos downloads para Windows e Linux, usando todas as placas que detecta junto com o processador. No Windows, o runtime CUDA está incluído, então você só precisa do driver NVIDIA. No Linux, instale o driver e as bibliotecas NVRTC. A primeira execução ajusta cada placa e lembra o resultado.'
   - q: 'Por que a largura de banda da memória importa na mineração de Blocknet?'
     a: 'Cada hash do Blocknet grava um bloco inteiro de 2 GiB de memória e lê dados de volta de todo ele, muito mais do que qualquer cache de processador comporta. Por isso o hashrate depende da velocidade com que o sistema de memória movimenta os dados. Máquinas com mais largura de banda de memória e RAM suficiente para muitas threads mineram mais rápido.'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ A prova de trabalho do Blocknet é o Argon2id com um bloco de memória de 2 GiB 
 Em 25 de outubro de 2026, um EPYC 9355P de 32 núcleos e 64 threads, com 192 GiB distribuídos por doze canais de memória DDR5-4800, atingiu **68,256 H/s**, arredondados para **68,3 H/s**. Essa configuração manual fixa usou 64 threads de mineração, o kernel streaming, huge pages de 1 GiB e um limite de potência do pacote de 280 W. A taxa é o total de hashes concluídos dividido pelo tempo total decorrido em quatro execuções novas de 120 segundos, incluindo a inicialização e o encerramento.
 
 O [experimento de tamanho de página](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) registra a revisão exata do código-fonte, o SHA-256 do executável, as verificações de alocação de páginas e o método de medição. Seus [registros legíveis por máquina](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) preservam a configuração e os numeradores e denominadores brutos. Trata-se de um soquete completo configurado manualmente; as medições de nuvem e Mac abaixo descrevem suas próprias máquinas e configurações.
+
+## Qual foi a velocidade da RTX 5090 no nosso teste?
+
+Testamos em 25 de outubro de 2026 usando Windows 11, uma NVIDIA GeForce RTX 5090, um AMD Ryzen 9 9950X3D, 125,4 GiB de RAM utilizável, seine v0.2.26 e o driver NVIDIA `610.88`. Executamos três pares intercalados com `--bench-kind backend`. Cada execução usou um aquecimento de 20 segundos e três rodadas medidas de 20 segundos, com 20 segundos entre as execuções. As configurações de kernel, limite de registradores, lanes e threads foram automáticas.
+
+| Modo | Média em H/s |
+|---|---|
+| Apenas RTX 5090 | 7,3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12,9 |
+
+A tabela mostra a média de três execuções por modo neste computador, mantendo abertos os aplicativos que já estavam em uso. Ambos os modos usaram a GPU `0` e o mesmo cache de ajuste automático da NVIDIA. Esses são hashrates de benchmark local; os shares aceitos confirmam o crédito no pool. As [notas de medição](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md) registram as configurações e os resultados individuais.
 
 ## Comparação medida de servidores em nuvem e Mac
 
@@ -86,7 +97,7 @@ Sim. No Windows e no Linux, o seine minera com todos os núcleos da CPU e todas 
 - **Linux:** instale o driver NVIDIA e as bibliotecas NVRTC da sua distribuição ou da NVIDIA.
 - **Primeira execução:** o seine ajusta as configurações de kernel para cada placa e guarda o resultado em cache, então as inicializações seguintes levam segundos.
 
-Nos [Macs com Apple Silicon](/pt-br/blog/mine-blocknet-on-mac/), o seine minera com a CPU por padrão, a configuração mais rápida medida no M4 Max. O [guia da NVIDIA](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md) cobre rigs com várias GPUs e os requisitos.
+Nos [Macs com Apple Silicon](/pt-br/blog/mine-blocknet-on-mac/), o seine minera com a CPU por padrão, a configuração mais rápida medida no M4 Max. O [guia da NVIDIA](/pt-br/blog/mine-blocknet-nvidia-gpu/) cobre rigs com várias GPUs e os requisitos.
 
 ## O que o seine ajusta automaticamente?
 

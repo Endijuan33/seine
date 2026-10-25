@@ -11,7 +11,7 @@ faq:
     a: 'seine は Windows 版と Linux 版で NVIDIA グラフィックカードを使ってマイニングし、検出したすべてのカードをプロセッサーと並行して使います。Windows では CUDA ランタイムが同梱されているので、NVIDIA ドライバーだけが必要です。Linux ではドライバーと NVRTC ライブラリをインストールしてください。初回起動時に各カードを調整し、その結果を記憶します。'
   - q: 'Blocknet のマイニングでメモリ帯域幅が重要なのはなぜですか？'
     a: 'Blocknet のハッシュは 1 回ごとに 2 GiB のメモリブロックを丸ごと書き込み、その全体からデータを読み戻します。これはどのプロセッサーのキャッシュよりもはるかに大きな量です。そのためハッシュレートは、メモリシステムがデータを動かす速さで決まります。メモリ帯域幅が大きく、多くのスレッドを動かせるだけの RAM を持つマシンが最も速くマイニングできます。'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Blocknet のプルーフ・オブ・ワークは、ハッシュごとに 2 GiB �
 2026年10月25日、32コア／64ハードウェアスレッドのEPYC 9355Pに、12本のDDR5-4800メモリチャネルで192 GiBを搭載した構成が、**68.256 H/s**、丸めて**68.3 H/s**を記録しました。この固定の手動構成では、マイニングスレッド64本、streamingカーネル、1 GiBのヒュージページ、280 Wのパッケージ電力上限を使用しました。速度は、起動と終了を含む120秒の新規実行4回について、完了したハッシュの合計を経過時間の合計で割った値です。
 
 [ページサイズの実験](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md)には、正確なソースリビジョン、実行ファイルのSHA-256、ページ割り当ての確認結果、測定方法が記録されています。[機械可読の記録](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json)には、構成と生の分子・分母が保存されています。これはソケット全体を手動設定した結果です。以下のクラウドとMacの測定は、それぞれ固有のマシンと設定を示しています。
+
+## テストでのRTX 5090の速度は？
+
+2026年10月25日に、Windows 11、NVIDIA GeForce RTX 5090、AMD Ryzen 9 9950X3D、利用可能なRAM 125.4 GiB、seine v0.2.26、NVIDIAドライバー`610.88`を使用してテストしました。`--bench-kind backend`を使い、両モードを交互に実行する比較を3組行いました。各実行には20秒のウォームアップ1回と20秒の測定ラウンド3回を含め、実行の間に20秒の間隔を置きました。カーネル、レジスタ上限、レーン数、スレッド数は自動設定でした。
+
+| モード | 平均 H/s |
+|---|---|
+| RTX 5090のみ | 7.3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12.9 |
+
+表は、このデスクトップPCで既存のアプリを開いたまま各モードを3回実行した平均値です。両モードでGPU `0`と同じNVIDIA自動調整キャッシュを使用しました。これらはローカルベンチマークの速度であり、プールへの計上は受理されたシェアで確認します。[測定メモ](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md)には設定と個別の結果を記録しています。
 
 ## クラウドサーバーとMacの実測比較
 
@@ -86,7 +97,7 @@ seine はスレッド数をプロセッサーの論理コア数でも制限す�
 - **Linux：** NVIDIA ドライバーと NVRTC ライブラリを、ディストリビューションまたは NVIDIA からインストールします。
 - **初回起動：** seine はカードごとにカーネル設定を調整して結果をキャッシュするので、2 回目以降は数秒で起動します。
 
-[Apple シリコン搭載の Mac](/ja/blog/mine-blocknet-on-mac/) では、seine はデフォルトで CPU を使ってマイニングします。これは M4 Max で測定した中で最速の構成です。マルチ GPU リグと必要な環境については [NVIDIA ガイド](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md)をご覧ください。
+[Apple シリコン搭載の Mac](/ja/blog/mine-blocknet-on-mac/) では、seine はデフォルトで CPU を使ってマイニングします。これは M4 Max で測定した中で最速の構成です。マルチ GPU リグと必要な環境については [NVIDIA ガイド](/ja/blog/mine-blocknet-nvidia-gpu/)をご覧ください。
 
 ## seine は何を自動で調整しますか？
 

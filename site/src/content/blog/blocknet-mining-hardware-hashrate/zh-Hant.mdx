@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 與 Linux 版本使用 NVIDIA 顯示卡挖礦，會在處理器之外同時使用偵測到的每一張顯示卡。在 Windows 上已內建 CUDA 執行環境，只需安裝 NVIDIA 驅動程式。在 Linux 上需安裝驅動程式與 NVRTC 函式庫。首次啟動時會為每張顯示卡調校並記住結果。'
   - q: '為什麼記憶體頻寬對挖 Blocknet 很重要？'
     a: '每次 Blocknet 雜湊都要寫滿一整塊 2 GiB 的記憶體，並從其中各處讀回資料，遠遠超出任何處理器快取的容量。因此算力取決於記憶體系統搬運資料的速度。記憶體頻寬較高、記憶體足以執行更多執行緒的電腦挖得最快。'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Blocknet 的工作量證明是 Argon2id，每次雜湊使用一塊 2 GiB 的記�
 2026年10月25日，一顆 32 核心／64 硬體執行緒的 EPYC 9355P，搭配十二通道 DDR5-4800、共 192 GiB 記憶體，測得 **68.256 H/s**，四捨五入為 **68.3 H/s**。這項固定的手動配置使用 64 個挖礦執行緒、streaming 運算核心程式、1 GiB 大型分頁和 280 W 封裝功耗上限。速率由四次各 120 秒的全新執行中完成的雜湊總數除以總耗時得出，包含啟動和結束時間。
 
 [分頁大小實驗](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md)記錄了準確的原始碼修訂版本、可執行檔 SHA-256、分頁配置檢查和測量方法。[機器可讀記錄](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json)保留了配置以及原始分子和分母。這是手動設定整個處理器插槽的結果；下方雲端伺服器和 Mac 的測量各有自己的機器與設定。
+
+## RTX 5090 在我們的測試中有多快？
+
+我們於 2026 年 10 月 25 日進行測試，使用 Windows 11、NVIDIA GeForce RTX 5090、AMD Ryzen 9 9950X3D、125.4 GiB 可用 RAM、seine v0.2.26 和 NVIDIA 驅動程式 `610.88`。透過 `--bench-kind backend`，我們交替執行兩種模式，共完成三組配對測試。每次執行包含一輪 20 秒暖機和三輪各 20 秒的測量，執行之間間隔 20 秒。運算核心程式、暫存器上限、通道及執行緒均使用自動設定。
+
+| 模式 | 平均 H/s |
+|---|---|
+| 僅 RTX 5090 | 7.3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12.9 |
+
+表中數值是這台桌上型電腦每種模式執行三次的平均值，測試時原有應用程式保持開啟。兩種模式都使用 GPU `0` 和相同的 NVIDIA 自動調校快取。這些是本機效能測試速率；已接受的份額用來確認礦池計入了工作。[測量紀錄](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md)列出設定及各次結果。
 
 ## 雲端伺服器與 Mac 實測比較
 
@@ -86,7 +97,7 @@ seine 也會把執行緒數限制在處理器的邏輯核心數以內，所以�
 - **Linux：** 從發行版或 NVIDIA 安裝 NVIDIA 驅動程式與 NVRTC 函式庫。
 - **首次啟動：** seine 會為每張顯示卡調校運算核心程式參數並快取結果，之後幾秒內即可啟動。
 
-在[搭載 Apple 晶片的 Mac](/zh-hant/blog/mine-blocknet-on-mac/) 上，seine 預設使用 CPU 挖礦，這是在 M4 Max 上實測最快的方式。[NVIDIA 指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md)介紹了多顯示卡礦機與相關需求。
+在[搭載 Apple 晶片的 Mac](/zh-hant/blog/mine-blocknet-on-mac/) 上，seine 預設使用 CPU 挖礦，這是在 M4 Max 上實測最快的方式。[NVIDIA 指南](/zh-hant/blog/mine-blocknet-nvidia-gpu/)介紹了多顯示卡礦機與相關需求。
 
 ## seine 會自動調校哪些項目？
 

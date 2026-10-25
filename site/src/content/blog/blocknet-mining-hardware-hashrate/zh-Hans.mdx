@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 和 Linux 版本使用 NVIDIA 显卡挖矿，会在处理器之外同时使用检测到的每一张显卡。在 Windows 上已内置 CUDA 运行库，只需安装 NVIDIA 驱动。在 Linux 上需安装驱动和 NVRTC 库。首次启动时会为每张显卡调优并记住结果。'
   - q: '为什么内存带宽对挖 Blocknet 很重要？'
     a: '每次 Blocknet 哈希都要写满一整块 2 GiB 的内存，并从其中各处读回数据，远远超出任何处理器缓存的容量。因此算力取决于内存系统搬运数据的速度。内存带宽更高、内存足够运行更多线程的机器挖得最快。'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Blocknet 的工作量证明是 Argon2id，每次哈希使用一块 2 GiB 的内�
 2026年10月25日，一颗 32 核心／64 硬件线程的 EPYC 9355P，搭配十二通道 DDR5-4800、共 192 GiB 内存，测得 **68.256 H/s**，四舍五入为 **68.3 H/s**。这一固定的手动配置使用 64 个挖矿线程、streaming 计算内核、1 GiB 大页和 280 W 封装功耗上限。速率由四次各 120 秒的全新运行中完成的哈希总数除以总耗时得出，包含启动和退出时间。
 
 [页大小实验](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md)记录了准确的源码修订版本、可执行文件 SHA-256、页分配检查和测量方法。[机器可读记录](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json)保留了配置以及原始分子和分母。这是手动配置整个处理器插槽的结果；下方云服务器和 Mac 的测量各有自己的机器与设置。
+
+## RTX 5090 在我们的测试中有多快？
+
+我们于 2026 年 10 月 25 日进行了测试，使用 Windows 11、NVIDIA GeForce RTX 5090、AMD Ryzen 9 9950X3D、125.4 GiB 可用 RAM、seine v0.2.26 和 NVIDIA 驱动 `610.88`。通过 `--bench-kind backend`，我们交替运行两种模式，共完成三组配对测试。每次运行包含一轮 20 秒预热和三轮各 20 秒的测量，运行之间间隔 20 秒。计算内核、寄存器上限、通道和线程均使用自动设置。
+
+| 模式 | 平均 H/s |
+|---|---|
+| 仅 RTX 5090 | 7.3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12.9 |
+
+表中数值是这台桌面电脑每种模式运行三次的平均值，测试时原有应用保持打开。两种模式都使用 GPU `0` 和相同的 NVIDIA 自动调优缓存。这些是本地基准测试速率；已接受的份额用于确认矿池计入了工作。[测量记录](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md)列出了设置和各次结果。
 
 ## 云服务器与 Mac 实测比较
 
@@ -86,7 +97,7 @@ seine 还会把线程数限制在处理器的逻辑核心数以内，所以实�
 - **Linux：** 从发行版或 NVIDIA 安装 NVIDIA 驱动和 NVRTC 库。
 - **首次启动：** seine 会为每张显卡调优计算内核参数并缓存结果，之后几秒内即可启动。
 
-在 [Apple 芯片的 Mac](/zh-hans/blog/mine-blocknet-on-mac/) 上，seine 默认使用 CPU 挖矿，这是在 M4 Max 上实测最快的方式。[NVIDIA 指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md)介绍了多显卡矿机和相关要求。
+在 [Apple 芯片的 Mac](/zh-hans/blog/mine-blocknet-on-mac/) 上，seine 默认使用 CPU 挖矿，这是在 M4 Max 上实测最快的方式。[NVIDIA 指南](/zh-hans/blog/mine-blocknet-nvidia-gpu/)介绍了多显卡矿机和相关要求。
 
 ## seine 会自动调优哪些内容？
 

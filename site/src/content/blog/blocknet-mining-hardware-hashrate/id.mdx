@@ -11,7 +11,7 @@ faq:
     a: 'seine menambang dengan kartu grafis NVIDIA pada unduhan Windows dan Linux, memakai setiap kartu yang terdeteksi bersama prosesor. Di Windows, runtime CUDA sudah disertakan, jadi Anda hanya butuh driver NVIDIA. Di Linux, pasang driver dan pustaka NVRTC. Peluncuran pertama menyetel setiap kartu dan mengingat hasilnya.'
   - q: 'Mengapa bandwidth memori penting untuk menambang Blocknet?'
     a: 'Setiap hash Blocknet menulis satu blok memori 2 GiB penuh dan membaca kembali data dari seluruh bagiannya, jauh lebih banyak dari yang bisa ditampung cache prosesor mana pun. Karena itu hashrate bergantung pada seberapa cepat sistem memori memindahkan data. Komputer dengan bandwidth memori lebih besar dan RAM yang cukup untuk banyak thread menambang paling cepat.'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Proof of work Blocknet adalah Argon2id dengan blok memori 2 GiB per hash. Itu me
 Pada 25 Oktober 2026, EPYC 9355P dengan 32 inti/64 thread dan 192 GiB yang tersebar di dua belas kanal memori DDR5-4800 menghasilkan **68,256 H/s**, dibulatkan menjadi **68,3 H/s**. Konfigurasi manual tetap ini memakai 64 thread penambangan, kernel streaming, huge pages 1 GiB, dan batas daya paket 280 W. Hashrate dihitung dari total hash yang selesai dibagi total waktu berlalu dalam empat proses baru yang masing-masing berjalan selama 120 detik, termasuk startup dan shutdown.
 
 [Eksperimen ukuran halaman](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) mencatat revisi kode sumber yang tepat, SHA-256 file executable, pemeriksaan alokasi halaman, dan metode pengukuran. [Catatan yang dapat dibaca mesin](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) menyimpan konfigurasi serta pembilang dan penyebut mentah. Pengukuran ini memakai satu soket penuh yang dikonfigurasi secara manual; pengukuran cloud dan Mac di bawah menjelaskan mesin dan pengaturannya masing-masing.
+
+## Seberapa cepat RTX 5090 dalam pengujian kami?
+
+Kami menguji pada 25 Oktober 2026 menggunakan Windows 11, NVIDIA GeForce RTX 5090, AMD Ryzen 9 9950X3D, RAM yang dapat digunakan sebesar 125,4 GiB, seine v0.2.26, dan driver NVIDIA `610.88`. Kami menjalankan tiga pasang pengujian berselang-seling dengan `--bench-kind backend`. Setiap pengujian menggunakan satu pemanasan 20 detik dan tiga putaran pengukuran masing-masing 20 detik, dengan jeda 20 detik antar-pengujian. Pengaturan kernel, batas register, lane, dan thread berlangsung otomatis.
+
+| Mode | Rata-rata H/s |
+|---|---|
+| RTX 5090 saja | 7,3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12,9 |
+
+Tabel menampilkan rata-rata tiga pengujian per mode pada desktop ini dengan aplikasi yang sebelumnya terbuka tetap berjalan. Kedua mode menggunakan GPU `0` dan cache penyetelan otomatis NVIDIA yang sama. Angka ini merupakan hashrate benchmark lokal; share yang diterima mengonfirmasi kredit dari pool. [Catatan pengukuran](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md) mencatat pengaturan dan hasil setiap pengujian.
 
 ## Perbandingan hasil pengukuran server cloud dan Mac
 
@@ -86,7 +97,7 @@ Bisa. Di Windows dan Linux, seine menambang dengan setiap core CPU dan setiap ka
 - **Linux:** pasang driver NVIDIA dan pustaka NVRTC dari distribusi Anda atau dari NVIDIA.
 - **Peluncuran pertama:** seine menyetel pengaturan kernel untuk setiap kartu dan menyimpan hasilnya, jadi saat dijalankan berikutnya hanya butuh beberapa detik.
 
-Di [Mac Apple Silicon](/id/blog/mine-blocknet-on-mac/), seine menambang dengan CPU secara default, pengaturan tercepat yang terukur di M4 Max. [Panduan NVIDIA](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md) membahas rig multi-GPU dan persyaratannya.
+Di [Mac Apple Silicon](/id/blog/mine-blocknet-on-mac/), seine menambang dengan CPU secara default, pengaturan tercepat yang terukur di M4 Max. [Panduan NVIDIA](/id/blog/mine-blocknet-nvidia-gpu/) membahas rig multi-GPU dan persyaratannya.
 
 ## Apa saja yang disetel seine secara otomatis?
 

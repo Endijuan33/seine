@@ -11,7 +11,7 @@ faq:
     a: 'W wersjach dla systemów Windows i Linux seine kopie na kartach graficznych NVIDIA, używając każdej wykrytej karty razem z procesorem. W systemie Windows środowisko uruchomieniowe CUDA jest dołączone, więc potrzebujesz tylko sterownika NVIDIA. W systemie Linux zainstaluj sterownik i biblioteki NVRTC. Przy pierwszym uruchomieniu seine dostraja każdą kartę i zapamiętuje wynik.'
   - q: 'Dlaczego przepustowość pamięci ma znaczenie przy kopaniu Blocknet?'
     a: 'Każdy hash Blocknet zapisuje pełny blok pamięci 2 GiB i odczytuje dane z całego tego obszaru, znacznie więcej, niż mieści jakakolwiek pamięć podręczna procesora. Hashrate zależy więc od tego, jak szybko system pamięci przesyła dane. Najszybciej kopią komputery z większą przepustowością pamięci i wystarczającą ilością RAM na wiele wątków.'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Proof of work Blocknet to Argon2id z blokiem pamięci 2 GiB na każdy hash. To s
 25 października 2026 r. EPYC 9355P z 32 rdzeniami i 64 wątkami oraz 192 GiB pamięci w dwunastu kanałach DDR5-4800 osiągnął **68,256 H/s**, po zaokrągleniu **68,3 H/s**. Ta stała konfiguracja ręczna korzystała z 64 wątków kopania, kernela streaming, stron huge pages o rozmiarze 1 GiB i limitu mocy pakietu procesora 280 W. Wynik to łączna liczba ukończonych hashy podzielona przez całkowity czas czterech nowych uruchomień po 120 sekund, z uwzględnieniem rozruchu i zamykania.
 
 [Eksperyment z rozmiarem stron](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) dokumentuje dokładną rewizję kodu źródłowego, SHA-256 pliku wykonywalnego, kontrole alokacji stron i metodę pomiaru. [Rekordy w formacie do odczytu maszynowego](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) zachowują konfigurację oraz surowe liczniki i mianowniki. Jest to cały procesor w jednym gnieździe skonfigurowany ręcznie; poniższe pomiary chmurowe i Mac opisują własne maszyny i ustawienia.
+
+## Jak szybka była RTX 5090 w naszym teście?
+
+Testy przeprowadziliśmy 25 października 2026 roku z użyciem Windows 11, NVIDIA GeForce RTX 5090, AMD Ryzen 9 9950X3D, 125,4 GiB dostępnej pamięci RAM, seine v0.2.26 i sterownika NVIDIA `610.88`. Wykonaliśmy trzy naprzemienne pary testów z `--bench-kind backend`. Każde uruchomienie obejmowało jedną rozgrzewkę trwającą 20 sekund i trzy mierzone rundy po 20 sekund, z 20 sekundami przerwy między uruchomieniami. Ustawienia kernela, limitu rejestrów, lanes i wątków były automatyczne.
+
+| Tryb | Średnie H/s |
+|---|---|
+| Tylko RTX 5090 | 7,3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12,9 |
+
+Tabela przedstawia średnią z trzech uruchomień każdego trybu na tym komputerze, z pozostawionymi otwartymi aplikacjami. Oba tryby używały GPU `0` i tej samej pamięci podręcznej automatycznego dostrajania NVIDIA. Są to wyniki lokalnego benchmarku; zaakceptowane udziały potwierdzają zaliczenie pracy przez pulę. [Notatki z pomiarów](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md) zawierają ustawienia i wyniki poszczególnych testów.
 
 ## Porównanie pomiarów serwerów chmurowych i Maca
 
@@ -86,7 +97,7 @@ Tak. W systemach Windows i Linux seine kopie jednocześnie na każdym rdzeniu CP
 - **Linux:** zainstaluj sterownik NVIDIA i biblioteki NVRTC z repozytoriów swojej dystrybucji albo od NVIDIA.
 - **Pierwsze uruchomienie:** seine dostraja ustawienia swoich jąder dla każdej karty i zapamiętuje wynik, więc kolejne starty trwają sekundy.
 
-Na [Macach z Apple Silicon](/pl/blog/mine-blocknet-on-mac/) seine domyślnie kopie na CPU, co w pomiarach na M4 Max jest najszybszą konfiguracją. [Poradnik NVIDIA](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md) opisuje koparki z wieloma GPU i wymagania.
+Na [Macach z Apple Silicon](/pl/blog/mine-blocknet-on-mac/) seine domyślnie kopie na CPU, co w pomiarach na M4 Max jest najszybszą konfiguracją. [Poradnik NVIDIA](/pl/blog/mine-blocknet-nvidia-gpu/) opisuje koparki z wieloma GPU i wymagania.
 
 ## Co seine dostraja automatycznie?
 

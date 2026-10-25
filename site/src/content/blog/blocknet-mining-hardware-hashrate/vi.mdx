@@ -11,7 +11,7 @@ faq:
     a: 'seine đào trên card đồ họa NVIDIA với bản tải cho Windows và Linux, dùng mọi card nó phát hiện được cùng với bộ xử lý. Trên Windows, CUDA runtime đã được kèm sẵn, nên bạn chỉ cần driver NVIDIA. Trên Linux, hãy cài driver và các thư viện NVRTC. Lần chạy đầu tiên tinh chỉnh từng card và ghi nhớ kết quả.'
   - q: 'Vì sao băng thông bộ nhớ quan trọng khi đào Blocknet?'
     a: 'Mỗi lần băm Blocknet ghi trọn một khối bộ nhớ 2 GiB và đọc lại dữ liệu từ khắp khối đó, lớn hơn rất nhiều so với dung lượng cache của bất kỳ bộ xử lý nào. Vì thế hashrate phụ thuộc vào tốc độ hệ thống bộ nhớ chuyển dữ liệu. Những máy có băng thông bộ nhớ cao hơn và đủ RAM cho nhiều luồng sẽ đào nhanh nhất.'
-sourceHash: 140f540005ba
+sourceHash: b10796aacb66
 translation: draft
 ---
 
@@ -30,6 +30,17 @@ Proof of Work của Blocknet là Argon2id với một khối bộ nhớ 2 GiB ch
 Ngày 25 tháng 10 năm 2026, EPYC 9355P có 32 lõi/64 luồng phần cứng với 192 GiB trên mười hai kênh nhớ DDR5-4800 đạt **68,256 H/s**, làm tròn thành **68,3 H/s**. Cấu hình thủ công cố định này dùng 64 luồng đào, kernel streaming, huge pages 1 GiB và giới hạn công suất package 280 W. Tốc độ được tính bằng tổng số hash hoàn thành chia cho tổng thời gian của bốn lần chạy mới, mỗi lần 120 giây, bao gồm cả khởi động và tắt.
 
 [Thử nghiệm kích thước trang](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) ghi lại chính xác phiên bản mã nguồn, SHA-256 của tệp thực thi, các kiểm tra cấp phát trang và phương pháp đo. [Các bản ghi máy đọc được](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) lưu cấu hình cùng tử số và mẫu số thô. Đây là toàn bộ một socket được cấu hình thủ công; các phép đo cloud và Mac bên dưới mô tả máy và thiết lập riêng của chúng.
+
+## RTX 5090 nhanh đến mức nào trong thử nghiệm của chúng tôi?
+
+Chúng tôi thử nghiệm vào ngày 25 tháng 10 năm 2026 với Windows 11, NVIDIA GeForce RTX 5090, AMD Ryzen 9 9950X3D, 125,4 GiB RAM khả dụng, seine v0.2.26 và trình điều khiển NVIDIA `610.88`. Chúng tôi chạy ba cặp thử nghiệm xen kẽ với `--bench-kind backend`. Mỗi lần chạy có một vòng làm nóng 20 giây và ba vòng đo 20 giây, nghỉ 20 giây giữa các lần chạy. Thiết lập kernel, giới hạn thanh ghi, lane và luồng đều tự động.
+
+| Chế độ | H/s trung bình |
+|---|---|
+| Chỉ RTX 5090 | 7,3 |
+| RTX 5090 + Ryzen 9 9950X3D | 12,9 |
+
+Bảng lấy trung bình ba lần chạy mỗi chế độ trên máy tính này, với các ứng dụng đang có vẫn mở. Cả hai chế độ dùng GPU `0` và cùng bộ nhớ đệm tự động tinh chỉnh NVIDIA. Đây là tốc độ băm đo cục bộ; share được chấp nhận xác nhận pool đã ghi nhận công việc. [Ghi chú đo lường](https://github.com/zpalmtree/seine/blob/master/site/editorial/batches/2026-10-nvidia-guide/research.md) ghi lại thiết lập và kết quả từng lần chạy.
 
 ## So sánh kết quả đo máy chủ cloud và Mac
 
@@ -86,7 +97,7 @@ Có. Trên Windows và Linux, seine đào trên mọi nhân CPU và mọi card �
 - **Linux:** cài driver NVIDIA và các thư viện NVRTC từ bản phân phối của bạn hoặc từ NVIDIA.
 - **Lần chạy đầu tiên:** seine tinh chỉnh thiết lập kernel cho từng card và lưu kết quả vào bộ nhớ đệm, nên những lần khởi động sau chỉ mất vài giây.
 
-Trên [máy Mac Apple Silicon](/vi/blog/mine-blocknet-on-mac/), seine đào bằng CPU theo mặc định, cấu hình nhanh nhất đo được trên M4 Max. [Hướng dẫn NVIDIA](https://github.com/zpalmtree/seine/blob/master/docs/guides/nvidia.md) trình bày về dàn máy đào nhiều GPU và các yêu cầu.
+Trên [máy Mac Apple Silicon](/vi/blog/mine-blocknet-on-mac/), seine đào bằng CPU theo mặc định, cấu hình nhanh nhất đo được trên M4 Max. [Hướng dẫn NVIDIA](/vi/blog/mine-blocknet-nvidia-gpu/) trình bày về dàn máy đào nhiều GPU và các yêu cầu.
 
 ## seine tự động tinh chỉnh những gì?
 
