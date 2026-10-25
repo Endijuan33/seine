@@ -21,6 +21,10 @@ kernel earlier confirmed it about 90 seconds sooner and increased completed
 work by 0.68% over four paired 20-minute cold starts, with automatic worker and
 kernel selection on 2 MiB huge pages. Both confirmation cycles remain required.
 
+**AMD GPU builds no longer require NVIDIA support.** Building from source with
+`--no-default-features --features amd` now includes the shared hash-finalization
+helpers required by the HIP backend. Native Radeon validation remains pending.
+
 ## v0.2.25
 
 **Fewer lost shares when the pool is busy.** Shares the pool turns away with
