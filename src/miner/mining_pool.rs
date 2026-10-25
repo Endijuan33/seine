@@ -342,6 +342,7 @@ fn rebind_active_pool_job(
     job: PoolJob,
     target: [u8; 32],
     network_target: Option<[u8; 32]>,
+    log_changes: bool,
 ) {
     let now = Instant::now();
     let previous_difficulty = active_job.share_difficulty;
@@ -354,7 +355,7 @@ fn rebind_active_pool_job(
     active_job.register_share_binding(job.job_id.clone(), target);
     active_job.job = job.clone();
 
-    if !mode.is_user() {
+    if !mode.is_user() || !log_changes {
         return;
     }
     let difficulty_label = job
@@ -378,6 +379,50 @@ fn rebind_active_pool_job(
             job.height
         ),
     );
+}
+
+/// Decoded header, share target and network target of a pool job.
+type PoolJobBinding = (Arc<[u8]>, [u8; 32], Option<[u8; 32]>);
+
+fn parse_pool_job_binding(job: &PoolJob) -> std::result::Result<PoolJobBinding, String> {
+    let header_base = decode_hex(&job.header_base, "pool.header_base")
+        .map(Arc::<[u8]>::from)
+        .map_err(|err| format!("invalid job header_base: {err:#}"))?;
+    let target = parse_target(&job.target).map_err(|err| format!("invalid job target: {err:#}"))?;
+    let network_target = match job.network_target.as_deref() {
+        Some(value) => Some(
+            parse_target(value).map_err(|err| format!("invalid job network_target: {err:#}"))?,
+        ),
+        None => None,
+    };
+    Ok((header_base, target, network_target))
+}
+
+/// Keeps a parked (inactive-session) job attached to `job` when the pool only
+/// re-issued the same template and nonce range under a new job id, as it does
+/// for a same-template difficulty rebind. Returns false when `job` is real new
+/// work and the parked job must be discarded.
+///
+/// Without this, a rebind that arrives while the dev-fee session is active
+/// would discard the parked user job, and resuming would start a fresh job at
+/// `nonce_start` on the same header, resubmitting every share already found
+/// there (the pool rejects those as duplicates).
+fn rebind_parked_pool_job(
+    mode: PoolConnectionMode,
+    parked: &mut ActivePoolJob,
+    job: &PoolJob,
+) -> bool {
+    if parked.job.job_id == job.job_id {
+        return true;
+    }
+    let Ok((header_base, target, network_target)) = parse_pool_job_binding(job) else {
+        return false;
+    };
+    if !same_pool_template_identity(parked, job, header_base.as_ref(), network_target.as_ref()) {
+        return false;
+    }
+    rebind_active_pool_job(mode, parked, job.clone(), target, network_target, false);
+    true
 }
 
 enum PoolShareSubmitOutcome {
@@ -847,11 +892,10 @@ pub(super) fn run_pool_mining_loop(
                         )
                     };
 
-                    if let Some(resume) = resumed_job.take() {
-                        if cached_job
-                            .as_ref()
-                            .is_some_and(|cached| cached.job_id == resume.job.job_id)
-                        {
+                    if let Some(mut resume) = resumed_job.take() {
+                        if cached_job.as_ref().is_some_and(|cached| {
+                            rebind_parked_pool_job(active_mode, &mut resume, cached)
+                        }) {
                             active_job = Some(resume);
                             if let Some(job) = active_job.as_mut() {
                                 let assign_started = Instant::now();
@@ -1864,8 +1908,8 @@ fn handle_inactive_pool_event(
         }
         PoolEvent::Job(job) => {
             if inactive_job
-                .as_ref()
-                .is_some_and(|active| active.job.job_id != job.job_id)
+                .as_mut()
+                .is_some_and(|parked| !rebind_parked_pool_job(mode, parked, &job))
             {
                 *inactive_job = None;
             }
@@ -1950,41 +1994,20 @@ fn assign_pool_job(
         return Ok(());
     }
 
-    let header_base = match decode_hex(&job.header_base, "pool.header_base") {
-        Ok(value) => Arc::<[u8]>::from(value),
-        Err(err) => {
+    let (header_base, target, network_target) = match parse_pool_job_binding(&job) {
+        Ok(parsed) => parsed,
+        Err(message) => {
             if mode.is_user() {
-                warn("JOB", format!("invalid job header_base: {err:#}"));
+                warn("JOB", message);
             }
             return Ok(());
         }
-    };
-    let target = match parse_target(&job.target) {
-        Ok(target) => target,
-        Err(err) => {
-            if mode.is_user() {
-                warn("JOB", format!("invalid job target: {err:#}"));
-            }
-            return Ok(());
-        }
-    };
-    let network_target = match job.network_target.as_deref() {
-        Some(value) => match parse_target(value) {
-            Ok(target) => Some(target),
-            Err(err) => {
-                if mode.is_user() {
-                    warn("JOB", format!("invalid job network_target: {err:#}"));
-                }
-                return Ok(());
-            }
-        },
-        None => None,
     };
 
     if let Some(current) = active_job.as_mut() {
         if same_pool_template_identity(current, &job, header_base.as_ref(), network_target.as_ref())
         {
-            rebind_active_pool_job(mode, current, job, target, network_target);
+            rebind_active_pool_job(mode, current, job, target, network_target, true);
             set_tui_state_label(tui, "working");
             render_tui_now(tui);
             return Ok(());
@@ -2883,8 +2906,9 @@ mod tests {
 
     use super::{
         advance_pool_nonce_cursor, compact_pool_address_for_log,
-        fetch_local_daemon_wallet_snapshot, note_current_job_stale_submit_rejection,
-        parse_pool_stale_for, pool_api_base_urls_from_pool_url,
+        fetch_local_daemon_wallet_snapshot, handle_inactive_pool_event,
+        note_current_job_stale_submit_rejection, parse_pool_stale_for,
+        pool_api_base_urls_from_pool_url, rebind_parked_pool_job,
         service_pool_submit_backlog_with_submitter, should_apply_submit_ack_difficulty_immediately,
         should_resume_pool_assignment, submit_pool_solution_with_submitter,
         take_submit_timing_for_ack, ActivePoolJob, PendingPoolSubmit, PoolConnectionMode, PoolJob,
@@ -2933,6 +2957,144 @@ mod tests {
             [0xFF; 32],
             Some([0xFF; 32]),
         )
+    }
+
+    fn rebind_of(job: &PoolJob, job_id: &str, difficulty: u64) -> PoolJob {
+        let mut rebind = job.clone();
+        rebind.job_id = job_id.to_string();
+        rebind.difficulty = Some(difficulty);
+        rebind.target = hex::encode(crate::types::difficulty_to_target(difficulty));
+        rebind
+    }
+
+    #[test]
+    fn parked_job_keeps_nonce_progress_across_same_template_rebind() {
+        let mut parked = test_active_job(7);
+        parked.next_nonce = 500;
+        parked.submitted_nonces.insert(42);
+        let rebind = rebind_of(&parked.job, "job-2", 2);
+
+        assert!(rebind_parked_pool_job(
+            PoolConnectionMode::User,
+            &mut parked,
+            &rebind
+        ));
+        assert_eq!(parked.job.job_id, "job-2");
+        assert_eq!(
+            parked.next_nonce, 500,
+            "rebind must not rewind the nonce cursor"
+        );
+        assert!(parked.submitted_nonces.contains(&42));
+        assert!(parked.has_share_binding_job_id("job-1"));
+        assert!(parked.has_share_binding_job_id("job-2"));
+        assert_eq!(parked.share_difficulty, Some(2));
+        assert_eq!(parked.target, crate::types::difficulty_to_target(2));
+
+        // After resuming, a rescanned nonce is still deduplicated and new
+        // shares go out under the rebound job id.
+        let new_binding = parked.dynamic_share_target.snapshot().share_binding_id;
+        let mut active = Some(parked);
+        let mut lookup = RecentPendingSubmitLookup::default();
+        let stats = Stats::new();
+        let mut submitted = Vec::new();
+        for nonce in [42u64, 600] {
+            let mut solution = test_solution(7, nonce);
+            solution.share_binding_id = new_binding;
+            let outcome = submit_pool_solution_with_submitter(
+                PoolConnectionMode::User,
+                &mut active,
+                &solution,
+                "cpu#1",
+                &stats,
+                |job_id, nonce, _, _| {
+                    submitted.push((job_id.to_string(), nonce));
+                    Ok(())
+                },
+                &mut lookup,
+            );
+            if nonce == 42 {
+                assert!(matches!(outcome, PoolShareSubmitOutcome::Duplicate));
+            } else {
+                assert!(matches!(outcome, PoolShareSubmitOutcome::Submitted));
+            }
+        }
+        assert_eq!(submitted, vec![("job-2".to_string(), 600)]);
+    }
+
+    #[test]
+    fn parked_job_is_replaced_by_genuinely_new_work() {
+        let parked = test_active_job(1);
+        let mut new_header = rebind_of(&parked.job, "job-2", 1);
+        new_header.header_base = "01".to_string();
+        let mut new_range = rebind_of(&parked.job, "job-3", 1);
+        new_range.nonce_start = 1_001;
+        new_range.nonce_end = 2_000;
+        let mut new_height = rebind_of(&parked.job, "job-4", 1);
+        new_height.height = 2;
+        let mut new_template = rebind_of(&parked.job, "job-5", 1);
+        new_template.template_id = Some("tmpl-2".to_string());
+
+        for job in [new_header, new_range, new_height, new_template] {
+            let mut parked = test_active_job(1);
+            assert!(
+                !rebind_parked_pool_job(PoolConnectionMode::User, &mut parked, &job),
+                "{} should not rebind",
+                job.job_id
+            );
+            assert_eq!(parked.job.job_id, "job-1");
+        }
+    }
+
+    #[test]
+    fn inactive_session_rebind_keeps_parked_job_for_resume() {
+        let shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let client = crate::pool::PoolClient::connect(
+            "127.0.0.1:1",
+            "BTestAddress".to_string(),
+            "rig01".to_string(),
+            Arc::clone(&shutdown),
+        )
+        .expect("pool client should start");
+        let stats = Stats::new();
+        let mut lookup = RecentPendingSubmitLookup::default();
+        let mut latest_job = None;
+        let mut connected = true;
+        let mut parked = Some(test_active_job(3));
+        parked.as_mut().expect("parked job").next_nonce = 321;
+        let rebind = rebind_of(&parked.as_ref().expect("parked job").job, "job-2", 4);
+
+        handle_inactive_pool_event(
+            crate::pool::PoolEvent::Job(rebind),
+            PoolConnectionMode::User,
+            &client,
+            &mut latest_job,
+            &mut connected,
+            &mut parked,
+            &mut lookup,
+            &stats,
+        );
+        let kept = parked.as_ref().expect("rebind must keep the parked job");
+        assert_eq!(kept.job.job_id, "job-2");
+        assert_eq!(kept.next_nonce, 321);
+        assert_eq!(
+            latest_job.as_ref().map(|job| job.job_id.as_str()),
+            Some("job-2")
+        );
+
+        let mut new_block = rebind_of(&kept.job, "job-3", 4);
+        new_block.height = 2;
+        handle_inactive_pool_event(
+            crate::pool::PoolEvent::Job(new_block),
+            PoolConnectionMode::User,
+            &client,
+            &mut latest_job,
+            &mut connected,
+            &mut parked,
+            &mut lookup,
+            &stats,
+        );
+        assert!(parked.is_none(), "new block must discard the parked job");
+        shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn test_solution(epoch: u64, nonce: u64) -> MiningSolution {
