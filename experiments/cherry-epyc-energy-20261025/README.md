@@ -53,3 +53,24 @@ steady-state kernel benchmark H/s or substitute TDP for measured power.
 These observations can inform the next worker/power-policy investigation.
 They do not independently justify an automatic miner policy change: productive
 cold/cached selection and resource recovery need validation for that change.
+
+## Separate power-limit follow-up
+
+Prepared while the stock worker sweep was running, before taking any reduced-cap
+measurement. Host qualification found `amd_hsmp_hwmon` with a 280 W cap and
+300 W maximum. [AMD specifies 240–300 W cTDP for this CPU](https://www.amd.com/en/products/processors/server/epyc/9005-series/amd-epyc-9355p.html);
+the [kernel documents its writable HSMP power cap](https://kernel.org/doc/html/latest/arch/x86/amd_hsmp.html).
+
+If time permits after the stock sweep and any required count confirmation,
+`power.py` fixes the completed sweep's peak-throughput count and runs four fresh
+alternating pairs at 280 W versus 240 W. Each invocation uses 120 seconds of work
+and ten seconds of settling. It records and verifies the HSMP cap before and
+after every invocation, separately from the energy harness's RAPL constraints.
+Both arms use the same binary, streaming kernel, page mode, worker count and
+affinity. The original cap, hugepage pool and swap configuration are restored.
+
+Treat reduced-cap efficiency as a within-session result only if all four paired
+joules/hash differences improve, their descriptive 95% interval is below zero,
+and the throughput interval's lower bound retains at least 95% of the baseline.
+Otherwise report the result as neutral, rejected or inconclusive as appropriate.
+This phase does not extend the original rental deadline or change miner defaults.
