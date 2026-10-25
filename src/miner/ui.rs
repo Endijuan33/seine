@@ -138,6 +138,19 @@ pub(super) fn notify_dev_fee_mode(is_dev: bool) {
     });
 }
 
+/// Logs a newer-release notice and flags it in the live dashboard header.
+/// Returns false when no dashboard was live to receive it.
+pub(crate) fn announce_update(latest: &str, message: &str) -> bool {
+    let tui_state = lock(&TUI_STATE).clone();
+    if let Some(state) = &tui_state {
+        if let Ok(mut state) = state.lock() {
+            state.update_available = Some(latest.to_string());
+        }
+    }
+    info("UPDATE", message);
+    tui_state.is_some()
+}
+
 pub(super) fn set_tui_state(state: TuiState) {
     *lock(&TUI_STATE) = Some(state);
 }
