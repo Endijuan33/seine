@@ -3,7 +3,7 @@
   "best": [
     {
       "label": "AMD EPYC \u00b7 Zen 5",
-      "chip": "EPYC 9355P \u00b7 32C/64T \u00b7 1 GiB",
+      "chip": "EPYC 9355P",
       "threads": 64,
       "hps": 68.3,
       "source": "experiments/amd-page-size-20261025/benchmark-records.json",
@@ -31,7 +31,7 @@
     },
     {
       "label": "Intel Xeon",
-      "chip": "Sapphire Rapids 8488C",
+      "chip": "8488C",
       "threads": 32,
       "hps": 26.0
     }
