@@ -68,6 +68,15 @@ set so stale caches from a different path get re-tuned, not reused.
 
 ## Measuring
 
+- Before choosing hardware optimization targets or answering a telemetry status
+  request, run `python3 telemetry/agent_report.py` when production SSH access is
+  available. It checks service/storage health and returns aggregate inventory and
+  comparable performance cohorts without installation IDs or raw reports.
+- Handle the analysis for the user: summarize collection health, adoption and the
+  next evidence-backed experiment. Do not direct them to a dashboard or require
+  manual SQL. If data is sparse or the query fails, say so; do not infer a regression
+  from missing reports or treat live hashrates as benchmark proof. See
+  `telemetry/README.md#agent-analysis` for interpretation and operating limits.
 - Use the interleaved A/B harnesses, not single runs:
   `scripts/bench_cpu_ab.sh`, `scripts/bench_nvidia_ab.sh`,
   `scripts/benchctl.py` (paired runs with CIs). Leave tuning flags unset so

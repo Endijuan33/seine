@@ -149,6 +149,43 @@ The current host and maintenance commands are in
 
 ## Analysis
 
+### Agent analysis
+
+Agents can handle collection checks and optimization prioritization directly:
+
+```sh
+python3 telemetry/agent_report.py
+```
+
+This runs over the existing SSH connection to the production collector (override
+with `--host`), uses a read-only database transaction with bounded query time, and
+prints JSON containing health, adoption by version, CPU/GPU inventory, daily
+activity and qualifying performance cohorts. It exposes no installation IDs or
+raw reports. No browser, dashboard, local database client or additional Python
+packages are required. It exits nonzero on health, access or query failures while
+preserving any successful part of the briefing.
+
+The window is seven days, debug builds are excluded, and inventory uses each
+installation's latest report. Performance groups match version, CPU, OS and
+backend settings. Each installation contributes one median; identical devices
+in one report do not count as additional observations. A cohort must contain at
+least five installations, each with three valid reports spanning at least 24 hours.
+Changed/missed sampling windows and samples under a minute are excluded. These
+are conservative screening rules, not statistical confidence guarantees.
+
+Use the results to select hardware for controlled paired experiments. Consult the
+optimization logs before proposing work, and verify improvements on the target
+hardware before changing automatic defaults. Sparse data means "keep collecting,"
+not "hardware is slow." Low report counts alone are not proof of an outage.
+Send the user a concise interpretation and next action rather than raw SQL output.
+
+The command is invoked during agent work; it does not schedule unattended agent
+runs or notifications. Existing service health checks continue every five minutes.
+It neither modifies miner settings nor deploys changes. Backups remain local and
+external alerting remains unconfigured, as described in the production runbook.
+
+### Manual SQL
+
 Connect privately with `psql` or a preferred SQL client:
 
 ```sql

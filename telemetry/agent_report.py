@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Read-only, aggregate telemetry briefing for agents. No third-party packages."""
+import argparse
+from datetime import datetime
+import json
+from pathlib import Path
+import subprocess
+import sys
+from zoneinfo import ZoneInfo
+
+REMOTE_SQL = (
+    'docker compose -f /opt/seine/telemetry/deploy/compose.yaml '
+    '--env-file /opt/seine/telemetry/deploy/.env exec -T db '
+    'psql -X -U telemetry -d telemetry -qAt -v ON_ERROR_STOP=1'
+)
+
+
+def remote(host, command, data=None):
+    return subprocess.run(
+        ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '--', host, command],
+        input=data, text=True, capture_output=True, timeout=60,
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--host', default='root@2.31.36.180', help='Collector SSH destination')
+    args = parser.parse_args()
+    if args.host.startswith('-'):
+        parser.error('host must be an SSH destination, not an option')
+    briefing = {
+        'checked_at': datetime.now(ZoneInfo('America/New_York')).strftime('%Y-%m-%d %H:%M:%S %Z'),
+        'timezone': 'America/New_York',
+        'scope': 'Aggregates from release builds in the last seven days; installations are not people.',
+        'performance_screen': {
+            'minimum_installations': 5,
+            'minimum_reports_per_installation': 3,
+            'minimum_span_hours_per_installation': 24,
+            'interpretation': 'Screening thresholds, not statistical confidence or benchmark proof.',
+        },
+    }
+    failed = False
+    for key, command, data in (
+        ('health', '/opt/seine/telemetry/deploy/check.sh', None),
+        ('telemetry', REMOTE_SQL, Path(__file__).with_suffix('.sql').read_text()),
+    ):
+        try:
+            result = remote(args.host, command, data)
+            if result.returncode:
+                briefing[key] = {'status': 'error', 'detail': (result.stderr or result.stdout).strip()[:1000]}
+                failed = True
+            elif key == 'telemetry':
+                briefing[key] = json.loads(result.stdout)
+            else:
+                briefing[key] = {'status': 'ok', 'detail': result.stdout.strip()}
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+            briefing[key] = {'status': 'error', 'detail': str(error)[:1000]}
+            failed = True
+    data = briefing.get('telemetry', {})
+    if data.get('status') != 'error':
+        briefing['assessment'] = (
+            'No qualifying performance cohorts yet. Use inventory only; collect more observations before comparing rates.'
+            if not data['performance_candidates'] else
+            'Candidate cohorts are available. Prioritize common hardware, then verify any proposed change with controlled paired benchmarks.'
+        )
+    if failed:
+        briefing['assessment'] = 'Resolve the reported health/query failure before relying on this briefing.'
+    print(json.dumps(briefing, indent=2))
+    return int(failed)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
