@@ -2353,6 +2353,7 @@ dependencies = [
  "sha3",
  "sysinfo",
  "tokio",
+ "tower",
  "tower-http 0.5.2",
  "windows-sys 0.59.0",
 ]

@@ -128,7 +128,9 @@ For the raw CLI output, run:
 | `--service` | bool flag (default `false`) | Starts control API in idle mode (waits for `/v1/miner/start`). |
 | `--api-bind` | `host:port`, default `127.0.0.1:9977` | Control API bind address. |
 | `--api-allow-unsafe-bind` | bool flag (default `false`) | Allows non-loopback bind addresses. |
-| `--api-cors` | string, default `*` | CORS allow-origin value for control API responses. |
+| `--api-cors` | string, default empty (no CORS headers) | CORS allow-origin value for control API responses. |
+| `--api-token` | string, default generated | Fixed bearer token for the control API. When unset, Seine generates one per start. |
+| `--api-cookie` | path, default `<data-dir>/control-api.cookie` | Where the generated control API token is written. |
 
 ## Benchmark Mode
 

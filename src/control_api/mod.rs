@@ -8,10 +8,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_stream::stream;
-use axum::extract::State;
-use axum::http::StatusCode;
+use axum::extract::{Request, State};
+use axum::http::{header, HeaderMap, Method, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,22 @@ impl ApiError {
         Self {
             status: StatusCode::CONFLICT,
             code,
+            message: message.into(),
+        }
+    }
+
+    fn unauthorized(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthorized",
+            message: message.into(),
+        }
+    }
+
+    fn forbidden(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "forbidden",
             message: message.into(),
         }
     }
@@ -124,6 +141,7 @@ struct ApiConfigView {
     api_allow_unsafe_bind: bool,
     api_cors: String,
     api_key_required: bool,
+    api_cookie_path: Option<String>,
     mode: String,
     api_url: String,
     pool_url: Option<String>,
@@ -195,7 +213,11 @@ impl From<&Config> for ApiConfigView {
             api_bind: cfg.api_bind.clone(),
             api_allow_unsafe_bind: cfg.api_allow_unsafe_bind,
             api_cors: cfg.api_cors.clone(),
-            api_key_required: false,
+            api_key_required: true,
+            api_cookie_path: cfg
+                .api_token
+                .is_none()
+                .then(|| cfg.api_cookie_path.display().to_string()),
             mode: mining_mode_to_str(cfg.mode).to_string(),
             api_url: cfg.api_url.clone(),
             pool_url: cfg.pool_url.clone(),
@@ -1280,6 +1302,23 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         log_supervisor.ingest_log(event);
     })));
 
+    let api_token = match cfg.api_token.clone() {
+        Some(token) => token,
+        None => {
+            let token = generate_api_token()?;
+            write_api_cookie(&cfg.api_cookie_path, &token)?;
+            eprintln!(
+                "control API token written to {}",
+                cfg.api_cookie_path.display()
+            );
+            token
+        }
+    };
+    let guard = Arc::new(ApiGuard {
+        token: api_token,
+        require_loopback_host: is_loopback_bind_addr(&cfg.api_bind),
+    });
+
     if cfg.api_server_enabled && !cfg.service_mode {
         let _ = supervisor.start(StartRequest::default(), true);
     }
@@ -1302,9 +1341,12 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         .route("/v1/wallet/unlock", post(post_wallet_unlock))
         .route("/v1/events/stream", get(get_events_stream))
         .route("/metrics", get(get_metrics))
-        .with_state(app_state);
+        .with_state(app_state)
+        .layer(middleware::from_fn_with_state(guard, require_api_auth));
 
-    app = app.layer(build_cors_layer(&cfg.api_cors)?);
+    if let Some(cors) = build_cors_layer(&cfg.api_cors)? {
+        app = app.layer(cors);
+    }
 
     let bind_addr = parse_api_bind_addr(&cfg.api_bind)?;
     let listener = tokio::net::TcpListener::bind(bind_addr)
@@ -1318,6 +1360,9 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
 
     let result = server.await;
 
+    if cfg.api_token.is_none() {
+        let _ = std::fs::remove_file(&cfg.api_cookie_path);
+    }
     supervisor.initiate_global_shutdown();
     drop(thread_control_worker);
     let _ = supervisor.stop(StopRequest {
@@ -1335,21 +1380,128 @@ async fn wait_for_shutdown(shutdown: Arc<AtomicBool>) {
     }
 }
 
-fn build_cors_layer(cors_value: &str) -> Result<CorsLayer> {
+struct ApiGuard {
+    token: String,
+    require_loopback_host: bool,
+}
+
+/// Every route except `/v1/health` needs `Authorization: Bearer <token>`. On a loopback
+/// bind, requests must also name a loopback Host so DNS-rebinding pages are refused.
+async fn require_api_auth(
+    State(guard): State<Arc<ApiGuard>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if guard.require_loopback_host && !host_header_is_loopback(request.headers()) {
+        return ApiError::forbidden("control API only accepts loopback Host headers")
+            .into_response();
+    }
+    let public = request.method() == Method::GET && request.uri().path() == "/v1/health";
+    if !public && !bearer_token_matches(request.headers(), &guard.token) {
+        return ApiError::unauthorized(
+            "missing or invalid bearer token; read it from the control API cookie file",
+        )
+        .into_response();
+    }
+    next.run(request).await
+}
+
+fn bearer_token_matches(headers: &HeaderMap, expected: &str) -> bool {
+    let Some(provided) = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+    else {
+        return false;
+    };
+    let (provided, expected) = (provided.trim().as_bytes(), expected.as_bytes());
+    provided.len() == expected.len()
+        && provided
+            .iter()
+            .zip(expected)
+            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
+            == 0
+}
+
+fn host_header_is_loopback(headers: &HeaderMap) -> bool {
+    // Browsers always send Host; non-browser clients that omit it are not a rebinding risk.
+    let Some(host) = headers.get(header::HOST) else {
+        return true;
+    };
+    let Ok(host) = host.to_str() else {
+        return false;
+    };
+    let host = host.trim();
+    let name = if let Some(rest) = host.strip_prefix('[') {
+        rest.split(']').next().unwrap_or_default()
+    } else {
+        host.rsplit_once(':').map_or(host, |(name, _)| name)
+    };
+    name.eq_ignore_ascii_case("localhost")
+        || name
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn is_loopback_bind_addr(bind: &str) -> bool {
+    parse_api_bind_addr(bind).is_ok_and(|addr| addr.ip().is_loopback())
+}
+
+fn generate_api_token() -> Result<String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes)
+        .map_err(|err| anyhow!("failed to generate control API token: {err}"))?;
+    Ok(hex::encode(bytes))
+}
+
+fn write_api_cookie(path: &std::path::Path, token: &str) -> Result<()> {
+    use std::io::Write;
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let _ = std::fs::remove_file(path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .with_context(|| format!("failed to create control API cookie {}", path.display()))?;
+    file.write_all(token.as_bytes())
+        .with_context(|| format!("failed to write control API cookie {}", path.display()))?;
+    Ok(())
+}
+
+fn build_cors_layer(cors_value: &str) -> Result<Option<CorsLayer>> {
     let trimmed = cors_value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
     if trimmed == "*" {
-        return Ok(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any));
+        return Ok(Some(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        ));
     }
 
     let value = axum::http::HeaderValue::from_str(trimmed)
         .with_context(|| format!("invalid CORS origin '{trimmed}'"))?;
-    Ok(CorsLayer::new()
-        .allow_origin(value)
-        .allow_methods(Any)
-        .allow_headers(Any))
+    Ok(Some(
+        CorsLayer::new()
+            .allow_origin(value)
+            .allow_methods(Any)
+            .allow_headers(Any),
+    ))
 }
 
 fn parse_api_bind_addr(bind: &str) -> Result<SocketAddr> {
@@ -2259,6 +2411,142 @@ fn ui_mode_to_str(value: UiMode) -> &'static str {
 mod tests {
     use super::*;
     use anyhow::anyhow;
+
+    fn headers(pairs: &[(header::HeaderName, &str)]) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        for (name, value) in pairs {
+            map.insert(name.clone(), value.parse().unwrap());
+        }
+        map
+    }
+
+    #[test]
+    fn bearer_token_must_match_exactly() {
+        let ok = headers(&[(header::AUTHORIZATION, "Bearer secret-token")]);
+        assert!(bearer_token_matches(&ok, "secret-token"));
+        assert!(!bearer_token_matches(&ok, "secret-tokeN"));
+        assert!(!bearer_token_matches(&ok, "secret-token-longer"));
+        assert!(!bearer_token_matches(&headers(&[]), "secret-token"));
+        let basic = headers(&[(header::AUTHORIZATION, "Basic secret-token")]);
+        assert!(!bearer_token_matches(&basic, "secret-token"));
+    }
+
+    #[test]
+    fn host_header_check_rejects_rebinding_names() {
+        for host in [
+            "127.0.0.1:9977",
+            "localhost:9977",
+            "LOCALHOST",
+            "[::1]:9977",
+            "127.1.2.3",
+        ] {
+            assert!(
+                host_header_is_loopback(&headers(&[(header::HOST, host)])),
+                "{host}"
+            );
+        }
+        for host in [
+            "evil.example:9977",
+            "127.0.0.1.evil.example",
+            "10.0.0.5:9977",
+            "[::2]:9977",
+        ] {
+            assert!(
+                !host_header_is_loopback(&headers(&[(header::HOST, host)])),
+                "{host}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn router_requires_token_and_loopback_host() {
+        use tower::ServiceExt;
+
+        let guard = Arc::new(ApiGuard {
+            token: "t0ken".to_string(),
+            require_loopback_host: true,
+        });
+        let app = Router::new()
+            .route("/v1/health", get(|| async { "ok" }))
+            .route("/v1/miner/live-config", patch(|| async { "patched" }))
+            .layer(middleware::from_fn_with_state(guard, require_api_auth));
+        let send = |method: Method, path: &str, host: &str, auth: Option<&str>| {
+            let mut builder = axum::http::Request::builder()
+                .method(method)
+                .uri(path)
+                .header(header::HOST, host);
+            if let Some(auth) = auth {
+                builder = builder.header(header::AUTHORIZATION, auth);
+            }
+            app.clone()
+                .oneshot(builder.body(axum::body::Body::empty()).unwrap())
+        };
+
+        let status = |res: Result<Response, std::convert::Infallible>| res.unwrap().status();
+        assert_eq!(
+            status(send(Method::GET, "/v1/health", "127.0.0.1:9977", None).await),
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(
+                send(
+                    Method::PATCH,
+                    "/v1/miner/live-config",
+                    "127.0.0.1:9977",
+                    None
+                )
+                .await
+            ),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            status(
+                send(
+                    Method::PATCH,
+                    "/v1/miner/live-config",
+                    "127.0.0.1:9977",
+                    Some("Bearer nope")
+                )
+                .await
+            ),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            status(
+                send(
+                    Method::PATCH,
+                    "/v1/miner/live-config",
+                    "127.0.0.1:9977",
+                    Some("Bearer t0ken")
+                )
+                .await
+            ),
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(
+                send(
+                    Method::PATCH,
+                    "/v1/miner/live-config",
+                    "evil.example:9977",
+                    Some("Bearer t0ken")
+                )
+                .await
+            ),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            status(send(Method::GET, "/v1/health", "evil.example:9977", None).await),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[test]
+    fn cors_is_off_unless_configured() {
+        assert!(build_cors_layer("").unwrap().is_none());
+        assert!(build_cors_layer("  ").unwrap().is_none());
+        assert!(build_cors_layer("http://localhost:3000").unwrap().is_some());
+    }
 
     #[test]
     fn api_thread_override_disables_adaptation_unless_explicitly_requested() {

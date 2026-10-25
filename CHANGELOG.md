@@ -6,6 +6,18 @@ appends the auto-generated compare link). Write for miners deciding whether to
 upgrade: lead with what they gain, keep it brief, skip internal refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
+## Unreleased
+
+**The control API now requires a token.** If you run Seine with `--service`
+or `--api-server`, every endpoint except `/v1/health` needs
+`Authorization: Bearer <token>`. Seine writes a fresh token to
+`<data-dir>/control-api.cookie` each start, or you can set one with
+`--api-token`. CORS is now off by default (`--api-cors <origin>` re-enables it
+for a browser frontend), and loopback binds reject non-loopback `Host`
+headers. This stops websites you visit from changing your miner's payout
+address or settings. Upgrade if you use the control API; plain CLI and TUI
+mining are unaffected.
+
 ## v0.2.22
 
 **Faster CPU mining on validated AMD EPYC Turin processors.** Automatic tuning

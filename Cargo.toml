@@ -56,6 +56,7 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Securit
 
 [dev-dependencies]
 httpmock = "0.7"
+tower = { version = "0.5", features = ["util"] }
 
 [profile.release]
 codegen-units = 1

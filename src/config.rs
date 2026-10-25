@@ -119,6 +119,7 @@ const DEFAULT_CPU_HASH_FLUSH_MS: u64 = 50;
 const DEFAULT_CPU_EVENT_DISPATCH_CAPACITY: usize = 256;
 const DEFAULT_CPU_AUTOTUNE_SECS: u64 = 6;
 const DEFAULT_CPU_AUTOTUNE_CONFIG_FILE: &str = "seine.cpu-autotune.json";
+const DEFAULT_CONTROL_API_COOKIE_FILE: &str = "control-api.cookie";
 #[cfg(target_os = "macos")]
 const DEFAULT_CPU_AFFINITY: CpuAffinityMode = CpuAffinityMode::PcoreOnly;
 #[cfg(not(target_os = "macos"))]
@@ -666,9 +667,19 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     api_allow_unsafe_bind: bool,
 
-    /// CORS allow-origin value for control API responses.
-    #[arg(long, default_value = "*")]
+    /// CORS allow-origin value for control API responses. Empty (default) sends no CORS
+    /// headers, so web pages on other origins cannot call the API from a browser.
+    #[arg(long, default_value = "")]
     api_cors: String,
+
+    /// Bearer token required by the control API. When omitted, Seine generates a random
+    /// token at startup and writes it to --api-cookie.
+    #[arg(long)]
+    api_token: Option<String>,
+
+    /// File the generated control API token is written to (default: <data-dir>/control-api.cookie).
+    #[arg(long)]
+    api_cookie: Option<PathBuf>,
 
     /// Run local performance benchmark instead of mining over API.
     #[arg(long, default_value_t = false)]
@@ -797,6 +808,8 @@ pub struct Config {
     pub api_bind: String,
     pub api_allow_unsafe_bind: bool,
     pub api_cors: String,
+    pub api_token: Option<String>,
+    pub api_cookie_path: PathBuf,
     pub allow_wallet_prompt: bool,
     pub bench: bool,
     pub bench_kind: BenchKind,
@@ -1186,6 +1199,16 @@ impl Config {
             );
         }
 
+        let api_token = match cli.api_token.as_deref().map(str::trim) {
+            Some("") => bail!("--api-token is empty"),
+            Some(token) => Some(token.to_string()),
+            None => None,
+        };
+        let api_cookie_path = cli
+            .api_cookie
+            .clone()
+            .unwrap_or_else(|| cli.data_dir.join(DEFAULT_CONTROL_API_COOKIE_FILE));
+
         let (token, token_cookie_path) = if cli.bench {
             (None, None)
         } else {
@@ -1308,6 +1331,8 @@ impl Config {
             api_bind: cli.api_bind,
             api_allow_unsafe_bind: cli.api_allow_unsafe_bind,
             api_cors: cli.api_cors,
+            api_token,
+            api_cookie_path,
             allow_wallet_prompt: true,
             bench: cli.bench,
             bench_kind: cli.bench_kind,
@@ -3391,7 +3416,9 @@ mod tests {
             service: false,
             api_bind: "127.0.0.1:9977".to_string(),
             api_allow_unsafe_bind: false,
-            api_cors: "*".to_string(),
+            api_cors: String::new(),
+            api_token: None,
+            api_cookie: None,
             bench: false,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
