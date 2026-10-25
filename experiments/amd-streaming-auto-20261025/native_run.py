@@ -14,12 +14,14 @@ import math
 import os
 from pathlib import Path
 import signal
-import socketserver
+import shutil
 import statistics
 import subprocess
 import sys
 import threading
 import time
+
+from fixture import Server, address
 
 GI = 1024**3
 K = C.WinDLL('kernel32', use_last_error=True)
@@ -57,44 +59,23 @@ def save(path, obj):
     path.write_text(json.dumps(obj, indent=2) + '\n', encoding='utf-8')
 
 
-def address():
-    payload = bytes(64)
-    digest = hashlib.sha3_256(b'blocknet_stealth_address_checksum'+b'blocknet_mainnet'+payload).digest()[:4]
-    value = int.from_bytes(digest,'big'); encoded = ''
-    while value:
-        value, digit = divmod(value,58)
-        encoded = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[digit]+encoded
-    return '1'*64+encoded
-
-
-class Fixture(socketserver.StreamRequestHandler):
-    def handle(self):
-        try:
-            for raw in self.rfile:
-                req = json.loads(raw)
-                self.server.events.append({'time': time.time(), 'method': req.get('method')})
-                if req.get('method') == 'login':
-                    response = {'id':req['id'],'status':'ok','result':{'protocol_version':2,'capabilities':['login_negotiation','submit_claimed_hash']}}
-                    work = {'method':'job','params':{'job_id':'native-streaming-validation','header_base':'00'*92,'target':'00'*32,'network_target':'00'*32,'height':1,'nonce_start':0,'nonce_end':2**63-1}}
-                    self.wfile.write((json.dumps(response)+'\n'+json.dumps(work)+'\n').encode()); self.wfile.flush()
-                elif req.get('method') == 'submit':
-                    self.server.errors.append('Impossible-target solution')
-        except (ConnectionError, OSError):
-            pass
-
-class Server(socketserver.ThreadingTCPServer):
-    daemon_threads = True
-    allow_reuse_address = True
-
-
 class Campaign:
     def __init__(self, root, jobid):
         self.root=root; self.out=root/'results'; self.out.mkdir(exist_ok=False)
         self.jobid=jobid; self.started=time.monotonic(); self.children=[]
+        self.resume=json.loads((root/'resume.json').read_text()) if (root/'resume.json').exists() else None
         self.stop_before=datetime.datetime.fromisoformat(json.loads((root/'deadline.json').read_text())['stop_before_utc']).timestamp()
-        assert self.stop_before-time.time()>=2100, 'Insufficient clean time before research collection deadline'
+        assert self.stop_before-time.time()>=(1200 if self.resume else 2100), 'Insufficient clean time before research collection deadline'
         self.exe=root/'target/release/seine.exe'
         self.sha=hashlib.sha256(self.exe.read_bytes()).hexdigest()
+        if self.resume:
+            assert self.sha==self.resume['binary_sha256']
+            source=root/self.resume['source_directory']
+            for name,digest in self.resume['accepted_files'].items():
+                assert Path(name).name==name and hashlib.sha256((source/name).read_bytes()).hexdigest()==digest
+                shutil.copy2(source/name,self.out/name)
+            shutil.copy2(source/'protocol.json',self.out/'benchmark-protocol.json')
+            save(self.out/'resume.json',self.resume)
         self.job=K.CreateJobObjectW(None,None); assert self.job
         limits=Extended(); limits.basic.flags=0x2000|0x200  # kill on close + aggregate memory ceiling
         limits.job_memory=40*GI
@@ -102,7 +83,7 @@ class Campaign:
         self.check()
         assert memory()['available']>=42*GI, memory()
         save(self.out/'protocol.json',{'binary_sha256':self.sha,'job_id':jobid,'memory_before':memory(),
-             'job_memory_ceiling_bytes':40*GI,'deadline_seconds':2700,'stop_before_epoch':self.stop_before,'source_commit':json.loads((root/'source.json').read_text())['commit'],
+             'benchmark_job_id':self.resume['job_id'] if self.resume else jobid,'lifecycle_only_resume':bool(self.resume),'job_memory_ceiling_bytes':40*GI,'deadline_seconds':2700,'stop_before_epoch':self.stop_before,'source_commit':json.loads((root/'source.json').read_text())['commit'],
              'confirmation':'Four AB/BA pairs,8 spread vs16 physical,streaming,20s warmup+2x20s measured',
              'ccd_screen':'Two reversed passes,8 spread vs8 cached CCD vs8 frequency CCD,streaming,10s warmup+20s measured',
              'productive':'Cold default-auto with min8/max16 bound, cached restart, cold CPU-load episode, high-reserve restart; each below600s donation grace',
@@ -170,7 +151,7 @@ class Campaign:
     def productive(self,label,seconds,cache,load=False,reserve=None):
         assert seconds<=540
         self.check();episode=self.out/label;episode.mkdir(); cache.mkdir(exist_ok=True)
-        server=Server(('127.0.0.1',0),Fixture);server.events=[];server.errors=[]
+        server=Server(('127.0.0.1',0))
         threading.Thread(target=server.serve_forever,daemon=True).start()
         args=[str(self.exe),'--mode','pool','--pool-url',f'127.0.0.1:{server.server_address[1]}','--address',address(),'--pool-worker','native-validation','--backend','cpu','--cpu-page-mode','regular','--cpu-affinity','auto','--cpu-autotune-min-threads','8','--cpu-autotune-max-threads','16','--cpu-autotune-config',str(cache/'tuning.json'),'--data-dir',str(cache/'config'),'--ui','plain','--stats-secs','5']
         if reserve is not None:args+=['--cpu-memory-reserve-percent',str(reserve)]
@@ -180,6 +161,8 @@ class Campaign:
             p=self.start(args,label,0x55555555)
             while time.monotonic()-start<seconds:
                 self.check();assert p.poll() is None,(label,p.returncode)
+                assert not server.errors,server.errors
+                assert sum(e['method']=='login' for e in server.events)<=1,'Unexpected fixture reconnect'
                 age=time.monotonic()-start
                 if load and 45<=age<125 and not burners:
                     for n in [0,2]: burners.append(self.start([sys.executable,__file__,'--burn','100'],label+'-load'+str(n),1<<n))
@@ -201,30 +184,34 @@ class Campaign:
         return after,text
 
     def run(self):
-        for name in ['verify_cpu_kernels','verify_streaming_dispatch']:
-            self.check()
-            exe=self.root/'target/release/examples'/(name+'.exe')
-            started=time.monotonic();p=self.start([str(exe)],name,1)
-            try:
-                while p.poll() is None:
-                    self.check();assert time.monotonic()-started<240;time.sleep(3)
-                assert p.returncode==0,(name,p.returncode)
-                save(self.out/(name+'.identity.json'),{'sha256':hashlib.sha256(exe.read_bytes()).hexdigest(),'exit_code':p.returncode,'elapsed':time.monotonic()-started})
-            finally:self.stop(p)
-            print(name,'PASS',flush=True)
-        spread=[0,2,4,6,16,18,20,22];physical=list(range(0,32,2))
-        pairs=[]
-        for n in range(1,5):
-            pair={}
-            order=[('eight',spread),('sixteen',physical)]
-            if n%2==0:order.reverse()
-            for label,cpus in order:pair[label]=self.bench(f'count-p{n}-{label}',cpus)
-            pairs.append(pair);save(self.out/'count-pairs.json',pairs)
-        cases=[('spread',spread),('cache',list(range(0,16,2))),('frequency',list(range(16,32,2)))]
-        placement={k:[] for k,_ in cases}
-        for n,order in enumerate([cases,list(reversed(cases))],1):
-            for label,cpus in order:placement[label].append(self.bench(f'ccd-p{n}-{label}',cpus,10,2))
-        save(self.out/'placement.json',placement)
+        if self.resume:
+            pairs=json.loads((self.out/'count-pairs.json').read_text())
+            placement=json.loads((self.out/'placement.json').read_text())
+        else:
+            for name in ['verify_cpu_kernels','verify_streaming_dispatch']:
+                self.check()
+                exe=self.root/'target/release/examples'/(name+'.exe')
+                started=time.monotonic();p=self.start([str(exe)],name,1)
+                try:
+                    while p.poll() is None:
+                        self.check();assert time.monotonic()-started<240;time.sleep(3)
+                    assert p.returncode==0,(name,p.returncode)
+                    save(self.out/(name+'.identity.json'),{'sha256':hashlib.sha256(exe.read_bytes()).hexdigest(),'exit_code':p.returncode,'elapsed':time.monotonic()-started})
+                finally:self.stop(p)
+                print(name,'PASS',flush=True)
+            spread=[0,2,4,6,16,18,20,22];physical=list(range(0,32,2))
+            pairs=[]
+            for n in range(1,5):
+                pair={}
+                order=[('eight',spread),('sixteen',physical)]
+                if n%2==0:order.reverse()
+                for label,cpus in order:pair[label]=self.bench(f'count-p{n}-{label}',cpus)
+                pairs.append(pair);save(self.out/'count-pairs.json',pairs)
+            cases=[('spread',spread),('cache',list(range(0,16,2))),('frequency',list(range(16,32,2)))]
+            placement={k:[] for k,_ in cases}
+            for n,order in enumerate([cases,list(reversed(cases))],1):
+                for label,cpus in order:placement[label].append(self.bench(f'ccd-p{n}-{label}',cpus,10,2))
+            save(self.out/'placement.json',placement)
         cold,text=self.productive('cold',540,self.root/'cold-cache')
         warm,warmtext=self.productive('warm',150,self.root/'cold-cache')
         loaded,loadtext=self.productive('load',300,self.root/'load-cache',load=True)

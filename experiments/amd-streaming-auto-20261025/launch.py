@@ -21,7 +21,7 @@ def main():
     subprocess.run(['gpuq', 'gaming', 'check', '--quiet'], check=True)
     status = json.loads(subprocess.check_output(['gpuq', 'status'], text=True))
     assert status['activeJobId'] == job
-    scripts = ['native_run.py', 'run-native.ps1']
+    scripts = ['native_run.py', 'run-native.ps1', 'fixture.py']
     hashes = {}
     for name in scripts:
         source = Path(__file__).with_name(name)

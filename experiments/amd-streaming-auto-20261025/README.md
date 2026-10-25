@@ -51,6 +51,16 @@ All episodes end before the 600-second donation grace period. The fixture uses a
 impossible target and no wallet with funds. No shared hosts file, firewall,
 browser, GPU process or system memory policy is changed.
 
+The first lifecycle attempt was discarded: the fixture incorrectly parsed blank
+keepalive lines as JSON and repeatedly disconnected the miner. The completed 14
+fixed-kernel reports and full-size parity preceded that failure and remain valid.
+The owned reservation was canceled, all children exited, and the initial cold
+cache was isolated. `fixture.py` now ignores blank keepalives; `test_fixture.py`
+checks that later requests still work on the same connection. The lifecycle-only
+resume verifies the frozen binary and each accepted file hash, preserves the first
+benchmark protocol/job identity, and starts with a fresh cold cache. No discarded
+productive sample is reused as automatic-selection evidence.
+
 ## Integration and handoff
 
 The research session owns PR50 joint tuning in `seine-cpu-followups`; do not alter
