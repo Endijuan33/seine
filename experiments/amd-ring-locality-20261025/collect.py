@@ -13,6 +13,7 @@ EXPERIMENTS = {
     'ring': ('/root/seine-ring-locality-20261025',
              ['seine-amd-ring-screen.service', 'seine-amd-ring-confirm.service']),
     'page': ('/root/seine-page-size-20261025', ['seine-amd-page-size.service']),
+    'resource': ('/root/seine-resource-supplement-20261025', ['seine-amd-resource-supplement.service']),
 }
 LIVE = {'active', 'activating', 'deactivating', 'reloading'}
 
