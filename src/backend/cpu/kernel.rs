@@ -671,7 +671,11 @@ mod tests {
                 .unwrap();
             let paths: Vec<_> = [
                 CpuKernel::Avx2,
+                CpuKernel::Avx512256Stream,
                 CpuKernel::Avx512,
+                CpuKernel::Avx512256Stream,
+                CpuKernel::Avx512256,
+                CpuKernel::Avx512256Stream,
                 CpuKernel::Neon,
                 CpuKernel::NeonSha3,
             ]

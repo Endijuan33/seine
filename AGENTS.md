@@ -45,6 +45,15 @@ This file preserves the full engineering reference for AI agents doing optimizat
 
 ### CPU Backend Tuning
 
+- `avx512-256-stream` is a distinct CPU kernel with a 64 KiB recent-block ring
+  and non-temporal arena stores. It preserves the full 2 GiB arena. ISA support
+  requires AVX2 + AVX-512F/VL; automatic trials additionally require validated
+  AMD family 26/model 2. The existing fallback remains unchanged. Mining tuning
+  visits every eligible challenger and caches only complete comparisons for the
+  current worker counts/backing; schema 2 also fingerprints the candidate set.
+  Full-size parity and dirty arena/kernel-switch checks are available through
+  `pow-kernel/examples/verify_streaming_dispatch.rs` and the optimized ignored
+  `adaptive_kernel_real_arena_smoke` test. Keep these with future ring changes.
 - `--cpu-page-mode` (`auto`, `regular`, `large`, `large-1g`; default `auto`) controls the CPU arena page contract.
   - `auto` prefers explicit Windows large pages/Linux HugeTLB, then retains the platform fallback chain.
   - `regular` forces ordinary pages and disables Linux THP for a controlled baseline.

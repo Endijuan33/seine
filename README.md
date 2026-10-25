@@ -114,9 +114,14 @@ invocations with arguments, and redirected input/output do not pause.
 | Platform | CPU | GPU (NVIDIA) |
 |----------|-----|--------------|
 | Linux x86_64 | works out of the box | CUDA driver + NVRTC libs |
+| Linux ARM64 | CPU-only `seine-linux-aarch64.tar.gz` | — |
 | macOS x86_64 | works out of the box | — |
 | macOS ARM | works out of the box (Metal experimental) | — |
 | Windows x86_64 | works out of the box | CUDA driver + NVRTC libs |
+
+The Linux ARM64 archive is built on Ubuntu 24.04 and requires glibc 2.39 or
+newer. On older distributions, build the CPU-only miner from source with
+`cargo build --release --locked --no-default-features`.
 
 Each CPU thread needs ~2 GB RAM (Argon2id parameters). Seine auto-sizes thread count from available cores and memory.
 On x86_64, CPU builds include both AVX2 and AVX-512 kernels and dispatch at runtime when the host supports them.
@@ -168,9 +173,20 @@ active throughout. Kernel windows last 30–60 seconds and require 32 hashes, wi
 a ten-minute limit for each trial. Interrupted or noisy trials retain the previous
 path. Workers switch between complete hashes without reallocating their arenas.
 
+On validated Zen 5 EPYC processors (AMD family 26, model 2), tuning also compares
+`avx512-256-stream`: a 256-bit AVX-512 kernel that keeps recent blocks cached and
+streams outputs into the normal 2 GiB arena. It requires AVX2 and AVX-512F/VL.
+Every eligible path is considered before caching the result; slower paths are
+rejected using the same repeated comparisons. No worker-count cutoff forces
+this kernel. A 24-worker EPYC 9R45 test improved 27.78% over AVX2, while the
+one-worker screen regressed 3.53%, so selection remains specific to the measured
+worker count and memory backing. Other CPU families retain their existing
+automatic candidates. See the [integrated validation report](experiments/epyc-investigation/INTEGRATED_VALIDATION.md)
+for native comparisons and automatic-selection evidence.
+
 Confirmed kernel choices are cached alongside the thread cache in
 `seine.cpu-autotune.json.kernels.json`, keyed by worker counts, observed page
-backing, CPU/build identity, placement and tuning settings. Known contexts reuse
+backing, CPU/build identity, eligible kernels, placement and tuning settings. Known contexts reuse
 that choice; stable contexts are reconsidered after 30 minutes. Experimental
 `avx512-256` remains benchmark-only. AVX2-only CPUs and ARM hosts without SHA3
 keep their existing paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables
