@@ -20,14 +20,19 @@ def paired(values, metric):
     return summarize_pairs(values, metric, DEFAULT_BOOTSTRAP_SAMPLES, DEFAULT_BOOTSTRAP_SEED)
 
 
-def analyze(root):
+def analyze(root, resource_supplement=None):
     out = root / 'results'
     manifest = read(out / 'manifest.json')
     for name, digest in manifest.items():
         assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
     outcome = read(out / 'outcome.json')
-    assert outcome['status'] == 'COMPLETE' and outcome['settings_restored'] and not outcome['cleanup_failures']
-    assert (out / 'lifecycle/COMPLETE').exists()
+    if resource_supplement is None:
+        assert outcome['status'] == 'COMPLETE' and outcome['settings_restored'] and not outcome['cleanup_failures']
+        assert (out / 'lifecycle/COMPLETE').exists()
+        resource = {'status': 'COMPLETE_IN_ORIGINAL_CAMPAIGN'}
+    else:
+        from audit_resource import verify_supplement
+        resource = verify_supplement(root, resource_supplement)
     parity = [line for line in (out / 'reference-parity.log').read_text().splitlines()
               if line.startswith('PASS nonce=')]
     assert len(parity) == 21 and all('full_size_bytes=2147483648 dirty_reuse=true guards=true' in line for line in parity)
@@ -38,7 +43,7 @@ def analyze(root):
     assert protocol['order'] == expected_order
     result = {'schema': 'seine-productive-comparison/v1', 'verified_files': len(manifest),
         'scope': 'Completed-hash lower bounds over service start through shutdown, automatic count/kernel selection; explicitly prepared 2 MiB HugeTLB.',
-        'binary_provenance': read(root / 'binary-provenance.json'), 'runs': {},
+        'binary_provenance': read(root / 'binary-provenance.json'), 'resource_validation': resource, 'runs': {},
         'hardware': {k: protocol['hardware'][k] for k in ('Model name', 'CPU family', 'Model',
             'Socket(s)', 'CPU(s)', 'Core(s) per socket', 'Thread(s) per core', 'NUMA node(s)')}}
     for warm in (False, True):
@@ -118,7 +123,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('collected', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--resource-supplement', type=Path,
+                        help='Separately collected resource check bound to the unchanged original failed fixture archive')
     args = parser.parse_args()
-    report = analyze(args.collected)
+    report = analyze(args.collected, args.resource_supplement)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({k: report[k] for k in ('cold', 'warm', 'numerical_gain_gate_passed')}, indent=2))

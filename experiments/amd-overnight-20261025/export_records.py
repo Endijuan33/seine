@@ -15,6 +15,7 @@ def apply_review(analysis, manifest_bytes, review):
     assert review['decision'] in ('accept_challenger_order', 'reject_challenger_order')
     assert review['result_manifest_sha256'] == hashlib.sha256(manifest_bytes).hexdigest()
     assert review['binary_provenance'] == analysis['binary_provenance']
+    assert review['resource_validation'] == analysis['resource_validation']
     for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
         assert review[phase + '_comparison'] == analysis[phase]['comparison']
     accepted = review['decision'] == 'accept_challenger_order'
@@ -83,10 +84,11 @@ if __name__ == '__main__':
     parser.add_argument('collected', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--review', type=Path, help='Explicit decision bound to the full evidence and frozen builds')
+    parser.add_argument('--resource-supplement', type=Path, help='Verified same-binary resource supplement')
     args = parser.parse_args()
     # The full audit requires all cold/warm pairs, reference checks and completed
     # lifecycle evidence. It cannot export a cherry-picked partial campaign.
-    analysis = analyze(args.collected)
+    analysis = analyze(args.collected, args.resource_supplement)
     if args.review:
         apply_review(analysis, (args.collected / 'results/manifest.json').read_bytes(),
                      json.loads(args.review.read_text()))

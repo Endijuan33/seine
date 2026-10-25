@@ -10,7 +10,8 @@ def fixture():
         'Socket(s)': '1', 'Model name': 'AMD EPYC 9355P'}, 'runs': {},
         'binary_provenance': {role: {'source_revision': role, 'binary_sha256': role}
                               for role in ('control', 'candidate')},
-        'landing_status': 'Research only', 'numerical_gain_gate_passed': False}
+        'landing_status': 'Research only', 'numerical_gain_gate_passed': False,
+        'resource_validation': {'status': 'COMPLETE_IN_ORIGINAL_CAMPAIGN'}}
     for warm in (False, True):
         for role in ('control', 'candidate'):
             for pair in range(1, 5):
@@ -34,7 +35,8 @@ class RecordTests(unittest.TestCase):
             data[phase] = {'comparison': {'paired_geometric_delta_pct': 0.5}}
         review = {'decision': 'accept_challenger_order',
                   'result_manifest_sha256': hashlib.sha256(b'evidence').hexdigest(),
-                  'binary_provenance': data['binary_provenance']}
+                  'binary_provenance': data['binary_provenance'],
+                  'resource_validation': data['resource_validation']}
         for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
             review[phase + '_comparison'] = data[phase]['comparison']
         with self.assertRaises(AssertionError):
