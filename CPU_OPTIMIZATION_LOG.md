@@ -2,6 +2,30 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 native AMD tuner tests retain hardware identity
+
+Found a validation blocker while auditing AMD tuning without a new rental:
+`cfg!(test)` replaced the real CPU identity with a neutral identity and disabled
+the validated startup path in every test binary, including the ignored native
+EPYC productive-selection test. That test therefore could not pass its initial
+streaming-eligibility assertion on its intended machine.
+
+The native constructor now applies the shipping identity/ISA gates in every
+build. Synthetic kernel/count fixtures explicitly use an identity-neutral
+constructor. Injected-identity tests cover Turin, Ryzen, Genoa exclusion, a
+non-AMD vendor, startup selection and candidate-set cache fingerprints. The
+24-worker hardware test also checks the exact validated Turin identity before
+starting workers, avoiding accidental execution on a streaming-capable desktop.
+
+The new native-constructor regression first failed on the local Zen 5 host:
+actual candidates were `[Avx512, Avx2]`, while runtime identity required the
+additional `Avx512256Stream`. It passes after the fix. CPU-only workspace
+validation passed 537 tests, with six existing hardware/resource tests ignored;
+scoped Rust 1.93.0 formatting and diff checks passed. No 48 GiB EPYC run or
+new throughput/energy measurement was performed. Shipping eligibility and
+selection policy are unchanged. Genoa automatic trials and Turin cold-start
+ordering remain follow-ups in `docs/AMD_CPU_EFFICIENCY.md`.
+
 ## 2026-10-25 joint tuning on v0.2.22: isolated integration
 
 Ports the count/kernel crossover policy and per-context retry fix from PR46/47

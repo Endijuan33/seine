@@ -15,6 +15,35 @@ package or wall energy efficiency, and the VM result is not a full-socket rate.
 The [energy harness](CPU_ENERGY.md) already measures package joules over a full
 invocation; its worker sweep now includes explicit streaming-kernel selection.
 
+## Throughput work independent of energy-counter access
+
+The next narrow eligibility investigation is **Genoa EPYC 9R14**, family
+25/model 17. [Existing native evidence](../experiments/high-end-streaming-20261025/RESULTS.md)
+measured streaming at 35.698 H/s versus AVX2 at 28.067 H/s at 24 workers
+(+27.19% across four alternating pairs), but automatic streaming trials still
+exclude this identity. The eight-worker screen was effectively flat. These
+results support investigating an additional candidate, not forcing streaming
+or assuming a worker count.
+
+Before enabling it, validate the candidate-set change through productive
+cold/cached runs, restart and resource-pressure recovery on Genoa. Keep the
+runtime ISA check and repeated-gain gate, and verify that old candidate-set
+caches are rejected. A throughput-only Linux host can answer this question;
+power counters are needed for the separate efficiency campaign below.
+
+The native tuner constructor now uses real CPU identity even in a test binary.
+Synthetic fixtures explicitly request a neutral identity. Previously,
+`cfg!(test)` removed streaming from the native EPYC test's candidates, making
+its eligibility assertion impossible to pass. The ignored 24-worker EPYC test
+is restricted to the validated Turin identity and still requires an owned host
+with reserved HugeTLB memory; it is not a Genoa validation substitute.
+
+After Genoa eligibility, investigate cold-start discovery cost on Turin: the
+[productive campaign](../experiments/cpu-followups-20261025/joint-native-results.json)
+recorded +3.53% cold versus +19.94% cached. Compare challenger ordering with
+fresh caches and interleaved runs before changing policy. Preserve all
+challengers, confirmation requirements and memory-pressure behavior.
+
 ## Rental shortlist
 
 Public listings checked on 2026-10-25; prices and inventory must be rechecked

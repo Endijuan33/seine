@@ -1640,8 +1640,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let mut kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let mut policy = Policy::new(&cfg, 1, 1, 4);
         let base = CpuKernel::preferred();
         let can_trial = CpuKernel::ALL
@@ -1734,8 +1736,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let policy = Policy::new(&cfg, 1, 1, 4);
         let snapshot = CpuAdaptiveSnapshot {
             kernel: blocknet_pow_kernel::CpuKernel::preferred(),
@@ -1837,8 +1841,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let mut kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let mut p = Policy::new(&cfg, 1, 1, 4);
         p.profile = CpuPerformanceProfile::Throughput;
         let mut snapshot = CpuAdaptiveSnapshot {
@@ -1918,8 +1924,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let mut kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let mut p = Policy::new(&cfg, 1, 1, 8);
         p.profile = CpuPerformanceProfile::Efficiency;
         let mut s = CpuAdaptiveSnapshot {
@@ -2262,8 +2270,10 @@ mod tests {
             confirmed_peak: 10.0,
             repeat: false,
         });
-        let kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let s = crate::backend::cpu::CpuAdaptiveSnapshot {
             kernel: CpuKernel::Avx2,
             kernel_generation: 1,
@@ -2509,8 +2519,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let mut kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         let mut p = Policy::new(&cfg, 8, 1, 12);
         let mut s = CpuAdaptiveSnapshot {
             kernel: CpuKernel::Avx512,
@@ -2613,7 +2625,7 @@ mod tests {
                         // A restart can reuse the fully confirmed kernel cache,
                         // but has no partially confirmed count winner to resume.
                         assert!(path.exists());
-                        kernels = super::super::adaptive_kernel::Tuner::new(
+                        kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
                             &cfg,
                             CpuAutotuneHostFingerprint::default(),
                         );
@@ -2680,8 +2692,10 @@ mod tests {
             cfg.cpu_autotune_config_path.display()
         ));
         let _ = fs::remove_file(&path);
-        let mut kernels =
-            super::super::adaptive_kernel::Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut kernels = super::super::adaptive_kernel::Tuner::identity_neutral(
+            &cfg,
+            CpuAutotuneHostFingerprint::default(),
+        );
         kernels.test_candidates(vec![
             CpuKernel::Avx512,
             CpuKernel::Avx2,

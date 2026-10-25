@@ -14,19 +14,19 @@ const CACHE_SCHEMA: u32 = 3;
 // ARM starts on the portable NEON path; SHA3 is eligible only after runtime
 // feature detection and must win two productive-work comparisons before it
 // becomes the cached choice.
+fn supported_kernels() -> Vec<CpuKernel> {
+    CpuKernel::ALL
+        .into_iter()
+        .filter(|k| k.is_supported())
+        .collect()
+}
+
+#[cfg(test)]
 fn candidates() -> Vec<CpuKernel> {
-    // Unit tests use the identity-neutral set; tests needing gated paths opt in.
-    let identity = if cfg!(test) {
-        crate::runtime_identity::CpuIdentity::default()
-    } else {
-        crate::runtime_identity::cpu_identity()
-    };
+    // Synthetic policy fixtures explicitly use the identity-neutral set.
     candidates_for(
-        &identity,
-        &CpuKernel::ALL
-            .into_iter()
-            .filter(|k| k.is_supported())
-            .collect::<Vec<_>>(),
+        &crate::runtime_identity::CpuIdentity::default(),
+        &supported_kernels(),
     )
 }
 
@@ -269,14 +269,23 @@ pub(super) struct Tuner {
 
 impl Tuner {
     pub(super) fn new(cfg: &Config, host: CpuAutotuneHostFingerprint) -> Self {
-        let candidates = candidates();
-        // Unit tests must not depend on whether the runner is a validated host;
-        // tests that cover the startup path set it explicitly.
-        let startup = if cfg!(test) {
-            None
-        } else {
-            startup_kernel_for(&crate::runtime_identity::cpu_identity(), &candidates)
-        };
+        Self::for_identity(cfg, host, &crate::runtime_identity::cpu_identity())
+    }
+
+    #[cfg(test)]
+    pub(super) fn identity_neutral(cfg: &Config, host: CpuAutotuneHostFingerprint) -> Self {
+        Self::for_identity(cfg, host, &crate::runtime_identity::CpuIdentity::default())
+    }
+
+    fn for_identity(
+        cfg: &Config,
+        host: CpuAutotuneHostFingerprint,
+        identity: &crate::runtime_identity::CpuIdentity,
+    ) -> Self {
+        // Native hardware tests must exercise the shipping identity and ISA
+        // gates. Only synthetic fixtures opt into an identity-neutral tuner.
+        let candidates = candidates_for(identity, &supported_kernels());
+        let startup = startup_kernel_for(identity, &candidates);
         let configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
             cfg.cpu_profile,
@@ -724,12 +733,86 @@ mod tests {
             std::process::id(),
             std::thread::current().id()
         ));
-        let mut t = Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        let mut t = Tuner::identity_neutral(&cfg, CpuAutotuneHostFingerprint::default());
         t.cache.winners.clear();
         t.candidates.retain(|k| *k != CpuKernel::Avx512256Stream);
         // Independent of whether this test runner is the validated Ryzen.
         t.startup = None;
         t
+    }
+
+    #[test]
+    fn native_constructor_uses_runtime_identity_in_hardware_tests() {
+        let cfg = super::super::tests::test_config();
+        let identity = crate::runtime_identity::cpu_identity();
+        let supported: Vec<_> = CpuKernel::ALL
+            .into_iter()
+            .filter(|k| k.is_supported())
+            .collect();
+        let expected = candidates_for(&identity, &supported);
+        let t = Tuner::new(&cfg, CpuAutotuneHostFingerprint::default());
+        assert_eq!(t.candidates, expected);
+        assert_eq!(t.startup, startup_kernel_for(&identity, &expected));
+    }
+
+    #[test]
+    fn injected_identity_controls_candidates_startup_and_cache_fingerprint() {
+        use crate::runtime_identity::CpuIdentity;
+        let cfg = super::super::tests::test_config();
+        let host = CpuAutotuneHostFingerprint::default();
+        let neutral = Tuner::identity_neutral(&cfg, host.clone());
+        assert_eq!(neutral.candidates, candidates());
+        assert_eq!(neutral.startup, None);
+        let turin = CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            ..CpuIdentity::default()
+        };
+        for (identity, eligible, starts_streaming) in [
+            (turin.clone(), true, false),
+            (
+                CpuIdentity {
+                    model: Some(0x44),
+                    ..turin.clone()
+                },
+                true,
+                true,
+            ),
+            (
+                CpuIdentity {
+                    family: Some(0x19),
+                    model: Some(0x11),
+                    ..turin.clone()
+                },
+                false,
+                false,
+            ),
+            (
+                CpuIdentity {
+                    vendor: Some("GenuineIntel".into()),
+                    ..turin
+                },
+                false,
+                false,
+            ),
+        ] {
+            let t = Tuner::for_identity(&cfg, host.clone(), &identity);
+            let streaming = eligible && CpuKernel::Avx512256Stream.is_supported();
+            assert_eq!(
+                t.candidates.contains(&CpuKernel::Avx512256Stream),
+                streaming
+            );
+            assert_eq!(
+                t.startup,
+                (streaming && starts_streaming).then_some(CpuKernel::Avx512256Stream)
+            );
+            assert_eq!(
+                t.cache.configuration != neutral.cache.configuration,
+                streaming
+            );
+            assert!(t.candidates.iter().all(|k| k.is_supported()));
+        }
     }
 
     #[test]
@@ -1255,15 +1338,22 @@ mod tests {
         use crate::backend::{NonceChunk, PowBackend, WorkAssignment, WorkTemplate};
         use std::sync::Arc;
         use std::time::{Duration, Instant};
+        let identity = crate::runtime_identity::cpu_identity();
         assert!(
-            candidates().contains(&CpuKernel::Avx512256Stream),
-            "requires validated EPYC identity and ISA"
+            identity.vendor.as_deref() == Some("AuthenticAMD")
+                && identity.family == Some(0x1a)
+                && identity.model == Some(0x02),
+            "requires validated EPYC identity; do not allocate 24 arenas on a desktop"
         );
         let mut cfg = super::super::tests::test_config();
         cfg.cpu_autotune_config_path =
             std::env::temp_dir().join(format!("seine-epyc-productive-{}", std::process::id()));
         cfg.cpu_autotune_secs = 6;
         let mut t = Tuner::new(&cfg, cpu_autotune_host_fingerprint());
+        assert!(
+            t.candidates.contains(&CpuKernel::Avx512256Stream),
+            "requires runtime support for the streaming kernel"
+        );
         t.cache.winners.clear();
         let backend = CpuBackend::adaptive(
             24,
