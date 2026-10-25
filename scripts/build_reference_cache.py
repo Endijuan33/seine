@@ -12,6 +12,9 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import platform
+import re
+import subprocess
 import time
 
 from verify_pool_work import lock_cache, reference_hasher
@@ -19,9 +22,26 @@ from verify_pool_work import lock_cache, reference_hasher
 _hash_nonce = None
 
 
-def initialize():
+def initialize(library_path):
     global _hash_nonce
-    _, _hash_nonce = reference_hasher()
+    _, _hash_nonce = reference_hasher(library_path)
+
+
+def darwin_available_memory(vm_stat):
+    """Conservative reclaimable memory; never include compressed or swap pages."""
+    page_size = int(re.search(r'page size of (\d+) bytes', vm_stat)[1])
+    pages = sum(int(re.search(r'^Pages ' + name + r':\s+(\d+)\.', vm_stat, re.M)[1])
+                for name in ['free', 'inactive', 'speculative'])
+    return pages * page_size
+
+
+def admission_resources():
+    if platform.system() == 'Linux':
+        available = int(re.search(r'MemAvailable:\s+(\d+)', Path('/proc/meminfo').read_text())[1]) * 1024
+        return available, len(os.sched_getaffinity(0))
+    if platform.system() == 'Darwin':
+        return darwin_available_memory(subprocess.check_output(['vm_stat'], text=True)), os.cpu_count() or 1
+    raise RuntimeError('Parallel reference admission supports Linux and macOS; use the single-process verifier elsewhere')
 
 
 def compute(item):
@@ -40,14 +60,15 @@ def main():
     parser.add_argument('work', type=Path, nargs='+')
     parser.add_argument('--cache', type=Path, required=True)
     parser.add_argument('--workers', type=int, default=1)
+    parser.add_argument('--reference-library', type=Path,
+                        help='Explicit independently built libargon2; no global installation needed')
     args = parser.parse_args()
-    # Admission is intentionally Linux-only; ordinary single-process verification
-    # remains usable on any host with libargon2.
-    import re
-    available = int(re.search(r'MemAvailable:\s+(\d+)', Path('/proc/meminfo').read_text())[1]) * 1024
-    cpus = len(os.sched_getaffinity(0))
+    available, cpus = admission_resources()
     if not 1 <= args.workers <= cpus or args.workers * 2.25 * 1024**3 > available * 0.75:
         parser.error('worker request exceeds CPU affinity or reserved-memory allowance')
+    # Fail before creating the process pool: initializer failures otherwise
+    # cause multiprocessing to repeatedly replace failed workers.
+    library_name, _ = reference_hasher(args.reference_library)
     # Refuse concurrent writers; the verifier cache is evidence, not a work queue.
     cache_guard = lock_cache(args.cache)
     cache = json.loads(args.cache.read_text()) if args.cache.exists() else {}
@@ -67,13 +88,16 @@ def main():
                 jobs[key] = (key, header, nonce)
     started = time.monotonic()
     audit = {'schema': 1, 'inputs': inputs, 'workers': args.workers,
+             'platform': platform.system(), 'admission_available_bytes': available,
+             'admission_cpus': cpus, 'reference_library': library_name,
              'initial_cache_entries': len(cache), 'unique_missing': len(jobs),
              'completed': 0, 'status': 'running',
              'reference': 'libargon2 Argon2id v19, m=2097152 KiB, t=1, p=1, output=32 bytes'}
     audit_path = args.cache.with_suffix('.build.json')
     audit_path.write_text(json.dumps(audit, indent=2) + '\n')
     try:
-        with multiprocessing.get_context('spawn').Pool(args.workers, initializer=initialize) as pool:
+        with multiprocessing.get_context('spawn').Pool(args.workers, initializer=initialize,
+                                                       initargs=(args.reference_library,)) as pool:
             for key, value in pool.imap_unordered(compute, jobs.values(), chunksize=1):
                 cache[key] = value
                 audit['completed'] += 1

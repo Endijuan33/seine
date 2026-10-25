@@ -279,7 +279,7 @@ rejects malformed jobs, wrong hashes, duplicate work and incomplete measurements
 the complete measured window, including startup when anchored to launch.
 
 For many captures, build the shared reference cache first on an otherwise idle
-Linux verifier host. Each process needs about 2 GiB; the builder checks available
+Linux or macOS verifier host. Each process needs about 2 GiB; the builder checks available
 memory and CPU affinity and refuses concurrent cache writers:
 
 ```sh
@@ -289,5 +289,7 @@ python3 scripts/build_reference_cache.py results/*/work.json \
 
 Then run the full verifier on **every** capture. A sampled correctness audit is
 useful during investigation but does not establish fully verified throughput.
+Both tools accept `--reference-library /path/to/libargon2` for an independent
+private build, including a macOS `.dylib`, without a system-wide installation.
 Do not infer energy efficiency from CPU TDP or VM rental price; record measured
 package or whole-system energy separately when trustworthy counters exist.

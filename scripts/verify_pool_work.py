@@ -32,8 +32,8 @@ def lock_cache(path):
     return handle
 
 
-def reference_hasher():
-    name = ctypes.util.find_library("argon2")
+def reference_hasher(library_path=None):
+    name = str(Path(library_path).resolve(strict=True)) if library_path else ctypes.util.find_library("argon2")
     if not name:
         raise RuntimeError("libargon2 is required for independent verification")
     library = ctypes.CDLL(name)
@@ -57,6 +57,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("work", type=Path)
     parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--reference-library", type=Path,
+                        help="Explicit independently built libargon2, when it is not installed system-wide")
     args = parser.parse_args()
     raw = args.work.read_bytes()
     work = json.loads(raw)
@@ -67,7 +69,7 @@ def main():
     if start is not None and (not math.isfinite(start) or not math.isfinite(end)
                              or not math.isclose(end-start, duration, abs_tol=1e-6)):
         raise ValueError('measurement bounds do not match duration')
-    name, hash_nonce = reference_hasher()
+    name, hash_nonce = reference_hasher(args.reference_library)
     cache_guard = lock_cache(args.cache)
     cache = json.loads(args.cache.read_text()) if args.cache.exists() else {}
     seen = set()
