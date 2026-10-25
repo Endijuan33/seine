@@ -48,6 +48,7 @@ def main():
     controller.save('protocol.json', {'workers': workers, 'caps_uw': {'baseline': original_cap,
         'candidate': 240_000_000}, 'cap_path': str(CAP), 'seconds': 120, 'pairs': 4,
         'settle_seconds': 10, 'baseline_binary_sha256': expected['seine'],
+        'controller_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'initial_hugepages': original_pool, 'initial_swaps': original_swaps,
         'selection': 'Peak-throughput count from completed stock worker sweep; all power pairs are fresh',
         'gain_rule': 'All four J/hash pairs improve, upper descriptive 95% delta below zero, and lower throughput delta at least -5%.'})
