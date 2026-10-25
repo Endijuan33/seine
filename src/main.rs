@@ -10,6 +10,7 @@ mod pool;
 mod runtime_identity;
 mod shortname;
 mod types;
+mod update_check;
 mod user_config;
 mod version;
 
@@ -30,6 +31,9 @@ fn main() {
 
 fn run() -> Result<()> {
     let cfg = Config::parse()?;
+    if cfg.update_check_enabled && !cfg.bench {
+        update_check::spawn();
+    }
 
     let shutdown = Arc::new(AtomicBool::new(false));
     {
