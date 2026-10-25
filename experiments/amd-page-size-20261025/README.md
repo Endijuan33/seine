@@ -55,3 +55,12 @@ ledger before starting; this document schedules no extension. Keep the campaign
 under its $25 total and **14:42:52 EDT** cleanup deadline. This steady-state
 investigation may take priority over the still-unmeasured short tuning-window
 candidate if both cannot fit. Never shorten an already-running protocol to fit it.
+
+`run.py` additionally requires verified prior-collection markers and a
+ledger-backed authorization file containing the controller deadline, provider
+deletion deadline, funded-credit horizon and total reserved campaign dollars.
+The provider deadline must precede both the funded horizon and goal deadline.
+Use outer unit `seine-amd-page-size.service`, a 2,520-second runtime maximum,
+SIGINT, default control-group termination and a 180-second stop timeout. The
+controller reserves three minutes for restoring both pools and swap, and ten
+minutes between its deadline and provider deletion for collection/cleanup.
