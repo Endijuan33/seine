@@ -39,7 +39,7 @@ mode, and affinity for their CPU and GPUs.
 | Kernel implementations | `pow-kernel/src/fixed_argon.rs`, `pow-kernel/src/fixed_argon/` |
 | Which CPU kernels the live tuner may try, per identity | `src/miner/adaptive_kernel.rs` (`candidates_for`) |
 | CPU identity (vendor/family/model) and build/runtime fingerprint | `src/runtime_identity.rs` (`cpu_identity`) |
-| Live CPU worker count tuning and memory/PSI shedding | `src/miner/adaptive_cpu.rs` |
+| Live CPU worker count tuning, joint count/kernel comparisons (each candidate count finishes its kernel sweep), memory/PSI shedding | `src/miner/adaptive_cpu.rs` (`tick_joint`), `src/miner/adaptive_kernel.rs` |
 | CPU topology / affinity (NUMA, L3, SMT, macOS P-cores) | `src/backend/cpu/topology.rs`, `src/config.rs` (`pcore_count`, `macos_hybrid_pcore_parallelism_cap`) |
 | Page mode (HugeTLB / Windows large pages / THP) | `src/config.rs`, `src/backend/cpu.rs` |
 | NVIDIA per-arch/per-device tuning (regcap candidates, launch depth, cancel interval) | `src/backend/nvidia.rs` (`*_RTX_5090`, `BLACKWELL_*`, `select_cancel_check_block_interval`) |
