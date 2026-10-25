@@ -37,5 +37,19 @@
     "feature": "cpu-research",
     "note": "Optimized kernel test executable; full-size parity test explicitly required.",
     "sha256": "01aca024edca923ef6018c62d203ed9509fe031ceabd94ad49c162a7f46f2743"
+  },
+  "baseline21-aligned": {
+    "commit": "359265e",
+    "source_fingerprint": "d8248e278baf1c66",
+    "sha256": "4e6c09c390cdc3d5726127bed7495373f809341f6b268d6dad78bfd3f9ac7b3c",
+    "rustflags": "-C llvm-args=-align-all-functions=6",
+    "scope": "separate post-controller alignment ablation; excluded from seven-input main manifest"
+  },
+  "arm-aligned": {
+    "commit": "f20e7bb",
+    "source_fingerprint": "f24ac20c126a52cc",
+    "sha256": "b26bb0616aff539b46e2c40253ce0bddfa99dfdaf01e36756937035c49b04c1c",
+    "rustflags": "-C llvm-args=-align-all-functions=6",
+    "scope": "separate post-controller alignment ablation; excluded from seven-input main manifest"
   }
 }

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import time
 from bench import paired, counters
@@ -45,7 +46,7 @@ def memory_run(label, threshold, workers, hashes, kernel='avx512'):
     before = counters()
     run(label, ['/usr/bin/time', '-v', '-o', str(OUT / (label + '-time.txt')),
                 str(ROOT / 'mine-reduced'), '2097152', str(hashes), str(threshold), kernel,
-                '70', str(workers), '0'], 180)
+                '100' if threshold == 1 else '70', str(workers), '0'], 180)
     rows = [json.loads(line) for line in (OUT / (label + '.log')).read_text().splitlines()]
     assert len(rows) == workers + 1 and rows[-1]['type'] == 'summary'
     assert rows[-1]['hashes'] == workers * hashes and rows[-1]['hps'] > 0
@@ -65,6 +66,10 @@ def main():
     p.add_argument('host', choices=['intel','skylake','epyc'])
     args = p.parse_args()
     OUT.mkdir(exist_ok=False)
+    source = OUT / 'protocol-source'
+    source.mkdir()
+    for path in ROOT.glob('*.py'):
+        shutil.copy2(path, source / path.name)
     os.chdir(ROOT)
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
@@ -106,7 +111,11 @@ def main():
         assert '[never]' in thp.read_text()
         memory = []
         for repeat in range(4):
-            order = [0,2,3] if repeat % 2 == 0 else [3,2,0]
+            # Threshold 1 retains every block: isolate prototype bookkeeping
+            # overhead from recomputation on the final EPYC host. The already
+            # running Intel protocol remains [0,2,3].
+            thresholds = [0,1,2,3] if args.host == 'epyc' else [0,2,3]
+            order = thresholds if repeat % 2 == 0 else thresholds[::-1]
             for threshold in order:
                 memory.append({'repeat':repeat,'threshold':threshold,'result':memory_run(f'memory-r{repeat}-t{threshold}',threshold,1,3)})
         if args.host == 'epyc':

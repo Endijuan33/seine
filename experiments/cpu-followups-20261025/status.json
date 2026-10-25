@@ -12,7 +12,7 @@
     },
     "intel_regression": {
       "source": "PR49 c68ade5",
-      "status": "native legacy and enum ablations running; equal-alignment rebuild pending desktop reservation release",
+      "status": "Legacy/enum native controls complete; separate valid equal-alignment binaries uploaded for post-controller AVX-512 2x2 test.",
       "known_limit": "original static normalization does not establish semantic equivalence or causality"
     },
     "reduced_memory": {
@@ -29,5 +29,5 @@
     "skylake": "owned timed lease active",
     "epyc": "planned after both Intel leases are cleaned"
   },
-  "alignment_preflight": "Shared Cargo target reused control artifact for ARM build; identical SHA caught before any timing. Invalid pair excluded. Rebuild will use separate target directory."
+  "alignment_preflight": "Shared Cargo target reused control artifact; identical SHA caught before timing and excluded. Replacement built in a new isolated target: distinct source fingerprints and SHA verified, all 13 inspected function entries aligned to 64 bytes."
 }

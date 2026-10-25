@@ -21,7 +21,9 @@ only after the second outer comparison.
 
 Validation before native runs: 507 CPU workspace tests passed (499 miner, five
 kernel, three integration), five existing resource tests ignored. Focused adaptive
-tests: 53 passed, two ignored. No native performance gain is claimed yet.
+tests: 54 passed, two ignored, including interruption between pending kernel
+challengers. No native performance gain is claimed yet. Campaign protocol and
+identities: `experiments/cpu-followups-20261025/README.md`.
 
 ## Conventions
 
