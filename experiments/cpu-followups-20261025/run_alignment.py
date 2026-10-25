@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import signal
+import shutil
 import statistics
 import subprocess
 import time
@@ -31,6 +32,9 @@ def interrupt(signum, frame):
 def main():
     os.chdir(ROOT)
     OUT.mkdir(exist_ok=False)
+    (OUT/'protocol-source').mkdir()
+    for name in ['bench.py', 'run_alignment.py', 'after_main.py']:
+        shutil.copy2(ROOT/name, OUT/'protocol-source'/name)
     signal.signal(signal.SIGINT, interrupt)
     signal.signal(signal.SIGTERM, interrupt)
     expected = json.loads((ROOT / 'expected-binaries.json').read_text())

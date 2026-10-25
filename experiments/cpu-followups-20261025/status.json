@@ -8,7 +8,9 @@
     "joint_tuning": {
       "source": "7477914",
       "status": "native cold/cached validation running; not promoted",
-      "local_tests": "54 adaptive passed, 2 ignored; prior full suite507 passed,5ignored plus one new focused regression"
+      "local_tests": "54 adaptive passed, 2 ignored; prior full suite507 passed,5ignored plus one new focused regression",
+      "native_boundary": "C5 post-controller real RAM/load/restart lifecycle queued; separate from timed HugeTLB comparisons",
+      "review_fix": "Test-only cache schema fixture corrected; final rerun waits for explicit desktop release"
     },
     "intel_regression": {
       "source": "PR49 c68ade5",

@@ -52,7 +52,8 @@ aggregate rate. Native RSS excludes independent reference verification, which
 runs separately. Buffer accounting includes metadata and retained allocation;
 RSS additionally captures process/allocator overhead. The 48 GiB wide comparison
 is a memory-constrained offline hashing experiment, not a comparison against the
-production miner's HugeTLB path. The EPYC-only threshold-1 control retains every
+production miner's HugeTLB path. Prototype workers use OS scheduling, without the
+miner's affinity controller. The EPYC-only threshold-1 control retains every
 block to expose prototype overhead without recomputation.
 
 `run_alignment.py` runs a fresh AVX-512 2x2 comparison after the main Ice Lake
@@ -62,6 +63,16 @@ rotated/reversed passes. Equal function-entry alignment cannot eliminate every
 layout effect or establish a unique cause. An earlier shared-target artifact
 reuse was caught by identical binary hashes before timing; that invalid pair is
 excluded from all native evidence.
+
+After C5's timed comparisons, `run_lifecycle.py` runs the established native
+resource harness with a fresh ordinary-page cache and a four-worker cap. Its
+360-second initial phase allows the joint count/kernel policy to persist a
+confirmed count before testing reductions to one and zero arenas, recovery, CPU
+contention, a constrained cached restart, and explicit opt-out. This is a safety
+experiment separate from the twelve-worker HugeTLB throughput comparison. Only
+task-owned systemd units are changed, and the existing rental deadline still
+applies. `after_main.py` prevents either post-run experiment from overlapping the
+main controller or starting without enough time remaining.
 
 ## Completion gate
 
