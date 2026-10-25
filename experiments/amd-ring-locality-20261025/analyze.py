@@ -191,6 +191,10 @@ def analyze(root):
             'Socket(s)', 'CPU(s)', 'Core(s) per socket', 'Thread(s) per core', 'NUMA node(s)')},
         'expected_binary_sha256': {str(ring): expected['ring-' + str(ring)] for ring in (64, 32, 16)},
         'comparisons': comparisons, 'shortlist': selection['shortlist'], 'shipping_change_accepted': False}
+    environment = read(root / 'results/screen-32-ring-32/1-baseline.json')['environment']
+    result['environment'] = {key: environment[key] for key in ('os', 'kernel_version', 'cpu_arch',
+        'runtime_environment', 'target_triple', 'rustc_version', 'build_profile',
+        'build_opt_level', 'build_rustflags', 'build_features')}
     result['diagnostics'] = diagnostics(root)
     confirmation = root / 'confirmation-results'
     if confirmation.exists():
@@ -221,6 +225,7 @@ def records(result, builds):
             rates = [v['hps'] for v in observations]
             output.append({'id': comparison['label'] + '-' + role, 'campaign': 'amd-ring-locality-20261025',
                 'hardware': result['hardware']['Model name'], 'category': 'amd', 'backend': 'cpu',
+                'os': result['environment']['os'], 'os_kernel_release': result['environment']['kernel_version'],
                 'physical_cores': 32, 'hardware_threads': 64, 'sockets': 1, 'numa_nodes': 1,
                 'cpu_vendor': 'AuthenticAMD', 'cpu_family': 26, 'cpu_model': 2, 'virtualization': 'none',
                 'installed_memory_gib': 192, 'memory_channels_populated': 12, 'memory_speed_mts': 4800,
@@ -231,6 +236,7 @@ def records(result, builds):
                 'phase': comparison['phase'], 'role': role, 'requested_seconds_per_round': comparison['seconds'],
                 'measured_rounds_per_invocation': 2, 'warmup_rounds_per_invocation': 1,
                 'repetitions': comparison['pairs'], 'benchmark_kind': 'backend',
+                'workload': 'legacy_argon2id_2gib',
                 'metric_scope': 'completed_hashes_over_measured_backend_time_including_fence',
                 'aggregation': 'ratio_of_totals', 'completed_hashes': hashes, 'elapsed_seconds': elapsed,
                 'hps': hashes / elapsed, 'hps_sample_cv': statistics.stdev(rates) / statistics.mean(rates),
