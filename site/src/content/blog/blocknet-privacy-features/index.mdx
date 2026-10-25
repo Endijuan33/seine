@@ -29,7 +29,7 @@ Blocknet uses the same proven cryptography family as Monero: ring signatures, st
 
 ## Ring signatures hide who paid
 
-When you spend coins, your wallet signs for a group of 16 outputs: the one you own and 15 others picked from the chain as decoys. The signature is a CLSAG ring signature. Anyone can verify that one member of the ring signed, and the signature doesn't reveal which one.
+When you spend coins, your wallet signs for a group of 16 outputs: the one you own and 15 others picked from the chain as decoys. The signature is a [CLSAG ring signature](/blog/ring-signatures-explained/). Anyone can verify that one member of the ring signed, and the signature doesn't reveal which one.
 
 Consensus enforces the ring size. Every input must carry exactly 16 ring members, each one a real output already on the chain, and the network rejects anything else. Because every input on the network uses the same size, ring size can't single out a transaction or the wallet that built it. The daemon's code fixes the size "to prevent information leakage from variable ring sizes".
 
@@ -37,7 +37,7 @@ To stop the same coins being spent twice, each input also carries a key image. I
 
 ## Stealth addresses hide who got paid
 
-A Blocknet address holds two public keys, a spend key and a view key. When someone pays you, their wallet combines your keys with a fresh random number to make a one-time address used for that output only. The address you shared never appears on the chain.
+A Blocknet address holds two public keys, a spend key and a view key. When someone pays you, their wallet combines your keys with a fresh random number to make a [one-time address](/blog/stealth-addresses-explained/) used for that output only. The address you shared never appears on the chain.
 
 Your wallet uses your private view key to scan new transactions and spot the outputs that belong to you, and your spend key to spend them later. Ten payments to the same address land on ten unrelated one-time addresses, so an observer can't add up what an address has received or tell that two payments went to the same person.
 
@@ -47,13 +47,13 @@ The same holds for [Blocknet ID names](/blog/blocknet-id-pay-by-name/). A shortn
 
 Amounts are stored as Pedersen commitments. A commitment locks in a number without showing it, and commitments can be added together. That lets every node check that a transaction's inputs equal its outputs plus the fee without learning any of the amounts.
 
-A commitment on its own could hide a negative amount, which would create coins from nothing. Each output therefore comes with a Bulletproofs range proof that its amount lies within a 64-bit range starting at zero. The proof convinces every node the amount is valid and reveals nothing else about it.
+A commitment on its own could hide a negative amount, which would create coins from nothing. Each output therefore comes with a [Bulletproofs range proof](/blog/bulletproofs-explained/) that its amount lies within a 64-bit range starting at zero. The proof convinces every node the amount is valid and reveals nothing else about it.
 
 The receiver still sees the real figure. Their wallet recovers it with the same shared secret it uses to find the output, so the amount is visible to the two people in the payment and to nobody else.
 
 ## Dandelion++ hides where a transaction started
 
-If a node announced its own transaction to all of its peers at once, someone watching many nodes could guess where it came from by noting who heard it first. Blocknet relays transactions with Dandelion++ to prevent that.
+If a node announced its own transaction to all of its peers at once, someone watching many nodes could guess where it came from by noting who heard it first. Blocknet relays transactions with [Dandelion++](/blog/dandelion-plus-plus-explained/) to prevent that.
 
 A new transaction first travels along a "stem", passed from one peer to a single next peer. At each hop there is a 90% chance it continues along the stem; otherwise it "fluffs" and spreads to the whole network from that point. By the time most nodes see the transaction, it appears to come from a node that may be many hops away from yours. Stem routes are reshuffled every 10 minutes.
 

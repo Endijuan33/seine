@@ -199,7 +199,8 @@ if (unknown.length) { console.error(`unknown post(s): ${unknown.join(', ')}`); p
 if (overlapMode) {
     for (const p of selected) {
         const mine = grams(prose(p.body));
-        const rows = sources.filter((o) => o.slug !== p.slug).map((o) => {
+        // Skip posts that don't parse (for example one being written right now).
+        const rows = sources.filter((o) => o.slug !== p.slug && o.body).map((o) => {
             const theirs = grams(prose(o.body));
             const shared = [...mine].filter((g) => theirs.has(g)).length;
             return { pct: (100 * shared) / Math.max(1, mine.size), shared, slug: o.slug, title: o.data?.title };

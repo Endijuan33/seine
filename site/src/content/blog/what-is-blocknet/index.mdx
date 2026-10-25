@@ -31,7 +31,7 @@ Blocknet's main network started on 2026-02-15 with no premine. Blocks arrive abo
 Every Blocknet payment combines three protections. A ring of 16 outputs hides which coin is being spent, a one-time stealth address hides who receives it, and Pedersen commitments with Bulletproofs hide the amount. There is no transparent mode, so every transaction gets the same privacy without any setting to change.
 </Answer>
 
-Each of these covers one part of a payment:
+Each of these covers one part of a payment, the three things a [privacy coin](/blog/what-is-a-privacy-coin/) keeps off the public record:
 
 - **The sender.** When you spend, your wallet signs with a ring of 16 outputs: yours and 15 others taken from the chain. Anyone checking the transaction can confirm that one of the 16 was spent, without learning which one. The ring size is fixed at 16 by consensus, so ring size never sets one transaction apart from another.
 - **The receiver.** Your published address never appears on the chain. Each payment to you goes to a fresh one-time stealth address that only your wallet can recognize, so two payments to the same person can't be tied together by looking at the chain.
