@@ -47,3 +47,9 @@ Zen 5, laptop mining.
 Covered 2026-10-25: zero pool hashrate and connection errors now belong to the expanded
 [bntpool tracking guide](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate),
 including all 20 languages. Do not create a competing Seine article.
+
+Prepared 2026-10-25: `mine-blocknet-nvidia-gpu/index.mdx` is an unpublished English
+setup/troubleshooting draft. See `batches/2026-10-nvidia-guide/research.md` for the
+source ledger, CLI verification, overlap assessment, and remaining NVIDIA capture
+and measurement work. This does not establish a traffic winner or complete the
+per-card benchmark requirement in row 1.

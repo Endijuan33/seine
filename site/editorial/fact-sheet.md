@@ -521,3 +521,23 @@ These additions use `seine@f96abd9` (v0.2.25 documentation). They supersede the 
 - **Windows defaults:** `seine.exe` prompts for an address/registered shortname and pool; bntpool default is `stratum+tcp://bntpool.com:3333`. Settings default to `./seine-data/seine.config.json` relative to launch directory. Shortnames resolve afresh for each run. Source: `docs/guides/configuration.md:8-28,78-88`.
 - **Optional Windows large pages:** grant Lock pages in memory to the mining account and sign out/back in. `secpol.msc` is available on Pro, Enterprise and Education. Default automatic mode falls back to regular pages. Source: `docs/guides/windows-large-pages.md:3-31`.
 - **PowerShell archive verification:** `Get-FileHash .\seine-windows-x86_64.zip -Algorithm SHA256`, compared against the matching release archive's checksum. Source: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash (checked 2026-10-25).
+
+## NVIDIA setup evidence added October 25, 2026
+
+These details were checked at `seine@77a3a97` against the v0.2.26 CLI help;
+they supplement the earlier source snapshot above.
+
+- Default backend selection includes the CPU and detected NVIDIA devices. Explicit
+  `--backend cpu,nvidia --nvidia-devices 0` selects CPU plus device 0;
+  `--backend nvidia` selects GPU-only mining. Device indices must exist on the host.
+  Sources: `src/config.rs:373–386,1475–1507`; `docs/guides/nvidia.md:3–16`.
+- The Windows x86_64 release bundles `nvrtc64_120_0.dll` and
+  `nvrtc-builtins64_128.dll`, from NVRTC 12.8.61, alongside `seine.exe`.
+  Its display driver is still required. Linux x86_64 requires the driver and
+  compatible NVRTC runtime libraries installed separately. Sources:
+  `.github/workflows/release.yml:83–103`; `docs/guides/nvidia.md:20–33`.
+- The default NVIDIA tuning cache is `seine-data/seine.nvidia-autotune.json`.
+  GPU lane selection uses available device memory, reserves headroom and checks
+  allocations; advertised VRAM divided by 2 GiB is not a guaranteed lane count.
+  Sources: `src/config.rs:130,370,1155–1158`;
+  `src/backend/nvidia.rs:530–585,2874–2882,3350–3358`.
