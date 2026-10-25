@@ -108,5 +108,44 @@
       "hps": 11.047,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     }
-  ]
+  ],
+  "best": [
+    {
+      "name": "Zen 5",
+      "sub": "AMD EPYC 9R45 · 24 workers",
+      "category": "amd",
+      "hps": 44.742
+    },
+    {
+      "name": "Zen 4",
+      "sub": "AMD EPYC 9R14 · 24 workers",
+      "category": "amd",
+      "hps": 35.698
+    },
+    {
+      "name": "Apple M4 Max",
+      "sub": "48 GB MacBook Pro · 16 threads",
+      "category": "apple",
+      "hps": 30.94
+    },
+    {
+      "name": "Graviton4",
+      "sub": "AWS Neoverse V2 · 16 workers",
+      "category": "arm",
+      "hps": 21.503
+    },
+    {
+      "name": "Graviton3",
+      "sub": "AWS Neoverse V1 · 16 workers",
+      "category": "arm",
+      "hps": 18.17
+    },
+    {
+      "name": "Sapphire Rapids",
+      "sub": "Intel Xeon 8488C · 12 workers",
+      "category": "intel",
+      "hps": 13.099
+    }
+  ],
+  "note_best": "Peak measured result per CPU generation; full per-CPU tables in docs/PERFORMANCE.md."
 }

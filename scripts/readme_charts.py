@@ -125,9 +125,10 @@ class Card:
         plt.close(self.fig)
 
 
-def hbar_chart(rows, title, subtitle, footnote, out, fonts, groups=True):
+def hbar_chart(rows, title, subtitle, footnote, out, fonts, groups=True, big=False):
     """Grouped horizontal bars. rows: dicts with name, sub, category, hps."""
-    label_w, row_h, group_gap = 300, 44, 34
+    label_w, group_gap = 300, 34
+    row_h = 54 if big else 44
     order = []
     if groups:
         seen = []
@@ -177,8 +178,13 @@ def hbar_chart(rows, title, subtitle, footnote, out, fonts, groups=True):
             cy = y + row_h / 2
             color = CATEGORY[r["category"]][1]
             bar(ax, cy, r["hps"], 20, color, radius=4 / sx)
-            card.text(32, top + cy - 1, r["name"], 15, FOAM, weight="medium")
-            card.text(32, top + cy + 15, r["sub"], 11.5, FAINT)
+            if big:
+                card.bg.text(32, top + cy + 1, r["name"], fontsize=21 * 0.75, color=FOAM,
+                             fontfamily=card.display, fontweight="heavy")
+                card.text(32, top + cy + 18, r["sub"], 11.5, FAINT, mono=True)
+            else:
+                card.text(32, top + cy - 1, r["name"], 15, FOAM, weight="medium")
+                card.text(32, top + cy + 15, r["sub"], 11.5, FAINT)
             card.text(plot_left + r["hps"] * sx + 10, top + cy + 5.5,
                       f"{r['hps']:.1f}", 15, FOAM, weight="medium", mono=True, knockout=True)
             y += row_h
@@ -202,6 +208,11 @@ def main():
                    "Best measured hashrate per CPU generation on AWS, seine v0.2.22+",
                    "AWS guests, 2 MiB huge pages, best kernel and worker count. Method: docs/PERFORMANCE.md",
                    args.out / "servers.svg", fonts)
+    if data.get("best"):
+        hbar_chart(data["best"], "Best by generation",
+                   "Peak measured hashrate, seine v0.2.22+",
+                   "Best measured configuration per CPU generation. Every CPU tested: docs/PERFORMANCE.md",
+                   args.out / "best.svg", fonts, groups=False, big=True)
     hbar_chart(data["desktop"], "Desktops and laptops",
                "Whole-machine CPU hashrate, seine v0.2.22+",
                "Offline benchmarks on stock hardware. Method: docs/PERFORMANCE.md",

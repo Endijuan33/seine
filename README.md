@@ -60,15 +60,11 @@ automatically. More options: [setup and configuration](docs/guides/configuration
 ## Performance
 
 <p align="center">
-  <img src="docs/assets/charts/servers.svg" alt="Hashrate on AWS servers by CPU generation" width="900">
+  <img src="docs/assets/charts/best.svg" alt="Best measured hashrate by CPU generation: Zen 5 44.7 H/s, Zen 4 35.7, Apple M4 Max 30.9, Graviton4 21.5, Graviton3 18.2, Sapphire Rapids 13.1" width="900">
 </p>
 
-<p align="center">
-  <img src="docs/assets/charts/desktop.svg" alt="Hashrate on desktops and laptops" width="900">
-</p>
-
-Every number is a measured result with paired, repeated runs. Full tables, method
-and per-CPU tuning: **[performance results](docs/PERFORMANCE.md)**.
+Every number is a measured result from repeated runs. Results for every CPU tested,
+method and tuning: **[performance results](docs/PERFORMANCE.md)**.
 
 ## Get the most from your hardware
 
