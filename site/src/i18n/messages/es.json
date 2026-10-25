@@ -39,7 +39,7 @@
   "copied": "Copiado",
   "step3": "Escribe tu dirección de Blocknet",
   "step3TextHtml": "O tu <code>@shortname</code>. Acepta el pool predeterminado y ya estarás minando; seine sigue ajustándose mientras funciona.",
-  "dashboardAlt": "El panel de seine minando en bntpool desde un Apple M4 Max a 30.6 H/s",
+  "dashboardAlt": "El panel de seine minando en bntpool desde un Apple M4 Max a 30,6 H/s",
   "perfTitle": "Tasa de hash",
   "perfSub": "seine prueba sus kernels en tu equipo mientras mina y se queda con el más rápido.",
   "perfAll": "Resultados de todas las CPU probadas",

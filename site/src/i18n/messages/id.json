@@ -39,7 +39,7 @@
   "copied": "Tersalin",
   "step3": "Masukkan alamat Blocknet Anda",
   "step3TextHtml": "Atau <code>@shortname</code> Anda. Terima pool bawaan dan Anda langsung menambang; seine terus menyetel dirinya sendiri selama berjalan.",
-  "dashboardAlt": "Dasbor seine sedang menambang di bntpool dari Apple M4 Max dengan 30.6 H/s",
+  "dashboardAlt": "Dasbor seine sedang menambang di bntpool dari Apple M4 Max dengan 30,6 H/s",
   "perfTitle": "Hashrate",
   "perfSub": "seine menguji kernel-kernelnya di komputer Anda sambil menambang dan memakai yang tercepat.",
   "perfAll": "Hasil untuk setiap CPU yang diuji",

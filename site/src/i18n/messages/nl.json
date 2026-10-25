@@ -39,7 +39,7 @@
   "copied": "Gekopieerd",
   "step3": "Voer je Blocknet-adres in",
   "step3TextHtml": "Of je <code>@shortname</code>. Accepteer de standaardpool en je bent aan het minen; seine blijft zichzelf afstemmen terwijl het draait.",
-  "dashboardAlt": "Het seine-dashboard tijdens het minen op bntpool met een Apple M4 Max op 30.6 H/s",
+  "dashboardAlt": "Het seine-dashboard tijdens het minen op bntpool met een Apple M4 Max op 30,6 H/s",
   "perfTitle": "Hashrate",
   "perfSub": "seine test zijn kernels op je computer tijdens het minen en houdt de snelste.",
   "perfAll": "Resultaten voor elke geteste CPU",

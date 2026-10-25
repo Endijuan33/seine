@@ -183,7 +183,9 @@ function checkTranslation(src, locale) {
     if (ext(t.body) !== ext(src.body)) errors.push(tag('external links must match the source'));
     if (/^# /m.test(stripCode(t.body))) errors.push(tag('the body has an H1'));
     const tErrs = []; checkLinks(t, locale.path, tErrs); errors.push(...tErrs.map(tag));
-    if (d.seoTitle && [...d.seoTitle].length > 32) warnings.push(tag('seoTitle is long for a CJK title; keep it to about 30 characters'));
+    // Search results show about 30 CJK or Thai characters, or about 60 in other scripts.
+    const titleBudget = ['ja', 'ko', 'th', 'zh-Hans', 'zh-Hant'].includes(locale.code) ? 32 : 65;
+    if (d.seoTitle && [...d.seoTitle].length > titleBudget) warnings.push(tag(`seoTitle is ${[...d.seoTitle].length} characters; keep it under ${titleBudget}`));
     return { errors, warnings };
 }
 

@@ -25,6 +25,8 @@ const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
 // Best measured hashrate per generation lives in src/data/benchmarks.json (one place to update).
 const bars = benchmarks.best.map((b) => ({ name: 'labelKey' in b ? t(b.labelKey as UiKey) : b.label, chip: b.chip, threads: b.threads, hps: b.hps }));
 const top = Math.max(...bars.map((b) => b.hps));
+// Hashrates in the locale's number format (49,4 in German, 49.4 in English).
+const hps = new Intl.NumberFormat(localeDef(locale).htmlLang, { maximumFractionDigits: 2 }).format;
 const specs = bars.slice(0, 4).map((b) => ({ hps: b.hps, label: b.name.replace(' · ', ' ') }));
 
 const feats: [UiKey, UiKey][] = [
@@ -77,7 +79,7 @@ const scriptVars = {
   </div>
   <div class="specs" aria-label={t('heroStats')}>
     <div class="wrap">
-      {specs.map((s) => <div><b>{s.hps}</b><span>H/s · {s.label}</span></div>)}
+      {specs.map((s) => <div><b>{hps(s.hps)}</b><span>H/s · {s.label}</span></div>)}
     </div>
   </div>
 
@@ -125,7 +127,7 @@ const scriptVars = {
           <div class="bar">
             <div class="who"><b>{b.name}</b><span>{b.chip} · {t('perfThreads', { n: b.threads })}</span></div>
             <div class="track"><i style={`width:${((100 * b.hps) / top).toFixed(1)}%`}></i></div>
-            <div class="v">{b.hps}<small>H/s</small></div>
+            <div class="v">{hps(b.hps)}<small>H/s</small></div>
           </div>
         ))}
       </div>
@@ -169,7 +171,7 @@ const scriptVars = {
     document.getElementById("primary-dl").href = row.querySelector(".get a").href;
     document.getElementById("primary-label").textContent = labels[os];
   }
-  function mb(n) { return (n / 1048576).toFixed(1) + " MB"; }
+  function mb(n) { return (n / 1048576).toLocaleString(htmlLang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB"; }
   fetch("https://api.github.com/repos/zpalmtree/seine/releases/latest").then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (rel) {
     var sizes = {}; (rel.assets || []).forEach(function (a) { sizes[a.name] = a.size; });
     document.querySelectorAll(".size[data-asset]").forEach(function (el) { var s = sizes[el.dataset.asset]; if (s) el.textContent = mb(s); });

@@ -39,7 +39,7 @@
   "copied": "Skopiowano",
   "step3": "Wpisz swój adres Blocknet",
   "step3TextHtml": "Lub swój <code>@shortname</code>. Zaakceptuj domyślną pulę i już kopiesz; seine dalej dostraja się w trakcie pracy.",
-  "dashboardAlt": "Panel seine podczas kopania na bntpool na Apple M4 Max z wynikiem 30.6 H/s",
+  "dashboardAlt": "Panel seine podczas kopania na bntpool na Apple M4 Max z wynikiem 30,6 H/s",
   "perfTitle": "Hashrate",
   "perfSub": "seine testuje swoje jądra obliczeniowe na Twoim komputerze podczas kopania i zostawia najszybsze.",
   "perfAll": "Wyniki dla wszystkich testowanych CPU",

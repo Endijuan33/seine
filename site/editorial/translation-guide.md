@@ -12,8 +12,13 @@ the same rules with `.md` files.
 2. Translate meaning, not word order: write as a native speaker writing for miners and crypto users
    in that language. Plain, literal and favorable, the same as the English (see
    `writing-guide.md`). Don't add claims, caveats or marketing, and don't drop any.
-3. Keep exactly: numbers and units (H/s, GB, GiB, BNT), chip and product names, commands, code
-   blocks, file names, flags, URLs, `@name`/`$name`, addresses, and lowercase "seine".
+3. Keep exactly: units (H/s, GB, GiB, BNT), chip and product names, commands, code blocks, file
+   names, flags, URLs, `@name`/`$name`, addresses, and lowercase "seine". Keep every number's
+   value, but write numbers in prose with the locale's separators, so "6,000 BNT" can't be read
+   as six: es, pt-BR, de, it, id, tr, vi, nl, el `6.000` and `16,8`; fr, ru, uk, pl `6 000` and
+   `16,8` (no-break space); ar, ja, ko, th, zh keep `6,000` and `16.8`. Numbers inside code blocks,
+   inline code, commands and quoted program output stay byte-identical. Years, versions (0.2.23),
+   model numbers (RTX 4090) and four-digit numbers in Spanish and Polish (`2048`) get no separator.
 4. Front matter: translate `title`, `description` (aim for the same length budget, roughly
    140-160 characters in Latin scripts and 60-90 characters in CJK), `tags` and every FAQ `q`/`a`
    (one line of plain text each, in YAML single quotes; double any `'` inside). Keep the same number

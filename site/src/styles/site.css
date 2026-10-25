@@ -29,6 +29,8 @@
 :is(:lang(zh-Hans), :lang(zh-Hant), :lang(ja), :lang(ko)) :is(h1, h2, h3) { letter-spacing: 0; word-break: keep-all; overflow-wrap: anywhere; }
 /* Scripts where negative tracking hurts legibility. */
 :is(:lang(ar), :lang(th)) :is(h1, h2, h3, .logo) { letter-spacing: 0; }
+/* Arabic letters join: monospace labels switch to the text face with no letter-spacing. */
+:lang(ar) :is(.crumbs, .meta, .block-label, .posts time, .langs, .downloads .size, .bar .who span) { font-family: var(--sans); letter-spacing: 0; }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }

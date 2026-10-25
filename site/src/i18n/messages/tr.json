@@ -39,7 +39,7 @@
   "copied": "Kopyalandı",
   "step3": "Blocknet adresinizi girin",
   "step3TextHtml": "Ya da <code>@shortname</code> adınızı. Varsayılan havuzu kabul ettiğinizde madencilik başlar; seine çalışırken kendini ayarlamaya devam eder.",
-  "dashboardAlt": "bntpool'da Apple M4 Max ile 30.6 H/s hızında madencilik yapan seine paneli",
+  "dashboardAlt": "bntpool'da Apple M4 Max ile 30,6 H/s hızında madencilik yapan seine paneli",
   "perfTitle": "Hashrate",
   "perfSub": "seine madencilik yaparken bilgisayarınızda kernel'lerini test eder ve en hızlısını kullanır.",
   "perfAll": "Test edilen tüm CPU'ların sonuçları",

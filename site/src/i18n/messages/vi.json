@@ -39,7 +39,7 @@
   "copied": "Đã sao chép",
   "step3": "Nhập địa chỉ Blocknet của bạn",
   "step3TextHtml": "Hoặc <code>@shortname</code> của bạn. Giữ pool mặc định là bạn đã bắt đầu đào; seine tiếp tục tự tinh chỉnh trong khi chạy.",
-  "dashboardAlt": "Bảng điều khiển seine đang đào trên bntpool từ Apple M4 Max ở 30.6 H/s",
+  "dashboardAlt": "Bảng điều khiển seine đang đào trên bntpool từ Apple M4 Max ở 30,6 H/s",
   "perfTitle": "Hashrate",
   "perfSub": "seine thử các kernel trên máy của bạn trong lúc đào và giữ lại kernel nhanh nhất.",
   "perfAll": "Kết quả của mọi CPU đã thử nghiệm",
