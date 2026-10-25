@@ -73,6 +73,25 @@ previous experiment and evidence collection, with enough time for all four pairs
 and cleanup. Until measured, its gain is unknown. If the complete protocol cannot
 fit, preserve it as unmeasured rather than publishing a partial comparison.
 
+## Separate software follow-up: cached startup
+
+The earlier Turin cached logs provide a concrete follow-up beyond sample length.
+In `joint-warm-candidate-1`, the miner starts from its remembered 48 workers,
+probes 64 workers at 32.9 seconds, then restores streaming at 36.9 seconds. The
+preserved cache contains a valid 48-worker streaming winner as well as the
+64-worker winner; this was not an absent-cache case.
+
+A source-level hypothesis is startup capacity accounting: `Controller::start`
+initially calls `limits(&cfg, 0)` after backends are initialized, while subsequent
+ticks include those backends' committed arena bytes. The resulting apparent
+headroom increase can set `recovery_pending`, which defers a new kernel action
+during the baseline phase. Verify that sequence with exact capacity/snapshot
+tracing and a targeted regression test before changing it. An earlier restoration
+is a proposed experiment, not another measured or shipping improvement. Keep
+real resource recovery, allocation cooldowns, cache-context checks and kernel
+acknowledgements intact; test both native restart behavior and constrained
+recovery before adoption.
+
 ## Next hardware investigations
 
 1. **Ryzen 7950X and 9950X under native Linux.** Current aggregate inventory makes
