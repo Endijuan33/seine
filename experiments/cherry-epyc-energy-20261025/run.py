@@ -103,13 +103,31 @@ def main():
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        pool.write_text(str(initial_pool) + '\n')
-        restored = int(pool.read_text()) == initial_pool
-        save('outcome.json', {'status': status if restored else 'FAILED', 'failure': failure,
-             'initial_pool_restored': restored, 'finished_at_epoch': time.time()})
+        cleanup, restored, swap_restored = [], False, None
+        try:
+            pool.write_text(str(initial_pool) + '\n')
+            restored = int(pool.read_text()) == initial_pool
+            assert restored
+        except Exception as error:
+            cleanup.append('hugepages: ' + repr(error))
+        if (ROOT / 'task-disabled-swap.txt').exists():
+            try:
+                # This marker records the image's one unused swap file, which
+                # was disabled during host preparation, before any measurement.
+                original = (ROOT / 'task-disabled-swap.txt').read_text().splitlines()
+                assert len(original) == 2 and original[1].split()[0] == '/swap.img'
+                subprocess.run(['swapon', '/swap.img'], check=True, timeout=30)
+                swap_restored = any(line.split()[0] == '/swap.img'
+                                    for line in Path('/proc/swaps').read_text().splitlines()[1:])
+                assert swap_restored
+            except Exception as error:
+                cleanup.append('swap: ' + repr(error))
+        save('outcome.json', {'status': status if not cleanup else 'FAILED', 'failure': failure,
+             'initial_pool_restored': restored, 'initial_swap_restored': swap_restored,
+             'cleanup_failures': cleanup, 'finished_at_epoch': time.time()})
         save('manifest.json', {str(p.relative_to(OUT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                for p in OUT.rglob('*') if p.is_file() and p.name != 'manifest.json'})
-        assert restored
+        assert not cleanup, cleanup
     print(status, flush=True)
 
 

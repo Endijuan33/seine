@@ -24,6 +24,9 @@ No miner default or power-limit change is part of this measurement.
    Do not install an out-of-tree driver or change counter permissions globally.
 3. Require readable, advancing package counters, no swap/OOM, sufficient RAM,
    and full-size reference parity through all 21 guarded dirty-arena transitions.
+   The image's unused `/swap.img` is recorded, disabled before measurement, and
+   restored by the controller's cleanup. No samples were collected in the first
+   preflight, which correctly refused the image's active swap configuration.
    If the host cannot provide qualified energy measurements, collect its
    inventory and terminate early instead of reporting a watts estimate.
 4. Take a 20-second one-worker plumbing measurement. Reserve 64 GiB of explicit
