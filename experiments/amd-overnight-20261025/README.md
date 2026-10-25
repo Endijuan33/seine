@@ -70,6 +70,14 @@ CPU-heavy work on the measured host. Keep original and follow-up phases separate
 
 ## Reporting
 
+After the native controller stops, run `/usr/bin/python3 collect.py --ssh-config
+<campaign-ssh-config> --output <fresh-evidence-directory>` from this directory.
+The collector exits 75 without archiving while measurements are active. Once
+inactive, it preserves raw results, frozen executables and protocol files, checks
+both manifests locally and records the archive checksum. Failed runs are still
+collected; only complete runs with restored settings are marked ready for a
+follow-up experiment. The analysis and landing gates remain separate.
+
 `frozen-builds.json` records the measured revisions, build settings and binary
 checksums. To reconstruct the measured candidate after branch rebases, check out
 its recorded control revision and apply `candidate-runtime.patch`. The patch
