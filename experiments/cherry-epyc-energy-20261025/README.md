@@ -54,6 +54,17 @@ These observations can inform the next worker/power-policy investigation.
 They do not independently justify an automatic miner policy change: productive
 cold/cached selection and resource recovery need validation for that change.
 
+## Separate SMT follow-up
+
+Prepared during the physical-core sweep, before measuring more than 32 workers.
+The host exposes 64 hardware threads and Seine's automatic count ceiling permits
+SMT. `smt.py` therefore checks 32/48/64 workers in four fresh alternating pairs
+against 32, at the unchanged 280 W cap, with 60-second windows and a 30-minute
+phase limit. It reserves 128 GiB of explicit pages and restores the original
+empty pool and unused swap file afterward. Keep this phase's controls separate
+from the earlier 24-worker baseline; do not call 32 the socket's best count
+without evaluating the SMT results.
+
 ## Separate power-limit follow-up
 
 Prepared while the stock worker sweep was running, before taking any reduced-cap
@@ -62,7 +73,8 @@ measurement. Host qualification found `amd_hsmp_hwmon` with a 280 W cap and
 the [kernel documents its writable HSMP power cap](https://kernel.org/doc/html/latest/arch/x86/amd_hsmp.html).
 
 If time permits after the stock sweep and any required count confirmation,
-`power.py` fixes the completed sweep's peak-throughput count and runs four fresh
+`power.py` fixes the completed SMT sweep's peak-throughput count (or the original
+sweep's count if SMT was not run) and runs four fresh
 alternating pairs at 280 W versus 240 W. Each invocation uses 120 seconds of work
 and ten seconds of settling. It records and verifies the HSMP cap before and
 after every invocation, separately from the energy harness's RAPL constraints.

@@ -37,9 +37,12 @@ def main():
     expected = json.loads((ROOT / 'expected-files.json').read_text())
     for name, digest in expected.items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
-    summary = json.loads((ROOT / 'results/sweep/summary.json').read_text())
+    count_phase = 'smt-results' if (ROOT / 'smt-results').exists() else 'results'
+    count_outcome = json.loads((ROOT / count_phase / 'outcome.json').read_text())
+    assert count_outcome['status'].startswith('COMPLETE') and not count_outcome['cleanup_failures']
+    summary = json.loads((ROOT / count_phase / 'sweep/summary.json').read_text())
     workers = summary['observed_peak_threads']
-    assert workers in (8, 16, 24, 32)
+    assert workers in (8, 16, 24, 32, 48, 64)
     assert time.time() + 1500 + 120 < args.deadline_epoch
     OUT.mkdir(exist_ok=False)
     controller.OUT = OUT
@@ -50,7 +53,7 @@ def main():
         'settle_seconds': 10, 'baseline_binary_sha256': expected['seine'],
         'controller_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'initial_hugepages': original_pool, 'initial_swaps': original_swaps,
-        'selection': 'Peak-throughput count from completed stock worker sweep; all power pairs are fresh',
+        'selection': 'Peak-throughput count from ' + count_phase + '; all power pairs are fresh',
         'gain_rule': 'All four J/hash pairs improve, upper descriptive 95% delta below zero, and lower throughput delta at least -5%.'})
     status, failure, completed = 'FAILED', None, []
     try:
