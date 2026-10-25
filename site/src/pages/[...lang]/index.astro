@@ -5,6 +5,7 @@ import heroSquare from '../../assets/hero-square.webp';
 import benchmarks from '../../data/benchmarks.json';
 import { LOCALES, localizePath, localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
 import { useTranslations, type UiKey } from '../../i18n/ui';
+import { getPosts } from '../../lib/blog';
 import Base from '../../layouts/Base.astro';
 import { DEFAULT_IMAGE, ORGANIZATION, REPO, SITE_URL } from '../../lib/site';
 
@@ -12,6 +13,15 @@ export const getStaticPaths = localeStaticPaths;
 
 const locale = localeFromParam(Astro.params.lang);
 const t = useTranslations(locale);
+const posts = await getPosts(locale);
+const guides = (slugs: string[]) => slugs.map((slug) => {
+    const post = posts.find((p) => p.slug === slug);
+    if (!post) throw new Error(`Missing homepage guide: ${slug} (${locale})`);
+    return post;
+});
+const downloadGuides = guides(['mine-blocknet-on-mac', 'mine-blocknet-nvidia-gpu', 'antivirus-flags-crypto-miner']);
+const setupGuides = guides(['how-to-mine-blocknet', 'blocknet-wallet-for-mining']);
+const performanceGuides = guides(['blocknet-mining-hardware-hashrate', 'huge-pages-blocknet-mining']);
 const RELEASE = `${REPO}/releases/latest/download/`;
 
 const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
@@ -101,6 +111,9 @@ const scriptVars = {
         <a href={`https://bntpool.com/blog/${locale === 'en' ? '' : locale.toLowerCase() + '/'}track-your-miner-on-bntpool/#zero-hashrate`}>{t('poolHelp')}</a>
         <a href={`${REPO}/blob/master/docs/BUILDING.md`}>{t('dlBuild')}</a>
       </div>
+      <div class="dl-foot">
+        {downloadGuides.map((post) => <a href={post.path}>{post.title}</a>)}
+      </div>
     </div>
   </section>
 
@@ -113,6 +126,9 @@ const scriptVars = {
           <li><div><b>{t('step2')}</b><span set:html={t('step2TextHtml')} /><br><span class="cmd"><code>./seine</code><button type="button" data-copy="./seine">{t('copy')}</button></span></div></li>
           <li><div><b>{t('step3')}</b><span set:html={t('step3TextHtml')} /></div></li>
         </ol>
+        <div class="dl-foot">
+          {setupGuides.map((post) => <a href={post.path}>{post.title}</a>)}
+        </div>
       </div>
       <div class="shot">
         <Picture src={dashboard} formats={['avif']} fallbackFormat="webp" widths={[700, 1050, 1400]}
@@ -132,6 +148,9 @@ const scriptVars = {
             <div class="v">{hps(b.hps)}<small>H/s</small></div>
           </div>
         ))}
+      </div>
+      <div class="dl-foot">
+        {performanceGuides.map((post) => <a href={post.path}>{post.title}</a>)}
       </div>
       <div class="perf-foot">
         <a href={`${REPO}/blob/master/docs/PERFORMANCE.md`}>{t('perfAll')}</a> ·

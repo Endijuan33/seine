@@ -23,6 +23,15 @@ rankings. The build fails if a published post has no row here.
 pair "Blocknet" with "mining", "miner" or "Argon2id" rather than standing alone. Posts don't
 explain the collision to readers (owner decision 2026-10-25: assume the reader knows Blocknet).
 
+## Main site and blog boundaries
+
+The homepage `/` owns **Seine download / Blocknet miner software**: supported operating
+systems, release downloads, a short setup summary and measured performance highlights.
+`/#download`, `/#start` and `/#performance` are sections of that same canonical page,
+not separate landing pages. The guides own detailed installation, wallet setup,
+hardware sizing and tuning. Homepage links route readers to those existing owners
+in their selected language; do not create parallel download or tuning articles.
+
 ## Current ownership
 
 | Primary keyword cluster | URL | Search job | Supporting phrases |
