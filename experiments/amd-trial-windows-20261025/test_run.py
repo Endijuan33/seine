@@ -13,12 +13,17 @@ class AdmissionTests(unittest.TestCase):
             with self.subTest(unit=unit), self.assertRaises(AssertionError):
                 validate_active_units(unit + ' loaded active running test\n')
 
-    def test_both_prior_collections_and_restoration_are_required(self):
+    def test_all_prior_collections_and_restoration_are_required(self):
         data = {'experiments_finished': True, 'verified_collections': {
             name: {'archive_sha256': 'a' * 64, 'verified_manifest_entries': 50,
                    'settings_restored': True}
-            for name in ('amd-overnight-20261025', 'amd-ring-locality-20261025')}}
+            for name in ('amd-overnight-20261025', 'amd-ring-locality-20261025',
+                         'amd-page-size-20261025')}}
         validate_handoff(data)
+        missing_page = copy.deepcopy(data)
+        del missing_page['verified_collections']['amd-page-size-20261025']
+        with self.assertRaises(KeyError):
+            validate_handoff(missing_page)
         for field, value in (('archive_sha256', 'not-a-checksum'),
                              ('verified_manifest_entries', 0), ('settings_restored', False)):
             broken = copy.deepcopy(data)

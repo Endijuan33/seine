@@ -60,6 +60,11 @@ leave kernel and worker counts automatic, with all 64 logical CPUs available.
    cold-run order. Preserve count/kernel cache restoration messages and context.
 6. Run the established ordinary-page four-CPU resource lifecycle checks: memory
    pressure, worker parking, contention, constrained restart, recovery and opt-out.
+   Use the identical complete resource fixture that passed the separately
+   collected Turin resource supplement: bounded 2 GiB reclaim allocation inside
+   the owned cgroup during the no-arena phase, 90 seconds for memory recovery,
+   mandatory positive memory-high events and PSI, and bounded helper cleanup.
+   The original fixture that failed to generate reclaim is not sufficient.
 7. Restore settings and collect checksummed raw logs, caches, counters, reports,
    frozen sources and executable identities before further native work or deletion.
 
@@ -83,7 +88,8 @@ units cannot overwrite earlier runs. Record each original and copied file hash.
 Use outer unit `seine-amd-short-windows.service` with a 14,460-second maximum,
 SIGINT shutdown and bounded control-group cleanup. The wrapper requires
 `prior-evidence-collected.json` with verified archives and restored settings for
-both prior native experiments, and `run-authorization.json` with the exact
+all three prior native experiments (productive, ring and page size), and
+`run-authorization.json` with the exact
 ledger-recorded rental reservation, funded-credit horizon and controller/deletion
 deadlines. Provider deletion must precede both the funded horizon and goal deadline. It rejects
 other active campaign units before running the controller's own preflight.
@@ -101,3 +107,11 @@ with the existing $3.25 Genoa allowance, that is $16.45 of the approved $25.
 Round rental exposure conservatively, include provisioning and earlier phases,
 and terminate promptly when finished. The dollar cap does not extend the goal's
 time limit, and provider shutdown alone does not stop Cherry billing.
+
+Funding update, recorded before this experiment starts: a USD 1 top-up was
+confirmed at 09:45 EDT under the existing USD 25 campaign authorization. Total
+funded credit is USD 14, covering eleven hours at USD 1.20/hour. The prepared
+extension reserves USD 13.20 for Cherry and USD 3.25 for AWS (USD 16.45 total),
+with provider deletion before **14:25 EDT**. Its admission requires all prior
+evidence collected, settings restored, and the complete four-hour allowance
+plus collection/deletion margin. Existing measurements retain their deadlines.

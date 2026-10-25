@@ -15,7 +15,8 @@ OWN_UNIT = 'seine-amd-short-windows.service'
 
 def validate_handoff(handoff):
     assert handoff['experiments_finished'] is True
-    for campaign in ('amd-overnight-20261025', 'amd-ring-locality-20261025'):
+    for campaign in ('amd-overnight-20261025', 'amd-ring-locality-20261025',
+                     'amd-page-size-20261025'):
         evidence = handoff['verified_collections'][campaign]
         assert re.fullmatch(r'[0-9a-f]{64}', evidence['archive_sha256'])
         assert evidence['verified_manifest_entries'] > 0
