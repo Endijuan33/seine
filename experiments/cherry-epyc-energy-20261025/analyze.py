@@ -27,9 +27,12 @@ def verify(folder):
 
 def analyze(root):
     qualification = read(root / 'qualification/summary.json')
+    kernel = read(root / 'qualification/kernel.json')
+    assert kernel['exit_code'] == 0 and kernel['stdout'].split()[0] == 'Linux'
     result = {'scope': 'Whole-invocation CPU package energy; excludes separately unmeasured DRAM and wall losses',
         'hardware': qualification, 'binary_sha256': read(root / 'expected-files.json')['seine'],
-        'source_revision': (root / 'source-revision.txt').read_text().strip(), 'phases': {}}
+        'source_revision': (root / 'source-revision.txt').read_text().strip(),
+        'os': 'Linux', 'os_kernel_release': kernel['stdout'].split()[2], 'phases': {}}
     parity = (root / 'results/reference-parity.log').read_text().splitlines()
     assert len([line for line in parity if line.startswith('PASS nonce=')]) == 21
     for name in ('results', 'smt-results'):
@@ -99,6 +102,7 @@ def export_records(result, destination):
     assert all(d['Size'] == '16 GB' and d['Configured Memory Speed'] == '4800 MT/s' for d in dimms)
     common = {'campaign': 'cherry-epyc-energy-20261025',
         'hardware': cpu['Model name'], 'category': 'amd', 'backend': 'cpu',
+        'os': result['os'], 'os_kernel_release': result['os_kernel_release'],
         'cpu_vendor': cpu['Vendor ID'], 'cpu_family': int(cpu['CPU family']),
         'cpu_model': int(cpu['Model']), 'sockets': int(cpu['Socket(s)']),
         'physical_cores': int(cpu['Core(s) per socket']) * int(cpu['Socket(s)']),
