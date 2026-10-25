@@ -56,6 +56,7 @@ For the raw CLI output, run:
 | `--work-allocation` | `adaptive` or `static`, default `adaptive` | Nonce chunk split policy across active backends. |
 | `--sub-round-rebalance-ms` | integer `>=0`, default `0` | Optional in-round adaptive rebalance interval (`0` disables). |
 | `--disable-sse` | bool flag (default `false`) | Disables daemon tip SSE; miner falls back to refresh timer only. |
+| `--disable-update-check` | bool flag (default `false`) | Disables the startup and 12-hourly GitHub check for newer seine releases. |
 | `--refresh-on-same-height` | bool flag (default `false`) | Refresh on same-height `new_block` hash change events. |
 | `--ui` | `auto`, `tui`, `plain`; default `auto` | Output mode selection. |
 

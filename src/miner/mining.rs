@@ -2799,6 +2799,7 @@ mod tests {
             work_allocation: WorkAllocation::Adaptive,
             sub_round_rebalance_interval: None,
             sse_enabled: true,
+            update_check_enabled: false,
             refresh_on_same_height: false,
             ui_mode: crate::config::UiMode::Plain,
             data_dir: std::path::PathBuf::from("./data"),

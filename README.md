@@ -105,6 +105,11 @@ startup overrides.
 Short terminal windows use a compact dashboard that keeps the CPU thread count,
 mining state, and hashrate visible. Press `q` or `Ctrl+C` to quit.
 
+Seine checks GitHub for a newer release at startup and every 12 hours. When one
+exists, the dashboard header shows `update vX.Y.Z available` and the log gets
+one line with the download link (plain and API modes log the same line). The
+check never interrupts mining; pass `--disable-update-check` to turn it off.
+
 On Windows, a fatal error after double-clicking `seine.exe` with no arguments
 leaves its console open until you press Enter. Launches from an existing shell,
 invocations with arguments, and redirected input/output do not pause.

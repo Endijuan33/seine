@@ -969,6 +969,9 @@ pub(crate) fn should_enable_tui(cfg: &Config) -> bool {
 }
 
 fn build_tui_state(cfg: &Config, backends: &[BackendSlot]) -> TuiState {
+    // Read before locking the dashboard; the update checker takes these locks
+    // in the opposite order.
+    let update = crate::update_check::for_new_dashboard();
     let tui_state = new_tui_state();
     if let Ok(mut s) = tui_state.lock() {
         s.mode = match cfg.mode {
@@ -991,6 +994,17 @@ fn build_tui_state(cfg: &Config, backends: &[BackendSlot]) -> TuiState {
             "relaxed".to_string()
         };
         s.version = crate::version::ui_display_version();
+        if let Some(update) = update {
+            s.update_available = Some(update.latest);
+            if let Some(message) = update.log_message {
+                s.push_log(tui::LogEntry {
+                    elapsed_secs: 0.0,
+                    level: tui::LogLevel::Info,
+                    tag: "UPDATE".to_string(),
+                    message,
+                });
+            }
+        }
         if let Some(hint) = cfg.nvidia_hint {
             s.push_log(tui::LogEntry {
                 elapsed_secs: 0.0,
@@ -3730,6 +3744,7 @@ pub(crate) mod tests {
             work_allocation: WorkAllocation::Adaptive,
             sub_round_rebalance_interval: None,
             sse_enabled: true,
+            update_check_enabled: false,
             refresh_on_same_height: false,
             ui_mode: crate::config::UiMode::Plain,
             data_dir: std::path::PathBuf::from("./data"),

@@ -638,6 +638,10 @@ struct Cli {
     #[arg(long, action = ArgAction::SetTrue)]
     disable_sse: bool,
 
+    /// Disable the background check for newer seine releases on GitHub.
+    #[arg(long, action = ArgAction::SetTrue)]
+    disable_update_check: bool,
+
     /// Refresh on same-height new_block hash changes (disabled by default to avoid replay churn).
     #[arg(long, action = ArgAction::SetTrue)]
     refresh_on_same_height: bool,
@@ -782,6 +786,7 @@ pub struct Config {
     pub work_allocation: WorkAllocation,
     pub sub_round_rebalance_interval: Option<Duration>,
     pub sse_enabled: bool,
+    pub update_check_enabled: bool,
     pub refresh_on_same_height: bool,
     pub ui_mode: UiMode,
     pub data_dir: PathBuf,
@@ -1292,6 +1297,7 @@ impl Config {
             work_allocation: cli.work_allocation,
             sub_round_rebalance_interval: optional_duration_from_millis(cli.sub_round_rebalance_ms),
             sse_enabled: !cli.disable_sse,
+            update_check_enabled: !cli.disable_update_check,
             refresh_on_same_height: cli.refresh_on_same_height,
             ui_mode: cli.ui,
             data_dir: cli.data_dir,
@@ -3378,6 +3384,7 @@ mod tests {
             work_allocation: WorkAllocation::Adaptive,
             sub_round_rebalance_ms: 0,
             disable_sse: false,
+            disable_update_check: false,
             refresh_on_same_height: false,
             ui: UiMode::Auto,
             api_server: false,
