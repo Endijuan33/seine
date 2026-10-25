@@ -113,6 +113,48 @@ def compare(folder, expected, workers, ring, pairs, seconds):
         'summary': summary, 'observations': observations}
 
 
+def diagnostics(root):
+    definitions_path = root / 'results/perf-event-definitions.json'
+    definitions = {event['EventName']: event for event in read(definitions_path)}
+    encodings = {'l2_cache_req_stat.dc_access_in_l2': 'cpu/event=0x64,umask=0xf8/',
+                 'l2_cache_req_stat.ls_rd_blk_c': 'cpu/event=0x64,umask=8/'}
+    output = {'scope': 'Separate 30-second whole-invocation diagnostic of ring 64; no uncounted warmup.',
+        'limitations': 'Userspace counters aggregate worker threads, including SMT siblings; cycles are not elapsed latency. L2 requests are not DRAM traffic. HSMP integer GB/s readings are non-atomic firmware estimates, not integrated bytes/hash. Samples include startup and shutdown.',
+        'event_definitions_sha256': digest(definitions_path), 'observations': []}
+    for workers in (32, 64):
+        prefix = root / 'results' / ('profile-control-' + str(workers))
+        status_path = Path(str(prefix) + '-status.json')
+        if not status_path.exists() or read(status_path)['exit_code'] != 0:
+            output['observations'].append({'workers': workers, 'status': 'UNAVAILABLE'})
+            continue
+        assert all(definitions[event]['Encoding'] == encoding for event, encoding in encodings.items())
+        report = read(Path(str(prefix) + '-bench.json'))
+        hsmp = read(Path(str(prefix) + '-hsmp.json'))
+        counters = [json.loads(line) for line in Path(str(prefix) + '-perf.json').read_text().splitlines()]
+        assert len(counters) == 4 and all(v['pcnt-running'] == 100 for v in counters)
+        assert len({v['event-runtime'] for v in counters}) == 1
+        assert report['bench_kind'] == 'end-to-end' and report['bench_secs'] == 30
+        assert report['rounds'] == 1 and report['warmup_rounds'] == 0
+        assert report['cpu_threads'] == workers and hsmp['exit_code'] == 0
+        assert report['config_fingerprint']['cpu_kernel'] == 'avx512-256-stream'
+        assert report['config_fingerprint']['cpu_page_mode'] == 'large'
+        assert all(sum(b['memory_explicit_large_workers'] for b in run['backend_runs']) == workers
+                   for run in report['runs'])
+        hashes = sum(run['hashes'] for run in report['runs'])
+        raw = {v['event']: float(v['counter-value']) for v in counters}
+        assert all(math.isfinite(value) and value > 0 for value in raw.values())
+        assert set(raw) == {'cycles:u', 'instructions:u', *(event + ':u' for event in encodings)}
+        output['observations'].append({'workers': workers, 'status': 'COMPLETE',
+            'completed_hashes': hashes, 'counter_scheduling_percent': 100, 'raw_user_counters': raw,
+            'user_counter_per_completed_hash': {key: value / hashes for key, value in raw.items()},
+            'hsmp_units': hsmp['units'], 'hsmp_samples': [s['values'] for s in hsmp['samples']],
+            'hsmp_read_errors': [s['errors'] for s in hsmp['samples'] if s['errors']],
+            'benchmark_sha256': digest(Path(str(prefix) + '-bench.json')),
+            'perf_sha256': digest(Path(str(prefix) + '-perf.json')),
+            'hsmp_sha256': digest(Path(str(prefix) + '-hsmp.json'))})
+    return output
+
+
 def analyze(root):
     collection = inspect_collected(root)
     assert collection['ready_for_followup']
@@ -149,6 +191,7 @@ def analyze(root):
             'Socket(s)', 'CPU(s)', 'Core(s) per socket', 'Thread(s) per core', 'NUMA node(s)')},
         'expected_binary_sha256': {str(ring): expected['ring-' + str(ring)] for ring in (64, 32, 16)},
         'comparisons': comparisons, 'shortlist': selection['shortlist'], 'shipping_change_accepted': False}
+    result['diagnostics'] = diagnostics(root)
     confirmation = root / 'confirmation-results'
     if confirmation.exists():
         assert selection['shortlist'] is not None
