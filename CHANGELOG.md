@@ -7,6 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## v0.2.26
 
+- **Help diagnose mining failures:** privacy-preserving warning and error summaries now identify affected hardware and code paths, including early failures and unclean restarts, while honoring your telemetry opt-out.
 - **Help improve mining on your hardware:** fixes missing CPU and GPU performance reports during pool mining and includes memory and CPU settings so future optimizations can target comparable machines. Your telemetry opt-out preference is preserved.
 
 **For self-hosted telemetry collectors:** update the collector before upgrading

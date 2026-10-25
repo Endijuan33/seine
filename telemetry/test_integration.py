@@ -135,3 +135,59 @@ for identity in identities:
 assert analysis('data_quality.sql')['status'] == 'ok'
 print('PASS: schema 1/2 compatibility, environment/build/RAM/limit cohort separation, '
       'per-report deduplication, stable cohort thresholds, sustained empty-sample detection and recovery')
+
+assert analysis('diagnostics.sql')['status'] == 'unavailable'
+diagnostic_fixture = json.loads(Path(__file__).with_name('diagnostics-fixture.json').read_text())
+
+def diagnostic_report():
+    value = json.loads(json.dumps(diagnostic_fixture))
+    value['installation_id'] = uuid.uuid4().hex
+    value['report_id'] = uuid.uuid4().hex
+    value['miner_version'] = 'diagnostics-fixture'
+    return value
+
+valid_diagnostic = diagnostic_report()
+assert send(valid_diagnostic) == 204
+private = diagnostic_report()
+private['diagnostics']['events'][0]['message'] = 'PRIVATE WALLET'
+assert send(private) == 422
+wrong_schema = diagnostic_report()
+wrong_schema['schema_version'] = 2
+assert send(wrong_schema) == 422
+forbidden_source = diagnostic_report()
+forbidden_source['diagnostics']['events'][0]['source'] = '/home/private/src/main.rs'
+assert send(forbidden_source) == 422
+short_failure = diagnostic_report()
+short_failure['window_secs'] = 1
+short_failure['backends'] = []
+short_failure['diagnostics']['reason'] = 'failure'
+assert send(short_failure) == 204
+
+# One noisy installation does not count as a fleet incident; three do.
+for index in range(3):
+    failure = diagnostic_report()
+    failure['diagnostics']['events'][0]['code'] = 'backend_error'
+    failure['diagnostics']['events'][0]['count'] = 1000
+    insert(failure, 0)
+    if index == 0:
+        repeated = json.loads(json.dumps(failure))
+        repeated['report_id'] = uuid.uuid4().hex
+        insert(repeated, 1)
+    diagnostics = analysis('diagnostics.sql')
+    assert diagnostics['status'] == ('attention' if index == 2 else 'ok'), diagnostics
+clusters = [c for c in diagnostics['issue_clusters'] if c['code'] == 'backend_error']
+assert len(clusters) == 1 and clusters[0]['affected_installations'] == 3
+assert clusters[0]['occurrences'] == 4000
+assert 'installation_id' not in json.dumps(diagnostics)
+
+# Final reports cannot trigger the missing-periodic-samples alarm.
+for _ in range(5):
+    failure = diagnostic_report()
+    failure['backends'] = []
+    failure['diagnostics']['reason'] = 'failure'
+    for hours in (4, 2, 1):
+        failure['report_id'] = uuid.uuid4().hex
+        insert(failure, hours)
+assert analysis('data_quality.sql')['status'] == 'ok'
+assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
+print('PASS: schema 3 diagnostics, early failures, private-data rejection, installation-weighted incident thresholds and periodic/final separation')

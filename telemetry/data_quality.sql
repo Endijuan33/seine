@@ -10,6 +10,7 @@ WITH reports AS (
     FROM telemetry_reports
     WHERE received_at >= now() - interval '6 hours'
       AND NOT (payload->>'debug_build')::boolean
+      AND coalesce(payload #>> '{diagnostics,reason}', 'periodic') = 'periodic'
 ), installations AS (
     SELECT installation_id, version, count(*) AS reports,
            bool_or(has_samples) AS has_samples,

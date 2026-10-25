@@ -258,6 +258,35 @@ pub(crate) fn run_with_thread_control(
     thread_control: Option<thread_control::ThreadControl>,
     history: Arc<session::SessionHistory>,
 ) -> Result<()> {
+    if cfg.bench {
+        return bench::run_benchmark(cfg, shutdown.as_ref());
+    }
+    // Install before address resolution, backend initialization and autotuning so
+    // failures before productive work are observable too. No network I/O here.
+    let telemetry = cfg
+        .hardware_telemetry
+        .as_ref()
+        .and_then(|options| crate::hardware_telemetry::start(options, cfg).ok());
+    let recorder = telemetry.as_ref().map(|(recorder, _)| recorder.clone());
+    let result = run_with_thread_control_inner(cfg, shutdown, thread_control, history, recorder);
+    if let Err(error) = &result {
+        crate::diagnostics::record(
+            seine_telemetry::DiagnosticCode::RunFailed,
+            crate::diagnostics::classify(&format!("{error:#}")),
+            None,
+        );
+    }
+    drop(telemetry);
+    result
+}
+
+fn run_with_thread_control_inner(
+    cfg: &Config,
+    shutdown: Arc<AtomicBool>,
+    thread_control: Option<thread_control::ThreadControl>,
+    history: Arc<session::SessionHistory>,
+    telemetry: Option<crate::hardware_telemetry::Recorder>,
+) -> Result<()> {
     if cfg!(debug_assertions) {
         warn(
             "MINER",
@@ -486,16 +515,9 @@ pub(crate) fn run_with_thread_control(
     let cfg = &runtime_cfg;
 
     let backend_executor = backend_executor::BackendExecutor::new();
-    let _telemetry_worker =
-        cfg.hardware_telemetry
-            .as_ref()
-            .and_then(|options| match crate::hardware_telemetry::start(options) {
-                Ok((recorder, worker)) => {
-                    backend_executor.set_hardware_telemetry(recorder);
-                    Some(worker)
-                }
-                Err(_) => None,
-            });
+    if let Some(recorder) = telemetry {
+        backend_executor.set_hardware_telemetry(recorder);
+    }
     let daemon_client = if let Some(token) = cfg.token.clone() {
         Some(ApiClient::new(
             cfg.api_url.clone(),
@@ -2856,6 +2878,11 @@ fn remove_backend_by_id(
     };
 
     let slot = backends.remove(idx);
+    crate::diagnostics::record(
+        seine_telemetry::DiagnosticCode::BackendQuarantined,
+        seine_telemetry::DiagnosticKind::General,
+        Some(slot.backend.name()),
+    );
     backend_executor.quarantine_backend(slot.id, Arc::clone(&slot.backend));
     backend_executor.remove_backend_worker(slot.id, &slot.backend);
     backend_executor.prune(backends);

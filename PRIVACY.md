@@ -2,9 +2,9 @@
 
 Last updated: October 25, 2026.
 
-This policy describes hardware and performance telemetry in the Seine miner.
+This policy describes hardware, performance and reliability telemetry in the Seine miner.
 Telemetry helps the project understand which hardware is in use, identify
-performance differences and prioritize optimization work.
+performance differences, diagnose failures and prioritize fixes and optimization work.
 
 ## Collection and controls
 
@@ -37,6 +37,17 @@ settings, hash counts and measurement durations. Reports
 identify measurement windows in which settings changed or telemetry samples
 were missed so those windows can be excluded from performance comparisons.
 
+Reliability summaries include bounded counts of warnings, errors, backend failures
+and quarantines, failed mining runs and Rust panics. Each summary includes a
+repository-relative source file and line, a fixed failure category, backend type
+where known, occurrence counts and elapsed times within the mining run. Categories
+are hints derived locally; free-form error messages, panic contents and stack
+traces are never uploaded. Reports include the source revision and fingerprint,
+pool-or-daemon mode, requested backend types, requested CPU threads, page and
+affinity policies and whether CPU thread tuning is enabled. They also identify
+truncated summaries and an unclean previous run, which may reflect a forced stop
+or power loss rather than a crash.
+
 Seine creates a random installation ID in its data directory to distinguish
 installations and avoid counting frequent reports as additional users. This ID
 is not derived from a wallet, CPU, GPU or other hardware identifier. Each report
@@ -50,10 +61,22 @@ hardware serial numbers, command lines or raw logs.
 
 ## Transmission, access and retention
 
-The first report is attempted after five minutes of a mining run, followed by
-hourly reports. Reports use HTTPS, except when explicitly configured for a local
-loopback test server. Collection failures do not stop mining. Failed reports are
-discarded instead of being queued for later upload.
+Regular reports are attempted after five minutes of a mining run, followed by
+hourly reports. A mining run that ends with diagnostics can attempt a final report,
+including failures before the first regular report. Reports use HTTPS, except
+when explicitly configured for a local loopback test server. Collection failures
+do not stop mining.
+
+Seine keeps at most one pending diagnostic report (up to 32 KiB) and a small
+run-state marker in its data directory. A failed diagnostic upload can be retried
+on a later reporting cycle or launch, with the same report ID to avoid duplicate
+storage. New diagnostics may replace older pending diagnostics. Reports older
+than 24 hours are discarded when next checked, rather than uploaded. The local
+upload cooldown limits repeated attempts across launches. Ordinary performance
+reports without diagnostics are not queued. Opting out suppresses pending uploads
+and removes pending state when the miner can acquire it; an active reporting
+worker also checks opt-out before sending. A forced termination may leave the
+marker for the next launch. No crash dump is collected.
 
 The receiving server necessarily sees the connection's IP address. IP addresses
 are not part of report payloads or stored telemetry records. The supplied

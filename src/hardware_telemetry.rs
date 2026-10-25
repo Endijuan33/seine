@@ -120,6 +120,9 @@ fn resolve_with_default(
         fs::rename(temporary, &path)?;
     }
     if !preferences.enabled || preferences.endpoint.is_none() {
+        if !preferences.enabled {
+            crate::diagnostics::clear_disabled(&path);
+        }
         return Ok(None);
     }
     let endpoint = preferences.endpoint.unwrap();
@@ -245,6 +248,7 @@ impl Recorder {
 pub(crate) struct Worker {
     stop: Sender<()>,
     thread: Option<thread::JoinHandle<()>>,
+    _diagnostics: crate::diagnostics::Guard,
 }
 
 impl Drop for Worker {
@@ -301,13 +305,39 @@ fn http_client() -> reqwest::Result<reqwest::blocking::Client> {
         .build()
 }
 
-fn upload(client: &reqwest::blocking::Client, options: &Options, report: &Report) {
-    if report.validate() && still_enabled(options) {
-        let _ = client.post(&options.endpoint).json(report).send();
-    }
+fn upload(client: &reqwest::blocking::Client, options: &Options, report: &Report) -> bool {
+    report.validate()
+        && still_enabled(options)
+        && serde_json::to_vec(report)
+            .is_ok_and(|body| body.len() <= seine_telemetry::MAX_BODY_BYTES)
+        && client
+            .post(&options.endpoint)
+            .json(report)
+            .send()
+            .is_ok_and(|r| r.status() == reqwest::StatusCode::NO_CONTENT)
 }
 
-pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
+fn send_report(
+    client: &reqwest::blocking::Client,
+    options: &Options,
+    report: &Report,
+    store: Option<&crate::diagnostics::Store>,
+) -> bool {
+    still_enabled(options)
+        && store.is_none_or(|s| s.admit_upload(&options.installation_id))
+        && upload(client, options, report)
+}
+
+pub(crate) fn start(options: &Options, cfg: &crate::config::Config) -> Result<(Recorder, Worker)> {
+    start_with_context(options, crate::diagnostics::context(cfg))
+}
+
+fn start_with_context(
+    options: &Options,
+    context: seine_telemetry::Diagnostics,
+) -> Result<(Recorder, Worker)> {
+    let guard = crate::diagnostics::install(context);
+    let diagnostics = Arc::clone(&guard.0);
     let recorder = Recorder(
         Arc::new(Mutex::new(BTreeMap::new())),
         Arc::new(AtomicBool::new(false)),
@@ -321,20 +351,66 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
             let Ok(client) = http_client() else {
                 return;
             };
+            if !still_enabled(&options) {
+                return;
+            }
+            let store =
+                crate::diagnostics::Store::open(&options.state_path, &options.installation_id).map(
+                    |(store, unclean)| {
+                        diagnostics.set_previous_unclean(unclean);
+                        store
+                    },
+                );
+            // One bounded replay on the next launch, using the same report ID for deduplication.
+            if let Some(store) = &store {
+                if let Some(pending) = store.pending(&options.installation_id) {
+                    if send_report(&client, &options, &pending, Some(store)) {
+                        store.clear_pending();
+                    }
+                }
+            }
             let mut since = Instant::now();
-            // Wait for productive work, then report hourly. A bounded channel wakes shutdown.
+            // Regular reports stay hourly; shutdown/failure wakes the worker immediately.
             let mut delay = Duration::from_secs(300);
             loop {
-                if stopped.recv_timeout(delay).is_ok() || !still_enabled(&options) {
+                let final_report = !matches!(
+                    stopped.recv_timeout(delay),
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout)
+                );
+                if !still_enabled(&options) {
+                    if let Some(store) = &store {
+                        store.clear_pending();
+                        store.finish();
+                    }
+                    break;
+                }
+                if let Some(store) = &store {
+                    if let Some(pending) = store.pending(&options.installation_id) {
+                        if send_report(&client, &options, &pending, Some(store)) {
+                            store.clear_pending();
+                        }
+                    }
+                }
+                if let Some(store) = &store {
+                    store.heartbeat(&options.installation_id);
+                }
+                let diagnostic_snapshot = diagnostics.snapshot(final_report);
+                let has_diagnostics = !diagnostic_snapshot.events.is_empty()
+                    || diagnostic_snapshot.previous_run_unclean
+                    || diagnostic_snapshot.dropped_events > 0;
+                if final_report && !has_diagnostics {
+                    if let Some(store) = &store {
+                        store.finish();
+                    }
                     break;
                 }
                 let backends = samples.drain();
                 let window_secs = backends
                     .iter()
-                    .fold(since.elapsed().as_secs(), |secs, sample| {
+                    .fold(since.elapsed().as_secs().max(1), |secs, sample| {
                         secs.max(sample.observed_secs.ceil() as u64)
                     });
-                let report = Report {
+                let mut report = Report {
                     schema_version: SCHEMA_VERSION,
                     installation_id: options.installation_id.clone(),
                     report_id: match random_id() {
@@ -355,10 +431,40 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
                     hardware: hardware(),
                     window_secs,
                     backends,
+                    diagnostics: Some(diagnostic_snapshot),
                 };
                 since = Instant::now();
-                // Failed samples are discarded; no offline spool or retry storms.
-                upload(&client, &options, &report);
+                // Keep uploads within the collector limit even on unusually large rigs.
+                while serde_json::to_vec(&report)
+                    .is_ok_and(|b| b.len() > seine_telemetry::MAX_BODY_BYTES)
+                    && !report.backends.is_empty()
+                {
+                    report.backends.pop();
+                    if let Some(d) = &mut report.diagnostics {
+                        d.dropped_backend_samples = d.dropped_backend_samples.saturating_add(1);
+                    }
+                }
+                if has_diagnostics {
+                    if let Some(store) = &store {
+                        store.save(&report);
+                    }
+                }
+                if send_report(&client, &options, &report, store.as_ref()) && has_diagnostics {
+                    if let Some(store) = &store {
+                        store.clear_pending();
+                    }
+                }
+                if !still_enabled(&options) {
+                    if let Some(store) = &store {
+                        store.clear_pending();
+                    }
+                }
+                if final_report {
+                    if let Some(store) = &store {
+                        store.finish();
+                    }
+                    break;
+                }
                 delay = INTERVAL;
             }
         })?;
@@ -367,6 +473,7 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
         Worker {
             stop,
             thread: Some(thread),
+            _diagnostics: guard,
         },
     ))
 }
@@ -374,6 +481,67 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    static WORKER_TEST: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn early_failure_is_reported_and_failed_delivery_is_retained_without_restart_storms() {
+        let _guard = WORKER_TEST.lock().unwrap();
+        let dir = Temp::new();
+        let server = httpmock::MockServer::start();
+        let failed = server.mock(|when, then| {
+            when.method(httpmock::Method::POST).path("/reports");
+            then.status(503);
+        });
+        let options = resolve(&dir.0, None, Some(&server.url("/reports")))
+            .unwrap()
+            .unwrap();
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        crate::miner::ui::warn(
+            "PRIVATE TAG",
+            "driver failed at /home/alice with wallet PRIVATE WALLET",
+        );
+        let _ = std::panic::catch_unwind(|| panic!("PRIVATE PANIC CONTENT"));
+        crate::diagnostics::record(
+            seine_telemetry::DiagnosticCode::RunFailed,
+            seine_telemetry::DiagnosticKind::Driver,
+            Some("nvidia"),
+        );
+        drop(worker);
+        failed.assert_hits(1);
+        let saved = fs::read_to_string(dir.0.join("seine.diagnostics.pending.json")).unwrap();
+        assert!(!saved.contains("PRIVATE") && !saved.contains("alice"));
+        let report: Report = serde_json::from_str(&saved).unwrap();
+        assert!(report.validate());
+        let diagnostics = report.diagnostics.as_ref().unwrap();
+        assert_eq!(diagnostics.reason, "failure");
+        assert!(diagnostics
+            .events
+            .iter()
+            .any(|e| e.code == seine_telemetry::DiagnosticCode::Warning
+                && e.source == "src/hardware_telemetry.rs"));
+        assert!(diagnostics
+            .events
+            .iter()
+            .any(|e| e.code == seine_telemetry::DiagnosticCode::RunFailed));
+        assert!(diagnostics
+            .events
+            .iter()
+            .any(|e| e.code == seine_telemetry::DiagnosticCode::RustPanic));
+        assert!(!dir.0.join("seine.diagnostics.running").exists());
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        drop(worker);
+        failed.assert_hits(1); // A supervisor restart must not bypass the five-minute cooldown.
+        resolve(&dir.0, Some(false), None).unwrap();
+        assert!(!dir.0.join("seine.diagnostics.pending.json").exists());
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        crate::diagnostics::record(
+            seine_telemetry::DiagnosticCode::RunFailed,
+            seine_telemetry::DiagnosticKind::General,
+            None,
+        );
+        drop(worker);
+        failed.assert_hits(1);
+    }
 
     fn resolve(
         data_dir: &Path,
@@ -477,6 +645,7 @@ mod tests {
 
     #[test]
     fn upload_obeys_opt_out_and_does_not_follow_redirects_or_retry_errors() {
+        let _guard = WORKER_TEST.lock().unwrap();
         let dir = Temp::new();
         let server = httpmock::MockServer::start();
         let redirect = server.mock(|when, then| {
@@ -508,7 +677,7 @@ mod tests {
             .unwrap();
         upload(&client, &options, &report);
         failed.assert_hits(1);
-        let (_, worker) = start(&options).unwrap();
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
         drop(worker); // Wakes immediately rather than waiting for the reporting interval.
         failed.assert_hits(1);
     }

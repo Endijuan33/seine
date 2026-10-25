@@ -44,13 +44,14 @@ def main():
         ('health', '/opt/seine/telemetry/deploy/check.sh', None),
         ('data_quality', REMOTE_SQL, Path(__file__).with_name('data_quality.sql').read_text()),
         ('telemetry', REMOTE_SQL, Path(__file__).with_suffix('.sql').read_text()),
+        ('diagnostics', REMOTE_SQL, Path(__file__).with_name('diagnostics.sql').read_text()),
     ):
         try:
             result = remote(args.host, command, data)
             if result.returncode:
                 briefing[key] = {'status': 'error', 'detail': (result.stderr or result.stdout).strip()[:1000]}
                 failed = True
-            elif key in ('telemetry', 'data_quality'):
+            elif key in ('telemetry', 'data_quality', 'diagnostics'):
                 briefing[key] = json.loads(result.stdout)
             else:
                 briefing[key] = {'status': 'ok', 'detail': result.stdout.strip()}
@@ -74,6 +75,18 @@ def main():
             'installations of one version, each reporting at least three times over two hours. '
             'Investigate the miner sampling path; waiting for cohorts is not sufficient.'
         )
+    diagnostics = briefing.get('diagnostics', {})
+    if diagnostics.get('status') == 'attention':
+        failed = True
+        briefing['diagnostic_assessment'] = (
+            'At least three installations of one version reported errors, quarantines or '
+            'unclean previous runs within 24 hours. Investigate issue clusters by build, '
+            'source location and hardware. An unclean run is not proof of a crash.'
+        )
+    elif diagnostics.get('status') == 'unavailable':
+        briefing['diagnostic_assessment'] = 'No diagnostic coverage yet; missing failure reports do not establish healthy miners.'
+    elif diagnostics.get('status') == 'ok':
+        briefing['diagnostic_assessment'] = 'Review issue clusters, including single-installation failures. No fleet threshold is exceeded.'
     print(json.dumps(briefing, indent=2))
     return int(failed)
 

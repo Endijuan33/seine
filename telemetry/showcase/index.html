@@ -20,8 +20,8 @@
   .small { font-size:13px } @media(max-width:480px) { body { padding:28px 18px } .actions button { flex:1 1 100% } }
 </style>
 <div class="eyebrow">Seine · developer showcase</div>
-<h1>Hardware telemetry</h1>
-<p>Exercise the real local collector with a synthetic CPU report. This page sends no information about your browser or computer.</p>
+<h1>Hardware and reliability telemetry</h1>
+<p>Exercise the real local collector with a synthetic CPU and warning report. This page sends no information about your browser or computer.</p>
 <p class="small">Source revision: <span id="revision">loading</span> · fixture data only · no production endpoint</p>
 <section>
   <h2>Collector responses</h2>
@@ -35,7 +35,7 @@
   <div id="result" role="status" aria-live="polite">Disabled. No report has been sent.</div>
   <p class="small">The checkbox controls this test harness only. The miner preference is stored by <code>seine --telemetry on|off</code>.</p>
 </section>
-<section><h2>Upload allowlist</h2><p>Schema 2 includes CPU resource limits and observed page backing alongside hardware, build and performance fields. Wallet addresses, worker names, hostnames, credentials and logs are excluded.</p><pre id="payload">Loading fixture…</pre></section>
+<section><h2>Upload allowlist</h2><p>Schema 3 adds bounded warning/error counts, source locations and restart diagnostics alongside hardware, build and performance fields. Wallet addresses, worker names, hostnames, credentials and logs are excluded.</p><pre id="payload">Loading fixture…</pre></section>
 <script>
 let fixture, last;
 const buttons=[...document.querySelectorAll('button')];
@@ -47,7 +47,7 @@ async function submit(payload){
   try {
     const response=await fetch('/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await response.json();
-    const labels={204:'Accepted. The collector stored the fixture report.',422:'Rejected. The payload does not match the upload allowlist.',429:'Rate limited. This installation has reported recently.',413:'Rejected. The report exceeds the size limit.',503:'Unavailable. Mining would continue; the report is discarded.'};
+    const labels={204:'Accepted. The collector stored the fixture report.',422:'Rejected. The payload does not match the upload allowlist.',429:'Rate limited. This installation has reported recently.',413:'Rejected. The report exceeds the size limit.',503:'Unavailable. Mining would continue; the miner may retain one bounded diagnostic report for a later attempt.'};
     result.textContent=`HTTP ${data.status} — ${labels[data.status]||'Request rejected.'}`;
   } catch {result.textContent='Unavailable. Could not reach the local test harness.';}
   setButtons();

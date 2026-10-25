@@ -112,11 +112,23 @@ pub(super) fn success(tag: &str, message: impl AsRef<str>) {
     log(Level::Success, tag, message.as_ref());
 }
 
+#[track_caller]
 pub(crate) fn warn(tag: &str, message: impl AsRef<str>) {
+    crate::diagnostics::record(
+        seine_telemetry::DiagnosticCode::Warning,
+        crate::diagnostics::classify(message.as_ref()),
+        None,
+    );
     log(Level::Warn, tag, message.as_ref());
 }
 
+#[track_caller]
 pub(super) fn error(tag: &str, message: impl AsRef<str>) {
+    crate::diagnostics::record(
+        seine_telemetry::DiagnosticCode::Error,
+        crate::diagnostics::classify(message.as_ref()),
+        None,
+    );
     log(Level::Error, tag, message.as_ref());
 }
 

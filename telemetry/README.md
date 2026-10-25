@@ -38,10 +38,11 @@ release. Clearing it disables the default in future builds, not already
 distributed binaries. Release archives include `PRIVACY.md`. The website workflow
 also publishes changes made only to that policy file.
 
-The first report is sent after five minutes; subsequent reports are hourly.
-Requests have a five-second total timeout, no redirects, no offline spool and no
-immediate retries. HTTP is allowed only for loopback testing. CPU-only builds need
-no database or collector dependencies.
+Regular reports start after five minutes and continue hourly. Runs ending with
+diagnostics can send an early final report. Requests have a five-second timeout
+and no redirects. One bounded diagnostic report can be retained for recovery;
+see reliability reporting below. HTTP is allowed only for loopback testing.
+CPU-only builds need no database or collector dependencies.
 
 The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
 [fixture.json](fixture.json). It includes:
@@ -56,6 +57,51 @@ The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
   GPU register/launch settings where available.
 - Per-backend hashes and observation duration, plus a flag excluding windows with
   changed settings or missed telemetry samples from performance comparisons.
+- Schema 3 reliability summaries: fixed warning/error codes and category hints,
+  repository source locations, counts and elapsed times, build revision and source
+  fingerprint, requested mining settings and an unclean-previous-run marker.
+
+### Reliability reporting
+
+The [diagnostic fixture](diagnostics-fixture.json) demonstrates schema 3. The
+collector continues accepting schema 1 and 2. Deploy it before schema 3 miners.
+The recorder starts after configuration parsing, before address resolution,
+backend initialization and tuning. UI warnings/errors identify their original
+call site through `track_caller`; backend error and quarantine paths also report
+backend type. Rust panic hooks retain source locations without panic contents.
+Category hints are heuristic; inspect the exact source revision before diagnosing.
+One failure can generate several warning/error codes: event counts are not counts
+of independent incidents. Repeated identical events increment counters; at most
+32 distinct event groups are retained per window. Dropped events and backend
+samples are explicit. Error groups can displace warning groups at capacity.
+
+Early failed runs produce valid short final reports; these are excluded from the
+periodic performance-completeness alarm. A local file lock protects run markers
+and one pending report (32 KiB maximum) from concurrent writers sharing a data
+directory. The latest diagnostic report replaces older pending diagnostics.
+Pending reports preserve their report ID on replay and expire when checked after
+24 hours. They are retried on a later cycle/launch, with a persisted five-minute
+cooldown. Normal performance-only reports are not spooled. Opt-out is checked
+before every upload, including replays; it clears pending state when available.
+Disk/network work stays in the reporting thread, outside mining control loops.
+
+Run `python3 telemetry/agent_report.py` for installation-weighted issue clusters
+by build, source, CPU, OS, runtime environment and backend. It includes diagnostic
+coverage separately from legacy clients; no reports does not mean no failures.
+`diagnostics.sql` flags a version after at least three installations report errors,
+quarantines or unclean runs within 24 hours. Single-installation failures and
+warnings remain visible below that threshold. The five-minute server check records
+these incidents in systemd/journald; **no external notification destination is
+configured**. A future notification integration must consume these aggregates,
+not raw report payloads.
+
+Limits: configuration/CLI parsing failures occur before reporting starts. Native
+aborts, OOM kills and power loss cannot reliably run an upload; an unclean marker
+can surface on a subsequent launch, and is not proof of a crash. Panic hooks do
+not supply crash dumps. Backend models/settings are available when sampled; a
+device that fails before initialization may have only its requested backend type.
+GPU driver versions are not currently reported. These reports guide reproduction
+on matching hardware; they are not a complete replay of a user's environment.
 
 GPU details describe active mining devices, rather than every installed adapter.
 Metal currently reports backend/memory/lanes; the CPU model identifies the Apple
@@ -119,10 +165,10 @@ indexes, WAL and backups. Revisit disk sizing using measured production growth.
 
 ### Schema rollout
 
-Deploy the updated collector **before** distributing miners that emit schema 2.
-The collector accepts schema 1 and 2 at the existing `/v1/reports` URL; the URL
+Deploy the updated collector **before** distributing miners that emit schema 3.
+The collector accepts schemas 1, 2 and 3 at the existing `/v1/reports` URL; the URL
 version does not change. Old reports omit resource/backing fields and remain
-readable. The old collector rejects schema 2, so releasing the new miner first
+readable. Older collectors reject schema 3, so releasing the new miner first
 would lose reports. No database table rewrite or miner/pool restart is needed for
 the collector upgrade; the performance view is replaced in place.
 

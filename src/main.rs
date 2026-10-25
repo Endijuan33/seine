@@ -5,6 +5,7 @@ mod console_exit;
 mod control_api;
 mod daemon_api;
 mod dev_fee;
+mod diagnostics;
 mod hardware_telemetry;
 mod miner;
 mod pool;
