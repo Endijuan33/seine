@@ -104,6 +104,17 @@ review with `review_cached_startup.py COLLECTED OUTPUT.json`; it verifies the
 original archive and preserves individual log/snapshot hashes. This diagnostic
 does not add a hashrate record or change the original failed-fixture status.
 
+## AMD GPU build preparation
+
+Commit `4c2605e` fixes a reproduced AMD-only build failure: shared hash-finalization
+helpers were incorrectly compiled only with NVIDIA or Metal enabled. The
+`--no-default-features --features amd` build now passes 20 non-hardware AMD tests;
+its three native GPU tests remain ignored. CPU-only and default builds also pass
+`cargo check`. The [bring-up guide](../../docs/AMD_BRINGUP.md) now separates ABI
+plausibility from wave32 eligibility, verifies exact hardware test selectors and
+requires measured evidence rather than a bandwidth-derived hashrate prediction.
+This is build preparation, not native HIP validation or a GPU performance point.
+
 ## Next hardware investigations
 
 1. **Ryzen 7950X and 9950X under native Linux.** Current aggregate inventory makes
