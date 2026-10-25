@@ -26,8 +26,8 @@
 - **Zero configuration.** Run `./seine`, paste your address, and you're mining in
   seconds. Threads, kernels, memory and CPU placement tune themselves.
 - **CPU and GPU together.** Every core and every NVIDIA GPU mines at once.
-- **Lowest fee on bntpool.com.** 1% dev fee on [bntpool.com](https://bntpool.com),
-  2.5% elsewhere.
+- **Pool or solo.** Mines on [bntpool.com](https://bntpool.com) out of the box, works
+  with any Stratum pool, or solo against your own Blocknet node.
 - **Built for rigs and fleets.** NUMA-aware placement, huge pages, a local control
   API with live events, and Prometheus metrics.
 
