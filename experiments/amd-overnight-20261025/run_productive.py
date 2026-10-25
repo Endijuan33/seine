@@ -88,6 +88,9 @@ def main():
     status, failure = 'FAILED', None
     try:
         subprocess.run(['swapoff', '/swap.img'], check=True, timeout=30)
+        run('reference-parity', ['./verify_streaming_dispatch'], 180, args.deadline_epoch)
+        parity = (OUT / 'reference-parity.log').read_text().splitlines()
+        assert len([line for line in parity if line.startswith('PASS nonce=')]) == 21
         run('joint-plumbing', [sys.executable, '-B', 'productive.py', '--binary', 'control',
             '--label', 'joint-plumbing', '--seconds', '60'], 180, args.deadline_epoch)
         assert (OUT / 'joint-plumbing/COMPLETE').exists()

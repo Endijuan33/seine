@@ -28,6 +28,9 @@ def analyze(root):
     outcome = read(out / 'outcome.json')
     assert outcome['status'] == 'COMPLETE' and outcome['settings_restored'] and not outcome['cleanup_failures']
     assert (out / 'lifecycle/COMPLETE').exists()
+    parity = [line for line in (out / 'reference-parity.log').read_text().splitlines()
+              if line.startswith('PASS nonce=')]
+    assert len(parity) == 21 and all('full_size_bytes=2147483648 dirty_reuse=true guards=true' in line for line in parity)
     protocol = read(out / 'protocol.json')
     assert protocol['cold_seconds'] == 1200 and protocol['warm_seconds'] == 180
     expected_order = [[binary, pair] for pair in range(1, 5)
