@@ -53,8 +53,6 @@ const POOL_DESYNC_STALE_FOR_THRESHOLD: Duration = Duration::from_secs(15);
 const POOL_TELEMETRY_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const POOL_HASHRATE_CACHE_TTL: Duration = Duration::from_secs(30);
 const POOL_TELEMETRY_TIMEOUT: Duration = Duration::from_secs(5);
-const POOL_TIMING_SLOW_CANCEL_THRESHOLD: Duration = Duration::from_secs(1);
-const POOL_TIMING_SLOW_ASSIGN_THRESHOLD: Duration = Duration::from_secs(1);
 const POOL_TIMING_SLOW_QUEUE_THRESHOLD: Duration = Duration::from_secs(3);
 const POOL_TIMING_SLOW_ACK_THRESHOLD: Duration = Duration::from_secs(3);
 const ATOMIC_UNITS_PER_BNT: u64 = 100_000_000;
@@ -460,38 +458,17 @@ fn format_pool_duration(duration: Duration) -> String {
 }
 
 fn record_pool_assignment_timing(
-    mode: PoolConnectionMode,
     job: &mut ActivePoolJob,
     reason: &'static str,
     cancel_latency: Option<Duration>,
     assign_latency: Duration,
 ) {
-    let completed_at = Instant::now();
     job.last_assignment_timing = Some(PoolAssignmentTiming {
         reason,
         cancel_latency,
         assign_latency,
-        completed_at,
+        completed_at: Instant::now(),
     });
-
-    if !mode.is_user() {
-        return;
-    }
-    let slow_cancel =
-        cancel_latency.is_some_and(|value| value >= POOL_TIMING_SLOW_CANCEL_THRESHOLD);
-    let slow_assign = assign_latency >= POOL_TIMING_SLOW_ASSIGN_THRESHOLD;
-    if slow_cancel || slow_assign {
-        warn(
-            "POOL",
-            format!(
-                "timing | switch={reason} cancel={} assign={}",
-                cancel_latency
-                    .map(format_pool_duration)
-                    .unwrap_or_else(|| "-".to_string()),
-                format_pool_duration(assign_latency),
-            ),
-        );
-    }
 }
 
 fn maybe_log_pool_submit_timing(
@@ -522,11 +499,7 @@ fn maybe_log_pool_submit_timing(
         format_pool_duration(total),
     );
     if mode.is_user() {
-        if status == "accepted" {
-            info("POOL", message);
-        } else {
-            warn("POOL", message);
-        }
+        warn("POOL", message);
     }
 }
 
@@ -892,7 +865,6 @@ pub(super) fn run_pool_mining_loop(
                                     job,
                                 )?;
                                 record_pool_assignment_timing(
-                                    active_mode,
                                     job,
                                     "resume",
                                     None,
@@ -1094,7 +1066,6 @@ pub(super) fn run_pool_mining_loop(
             set_tui_pending_nvidia(&mut tui, deferred_remaining);
             if deferred_backend_activated {
                 maybe_hot_rebalance_active_pool_job(
-                    active_mode,
                     cfg,
                     &mut work_id_cursor,
                     &mut epoch,
@@ -1307,7 +1278,6 @@ pub(super) fn run_pool_mining_loop(
 
         if topology_changed {
             maybe_hot_rebalance_active_pool_job(
-                active_mode,
                 cfg,
                 &mut work_id_cursor,
                 &mut epoch,
@@ -1355,7 +1325,6 @@ pub(super) fn run_pool_mining_loop(
                     job,
                 )?;
                 record_pool_assignment_timing(
-                    active_mode,
                     job,
                     "resume-backlog",
                     None,
@@ -1582,13 +1551,6 @@ fn handle_active_pool_event(
                         job.recent_stale_submit_acks.clear();
                     }
                 }
-                maybe_log_pool_submit_timing(
-                    mode,
-                    "accepted",
-                    ack.nonce,
-                    submit_timing.as_ref(),
-                    acknowledged_at,
-                );
             } else {
                 stats.bump_stale_shares();
                 let reason = ack.error.as_deref().unwrap_or("unknown");
@@ -1910,13 +1872,7 @@ fn apply_submit_ack_difficulty(
         backend_weights,
         job,
     )?;
-    record_pool_assignment_timing(
-        mode,
-        job,
-        "difficulty-update",
-        None,
-        assign_started.elapsed(),
-    );
+    record_pool_assignment_timing(job, "difficulty-update", None, assign_started.elapsed());
     Ok(())
 }
 
@@ -2030,13 +1986,7 @@ fn assign_pool_job(
             backend_weights,
             job,
         )?;
-        record_pool_assignment_timing(
-            mode,
-            job,
-            "new-job",
-            cancel_latency,
-            assign_started.elapsed(),
-        );
+        record_pool_assignment_timing(job, "new-job", cancel_latency, assign_started.elapsed());
     }
     set_tui_state_label(tui, "working");
     render_tui_now(tui);
@@ -2139,7 +2089,6 @@ fn assign_pool_continuation(
 
 #[allow(clippy::too_many_arguments)]
 fn maybe_hot_rebalance_active_pool_job(
-    mode: PoolConnectionMode,
     cfg: &Config,
     work_id_cursor: &mut u64,
     epoch_cursor: &mut u64,
@@ -2192,13 +2141,7 @@ fn maybe_hot_rebalance_active_pool_job(
                 backend_weights,
                 job,
             )?;
-            record_pool_assignment_timing(
-                mode,
-                job,
-                "hot-rebalance",
-                None,
-                assign_started.elapsed(),
-            );
+            record_pool_assignment_timing(job, "hot-rebalance", None, assign_started.elapsed());
             info("JOB", format!("{reason}; hot-rebalanced current pool job"));
         }
     }
