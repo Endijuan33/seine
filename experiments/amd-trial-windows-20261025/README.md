@@ -66,6 +66,16 @@ rejected results and their exact patch without enabling the policy on master.
 This is productive-throughput validation, not a package-power claim. Any power
 claim would need a separate paired energy protocol after this gate passes.
 
+`run.py` wraps frozen copies of the existing full-socket productive controller
+and helpers. The helper service prefix becomes `seine-short-windows-` so its
+units cannot overwrite earlier runs. Record each original and copied file hash.
+Use outer unit `seine-amd-short-windows.service` with a 14,460-second maximum,
+SIGINT shutdown and bounded control-group cleanup. The wrapper requires
+`prior-evidence-collected.json` with verified archives and restored settings for
+both prior native experiments, and `run-authorization.json` with the exact
+ledger-recorded rental reservation and controller/deletion deadlines. It rejects
+other active campaign units before running the controller's own preflight.
+
 ## Time and rental constraints
 
 No rental extension is scheduled by this document. Launch only when at least
