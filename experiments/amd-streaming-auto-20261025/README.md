@@ -60,6 +60,20 @@ checks that later requests still work on the same connection. The lifecycle-only
 resume verifies the frozen binary and each accepted file hash, preserves the first
 benchmark protocol/job identity, and starts with a fresh cold cache. No discarded
 productive sample is reused as automatic-selection evidence.
+Because the completed benchmarks are not repeated, this resume requires 20
+minutes of clean time remaining rather than the full run's 35-minute admission
+minimum. The same absolute 02:24 UTC release deadline remains enforced.
+
+The clean 540-second natural-count cold run rejected a noisy second streaming
+confirmation at 293.5 seconds. Its 300-second retry delay falls outside that cold
+window. This is retained as valid safety/convergence evidence, not discarded as
+a fixture failure. A separate `daemon_probe.py` uses the same production binary
+with a loopback HTTP/SSE daemon fixture, allowing up to 1,020 seconds for a retry
+without an external donation-pool connection. Its research count bounds are
+8–8 to isolate kernel/cache behavior; it does not prove unconstrained count
+convergence. After a confirmed winner, it runs at least 360 seconds total and
+another 30 seconds after caching, then checks a 90-second exact-context restart.
+It uses a fresh cache and the same hard desktop deadline and memory ceiling.
 
 ## Integration and handoff
 
