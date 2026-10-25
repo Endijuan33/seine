@@ -800,6 +800,26 @@ impl BenchBackend for CpuBackend {
     fn kernel_bench(&self, seconds: u64, shutdown: &AtomicBool) -> Result<u64> {
         Ok(self.sample_kernel(seconds, false, shutdown)?.hashes)
     }
+
+    fn kernel_bench_samples(
+        &self,
+        rounds: u32,
+        seconds: u64,
+        shutdown: &AtomicBool,
+    ) -> Result<Vec<KernelBenchSample>> {
+        let mut samples = Vec::with_capacity(rounds as usize);
+        for _ in 0..rounds {
+            if shutdown.load(Ordering::Acquire) {
+                break;
+            }
+            // Preserve the synchronized hashing timer. The trait's fallback
+            // wraps kernel_bench in a wall timer, charging every round's fresh
+            // arenas to the kernel and biasing comparisons against more lanes.
+            // One warm hash per lane stays outside the scored interval.
+            samples.push(self.autotune_sample(seconds, shutdown)?);
+        }
+        Ok(samples)
+    }
 }
 
 impl CpuBackend {
@@ -2309,6 +2329,28 @@ mod tests {
 #[cfg(test)]
 mod kernel_selection_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "allocates one real 2 GiB arena; run explicitly on an idle host"]
+    fn cpu_kernel_samples_preserve_hashing_and_lifecycle_timers() {
+        let backend = CpuBackend::new(1, CpuAffinityMode::Off);
+        let samples = backend
+            .kernel_bench_samples(1, 1, &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!(samples.len(), 1);
+        assert!(samples[0].hashes > 0);
+        assert!(samples[0].elapsed_secs >= 1.0);
+        assert!(samples[0].wall_elapsed_secs > samples[0].elapsed_secs);
+    }
+
+    #[test]
+    fn cancelled_cpu_kernel_samples_do_not_allocate_arenas() {
+        let backend = CpuBackend::new(1, CpuAffinityMode::Off);
+        assert!(backend
+            .kernel_bench_samples(3, 1, &AtomicBool::new(true))
+            .unwrap()
+            .is_empty());
+    }
 
     #[test]
     fn live_kernel_requests_reject_fixed_backends_and_unsupported_paths() {

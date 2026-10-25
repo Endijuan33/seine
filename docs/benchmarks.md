@@ -5,6 +5,13 @@ from the CPU and NVIDIA A/B scripts, and records reproducible manifests around
 arbitrary benchmark commands. It uses only the Python standard library and
 never changes host settings or closes applications.
 
+CPU `--bench-kind kernel` warms each lane and reports the synchronized hashing
+interval, including completion of the last in-flight hash. Its `wall_secs` also
+records arena setup and teardown. `kernel-effective` retains lifecycle timing.
+Older CPU builds charged arena lifecycle time to both modes, so compare only
+matching measurement semantics; a change in the reported rate is not itself
+a mining speedup.
+
 ## Capture the host before testing
 
 Run the preflight from the repository containing the build under test:

@@ -5,6 +5,10 @@ user benefit, name the hardware for measured gains, and include required upgrade
 steps. Keep test results and implementation details in the engineering docs.
 Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
+## Unreleased
+
+- **More accurate CPU kernel benchmarks:** hashing speed is measured separately from memory setup and cleanup.
+
 ## v0.2.26
 
 - **Help diagnose mining failures:** privacy-preserving warning and error summaries now identify affected hardware and code paths, including early failures and unclean restarts, while honoring your telemetry opt-out.

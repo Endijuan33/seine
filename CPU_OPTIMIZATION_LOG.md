@@ -3628,3 +3628,24 @@ cargo run --release -- --bench --bench-kind kernel --backend cpu --threads 1 --d
 ```bash
 cargo run --release -- --bench --bench-kind backend --backend cpu --threads 1 --disable-cpu-autotune-threads --bench-secs 12 --bench-rounds 4 --bench-warmup-rounds 1 --ui plain --bench-output <report.json>
 ```
+
+## 2026-10-25 CPU kernel benchmark lifecycle accounting
+
+The native EPYC 9R14 fixed-kernel screen revealed that `--bench-kind kernel`
+used the generic `BenchBackend::kernel_bench_samples` fallback. CPU's internal
+sampler already timed synchronized hashing separately, but `kernel_bench`
+returned only its hash count. The fallback then divided by an outer wall timer
+that included fresh arena allocation and teardown for every round. One 16-lane
+AVX2 round reported 1558 hashes over 73.95 seconds for a configured 60-second
+hashing window. The existing screen is preserved as lifecycle evidence and
+must not be ranked as isolated steady-state throughput.
+
+CPU now overrides the sample method to retain both timers from its existing
+warmed sampler. The hashing duration still includes the last in-flight hash;
+`wall_secs` retains complete lifecycle cost. `kernel-effective` and live mining
+are unchanged. No actual mining speedup is claimed by this reporting fix.
+
+Validation: 580 CPU-only workspace tests passed on the landing branch, eight hardware tests ignored.
+The dedicated real 2 GiB regression test was then explicitly run and passed:
+positive completed hashes, at least the requested hashing duration, and a
+strictly longer lifecycle timer. Cancellation before a round avoids allocation.
