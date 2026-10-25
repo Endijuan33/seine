@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/assets/brand/banner.jpg" alt="seine — the zero-config miner for Blocknet" width="900">
+  <img src="docs/assets/brand/banner.jpg" alt="seine — the fastest Blocknet miner" width="900">
 </p>
 
 <p align="center">
-  <b>Fast, zero-config mining for <a href="https://blocknetcrypto.com">Blocknet</a>.</b><br>
-  Tuned kernels for every modern CPU and NVIDIA GPU. Download, run, mine.
+  <b>The fastest miner for <a href="https://blocknetcrypto.com">Blocknet</a>.</b><br>
+  Tuned kernels for every modern CPU and NVIDIA GPU, zero configuration. Download, run, mine.
 </p>
 
 <p align="center">

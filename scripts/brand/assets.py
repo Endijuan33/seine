@@ -32,7 +32,7 @@ TEAL = "#1BA3A0"
 FOAM = "#DFFBF6"
 LIME = "#AAFF00"
 LIME_ON_LIGHT = "#4E9A00"
-TAGLINE = "The zero-config miner for Blocknet"
+TAGLINE = "The fastest Blocknet miner"
 
 
 def text_path(font, text, x, y, size, tracking=0.0):
@@ -81,7 +81,7 @@ def overlay_text(img, font_bold, font_text, x, y, size, tagline_size, shadow=Tru
     x0, y0 = int(x - pad), int(y - pad * 0.55)
     x1, y1 = int(x + max(word_w + size * 0.6, tag_w) + pad), int(y + size * 1.12 + tagline_size * 1.6 + pad * 0.7)
     y0, y1 = int(y0 - size * up), int(y1 + size * down)
-    blurred = img.filter(ImageFilter.GaussianBlur(size * 0.04))
+    blurred = img.filter(ImageFilter.GaussianBlur(size * 0.025))
     tint = Image.new("RGBA", img.size, (2, 26, 30, 44))
     frosted = Image.alpha_composite(blurred, tint)
     mask = Image.new("L", img.size, 0)
