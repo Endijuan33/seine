@@ -130,6 +130,13 @@ archive, manifest, binary provenance, resource evidence and numerical comparison
 Acceptance cannot override the preregistered numerical gate. Rejected experiments
 remain exportable and clearly labeled; partial campaigns cannot be exported.
 
+The offline audit also checks actual elapsed windows against the original
+1,200/180-second durations, observed cold interleaving and reverse cached order,
+non-overlap, each restart's exact own-cache source and restored count, automatic
+selection commands, and the publicly frozen executable checksums. These checks
+were made explicit while the unchanged native protocol was running; they do not
+change its measurements or numerical acceptance thresholds.
+
 ```sh
 /usr/bin/python3 experiments/amd-trial-windows-20261025/analyze.py COLLECTED results.json
 /usr/bin/python3 experiments/amd-trial-windows-20261025/export_records.py COLLECTED OUTPUT --review adoption-review.json

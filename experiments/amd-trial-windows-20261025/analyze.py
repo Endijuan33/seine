@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -20,6 +21,44 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def validate_windows(root, runs):
+    """Enforce actual durations, own-cache paths and observed interleaving."""
+    order = [(role, pair) for pair in range(1, 5)
+             for role in (('control', 'candidate') if pair % 2 else ('candidate', 'control'))]
+    labels = [f'joint-{role}-{pair}' for role, pair in order]
+    labels += [f'joint-warm-{role}-{pair}' for role, pair in reversed(order)]
+    assert set(runs) == set(labels), 'all sixteen original windows are required'
+    previous_end = None
+    for label in labels:
+        run = runs[label]
+        folder = root / 'results' / label
+        identity = read(folder / 'identity.json')
+        window = read(folder / 'productive-window.json')
+        warm = run['warm']
+        seconds = 180 if warm else 1200
+        elapsed = window['elapsed_start_request_through_stopped_seconds']
+        start = window['observation_start_epoch']
+        assert math.isfinite(elapsed) and elapsed >= seconds, 'shortened window: ' + label
+        assert math.isfinite(start) and start > 0
+        assert previous_end is None or start >= previous_end, 'overlap or wrong execution order: ' + label
+        previous_end = start + elapsed
+        remote = Path(identity['binary']).parent
+        assert Path(identity['binary']).name == run['binary']
+        expected_cache = str(remote / 'results' / f"joint-{run['binary']}-{run['pair']}") if warm else None
+        assert identity['cache_source'] == expected_cache, 'foreign cache source: ' + label
+        assert not warm or run['count_cache_restored'], 'own count cache not restored: ' + label
+        assert run['cpu_profile'] == 'balanced'
+        command = read(folder / 'command.json')
+        for flag, value in (('--backend', 'cpu'), ('--cpu-page-mode', 'large'),
+                            ('--cpu-affinity', 'auto'),
+                            ('--cpu-autotune-config', str(remote / 'results' / label / 'tuning.json')),
+                            ('--data-dir', str(remote / 'results' / label / 'config'))):
+            assert command.count(flag) == 1 and command[command.index(flag) + 1] == value, label
+        prohibited = ('--threads', '--cpu-autotune-min-threads', '--cpu-autotune-max-threads',
+                      '--bench-cpu-kernel', '--disable-cpu-autotune-threads', '--cpu-profile')
+        assert not any(argument.split('=', 1)[0] in prohibited for argument in command), label
+
+
 def analyze(root):
     archive = root.parent / 'productive-evidence.tar.gz'
     verified = verify_archive(root, archive)
@@ -27,6 +66,11 @@ def analyze(root):
     assert receipt['ready_for_followup'] and receipt['verified_manifest_entries'] == verified
     assert receipt['archive_sha256'] == digest(archive)
     result = productive_analysis(root)
+    frozen = read(Path(__file__).resolve().parent / 'frozen-builds.json')
+    protocol = read(root / 'results/protocol.json')
+    assert protocol['binary_sha256'] == {
+        role: frozen[role]['binary_sha256'] for role in ('control', 'candidate')}
+    validate_windows(root, result['runs'])
     result['experiment'] = 'amd-trial-windows-20261025'
     decisions = {}
     for label, run in result['runs'].items():
