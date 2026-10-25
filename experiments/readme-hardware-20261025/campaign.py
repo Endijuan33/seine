@@ -33,6 +33,9 @@ HOSTS = {  # label: (preferred type, arch, fallback type if preferred has no cap
     'skylake': ('m5.8xlarge', 'amd64', None), 'skylake-r5': ('r5.8xlarge', 'amd64', None),
     'cascadelake': ('m5n.8xlarge', 'amd64', None), 'icelake': ('c6i.8xlarge', 'amd64', None),
     'sapphirerapids': ('c7i.8xlarge', 'amd64', None), 'graniterapids': ('c8i.8xlarge', 'amd64', None),
+    # 128 GiB reruns for SMT Intel hosts whose best cell sat at the 64 GiB thread cap.
+    'sapphirerapids-m7i': ('m7i.8xlarge', 'amd64', None), 'icelake-m6i': ('m6i.8xlarge', 'amd64', None),
+    'graniterapids-m8i': ('m8i.8xlarge', 'amd64', None),
     'graviton2': ('m6g.8xlarge', 'arm64', 'c6g.8xlarge'), 'graviton3': ('m7g.8xlarge', 'arm64', 'c7g.8xlarge'),
     'graviton4': ('m8g.8xlarge', 'arm64', 'c8g.8xlarge'),
 }
@@ -84,7 +87,7 @@ def host_config(label, arch):
         verifiers = [{'file': 'verify-v022-arm', 'covers': ['seine-v022-arm'],
                       'provenance': f'verify_cpu_kernels from v0.2.22 source {RELEASE_COMMIT}, native build'},
                      {'file': 'verify-f20-arm', 'covers': ['seine-f20-arm'],
-                      'provenance': f'frozen portable-codegen-arm verifier, source {F20_COMMIT}'}]
+                      'provenance': f'frozen portable-codegen-arm verify_neon_dispatch (full-size RustCrypto reference parity, 3 nonces, dirty-arena neon/neon-sha3 switches), source {F20_COMMIT}'}]
     digests = {}
     for name, path in files.items():
         digest = sha256(path)

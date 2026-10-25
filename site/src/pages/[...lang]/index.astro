@@ -26,7 +26,7 @@ const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
 const bars = benchmarks.best.map((b) => ({ name: 'labelKey' in b ? t(b.labelKey as UiKey) : b.label, chip: b.chip, threads: b.threads, hps: b.hps }));
 const top = Math.max(...bars.map((b) => b.hps));
 // Hashrates in the locale's number format (49,4 in German, 49.4 in English).
-const hps = new Intl.NumberFormat(localeDef(locale).htmlLang, { maximumFractionDigits: 2 }).format;
+const hps = new Intl.NumberFormat(localeDef(locale).htmlLang, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format;
 const specs = bars.slice(0, 4).map((b) => ({ hps: b.hps, label: b.name.replace(' · ', ' ') }));
 
 const feats: [UiKey, UiKey][] = [

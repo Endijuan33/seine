@@ -24,26 +24,27 @@ with `--threads` or see as "Threads" on the dashboard.
 
 <img src="assets/charts/servers.svg" alt="Hashrate on AWS servers by CPU generation" width="900">
 
-| CPU | Generation | Threads | Kernel | H/s | Evidence |
-|---|---|---:|---|---:|---|
-| AMD EPYC 9R45 | Zen 5 Turin | 32 | streaming | 49.39 | [readme-hardware](../experiments/readme-hardware-20261025/summary.json) |
-| AMD EPYC 9R14 | Zen 4 Genoa | 24 | streaming | 35.70 | [high-end-streaming](../experiments/high-end-streaming-20261025/RESULTS.md) |
-| AMD EPYC 7R13 | Zen 3 Milan | 16 | AVX2 | 11.63 | [readme-hardware](../experiments/readme-hardware-20261025/README.md) |
-| AMD EPYC 7R32 | Zen 2 Rome | 12 | AVX2 | 6.01 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| AMD EPYC 7571 | Zen 1 Naples | 16 | AVX2 | 4.60 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| Intel Xeon 8488C | Sapphire Rapids | 12 | AVX-512 | 13.10 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| Intel Xeon 6975P-C | Granite Rapids | 12 | AVX-512 | 12.92 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| Intel Xeon 8375C | Ice Lake | 12 | AVX-512 | 12.21 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| Intel Xeon 8275CL | Cascade Lake | 12 | AVX2 | 10.25 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| Intel Xeon E5-2666 v3 | Haswell | 11 | AVX2 | 9.72 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| AWS Graviton4 | Neoverse V2 | 16 | NEON + SHA3 | 21.50 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| AWS Graviton3 | Neoverse V1 | 16 | NEON + SHA3 | 18.17 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
-| AWS Graviton2 | Neoverse N1 | 16 | NEON | 11.05 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
+| CPU | Generation | Instance | Threads | Kernel | H/s |
+|---|---|---|---:|---|---:|
+| AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming | 49.39 |
+| AMD EPYC 9R14 | Zen 4 Genoa | m7a.8xlarge | 32 | streaming | 38.18 |
+| AMD EPYC 7R13 | Zen 3 Milan | c6a.8xlarge | 16 | AVX2 | 11.63 |
+| AMD EPYC 7R32 | Zen 2 Rome | c5a.8xlarge | 16 | AVX2 | 10.96 |
+| AMD EPYC 7571 | Zen 1 Naples | m5a.8xlarge | 16 | AVX2 | 9.38 |
+| Intel Xeon 8488C | Sapphire Rapids | m7i.8xlarge | 32 | streaming | 26.00 |
+| Intel Xeon 6975P-C | Granite Rapids | m8i.8xlarge | 32 | streaming | 24.42 |
+| Intel Xeon 8375C | Ice Lake | m6i.8xlarge | 32 | streaming | 24.32 |
+| Intel Xeon 8259CL | Cascade Lake | m5n.8xlarge | 24 | streaming | 15.69 |
+| Intel Xeon 8175M | Skylake | m5.8xlarge | 32 | streaming | 15.64 |
+| Intel Xeon E5-2686 v4 | Broadwell | r4.8xlarge | 32 | AVX2 | 12.95 |
+| AWS Graviton4 | Neoverse V2 | m8g.8xlarge | 32 | NEON + SHA3 | 39.29 |
+| AWS Graviton3 | Neoverse V1 | m7g.8xlarge | 32 | NEON + SHA3 | 27.70 |
+| AWS Graviton2 | Neoverse N1 | m6g.8xlarge | 30 | NEON | 18.63 |
 
-Each row is the best confirmed configuration measured on that CPU so far, on an AWS
-guest with explicit 2 MiB huge pages. Instance sizes and thread counts differ between
-rows, so a row shows what seine achieved on that guest rather than a full socket.
-Larger-instance runs are in progress and will replace these numbers.
+Each row is the best configuration measured on that CPU: a 32-vCPU AWS instance
+with explicit 2 MiB huge pages, swept across kernels and thread counts, four timed
+runs at the winning setting. Raw results, per-run data and the method are in the
+[readme-hardware campaign](../experiments/readme-hardware-20261025/README.md).
 
 ## Desktops and laptops
 
@@ -129,7 +130,7 @@ Offline benchmarks need no daemon or pool:
 ```
 
 `--bench-cpu-kernel` accepts `scalar`, `avx2`, `avx512`, `avx512-256`,
-`avx512-256-stream` and `neon`, subject to CPU support. For statistically paired
+`avx512-256-stream`, `neon` and `neon-sha3`, subject to CPU support. For statistically paired
 A/B comparisons, use the [benchmark lab](benchmarks.md).
 
 ## Method and limits

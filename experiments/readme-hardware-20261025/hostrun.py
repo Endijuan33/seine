@@ -202,6 +202,10 @@ def parity():
         result = subprocess.run([str(path)], capture_output=True, text=True, timeout=900, env=child_env())
         (ROOT / (verifier['file'] + '.log')).write_text(result.stdout + result.stderr)
         passed = re.findall(r'^(\S+): PASS', result.stdout, re.MULTILINE)
+        # f20e7bb verifier format: "PASS nonce=N kernel=K full_size_bytes=2147483648 dirty_reuse=true"
+        passed += [k for k in dict.fromkeys(re.findall(
+            r'^PASS nonce=\S+ kernel=(\S+) full_size_bytes=2147483648', result.stdout, re.MULTILINE))
+                   if k not in passed]
         unsupported = re.findall(r'^(\S+): unsupported', result.stdout, re.MULTILINE)
         results[verifier['file']] = {'exit_code': result.returncode, 'passed': passed, 'unsupported': unsupported,
                                      'covers_binary': verifier['covers'], 'sha256': sha256(path),

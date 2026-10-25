@@ -22,91 +22,98 @@
       "sub": "Zen 5 Turin · 32 threads",
       "category": "amd",
       "hps": 49.393,
-      "source": "experiments/readme-hardware-20261025 (m8a.8xlarge, streaming kernel)"
+      "source": "experiments/readme-hardware-20261025/summary.json (m8a.8xlarge, streaming kernel)"
     },
     {
       "name": "AMD EPYC 9R14",
-      "sub": "Zen 4 Genoa · 24 threads",
+      "sub": "Zen 4 Genoa · 32 threads",
       "category": "amd",
-      "hps": 35.698,
-      "source": "experiments/high-end-streaming-20261025 (c7a.8xlarge, streaming kernel)"
+      "hps": 38.175,
+      "source": "experiments/readme-hardware-20261025/summary.json (m7a.8xlarge, streaming kernel)"
     },
     {
       "name": "AMD EPYC 7R13",
       "sub": "Zen 3 Milan · 16 threads",
       "category": "amd",
-      "hps": 11.63,
-      "source": "experiments/readme-hardware-20261025 (c6a.8xlarge, AVX2)"
+      "hps": 11.625,
+      "source": "experiments/readme-hardware-20261025/summary.json (c6a.8xlarge, AVX2)"
     },
     {
       "name": "AMD EPYC 7R32",
-      "sub": "Zen 2 Rome · 12 threads",
+      "sub": "Zen 2 Rome · 16 threads",
       "category": "amd",
-      "hps": 6.012,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 10.96,
+      "source": "experiments/readme-hardware-20261025/summary.json (c5a.8xlarge, AVX2)"
     },
     {
       "name": "AMD EPYC 7571",
       "sub": "Zen 1 Naples · 16 threads",
       "category": "amd",
-      "hps": 4.596,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 9.384,
+      "source": "experiments/readme-hardware-20261025/summary.json (m5a.8xlarge, AVX2)"
     },
     {
       "name": "Intel Xeon 8488C",
-      "sub": "Sapphire Rapids · 12 threads",
+      "sub": "Sapphire Rapids · 32 threads",
       "category": "intel",
-      "hps": 13.099,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 26.0,
+      "source": "experiments/readme-hardware-20261025/summary.json (m7i.8xlarge, streaming kernel)"
     },
     {
       "name": "Intel Xeon 6975P-C",
-      "sub": "Granite Rapids · 12 threads",
+      "sub": "Granite Rapids · 32 threads",
       "category": "intel",
-      "hps": 12.916,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 24.418,
+      "source": "experiments/readme-hardware-20261025/summary.json (m8i.8xlarge, streaming kernel)"
     },
     {
       "name": "Intel Xeon 8375C",
-      "sub": "Ice Lake · 12 threads",
+      "sub": "Ice Lake · 32 threads",
       "category": "intel",
-      "hps": 12.205,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 24.322,
+      "source": "experiments/readme-hardware-20261025/summary.json (m6i.8xlarge, streaming kernel)"
     },
     {
-      "name": "Intel Xeon 8275CL",
-      "sub": "Cascade Lake · 12 threads",
+      "name": "Intel Xeon 8259CL",
+      "sub": "Cascade Lake · 24 threads",
       "category": "intel",
-      "hps": 10.247,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 15.685,
+      "source": "experiments/readme-hardware-20261025/summary.json (m5n.8xlarge, streaming kernel)"
     },
     {
-      "name": "Intel Xeon E5-2666 v3",
-      "sub": "Haswell · 11 threads",
+      "name": "Intel Xeon 8175M",
+      "sub": "Skylake · 32 threads",
       "category": "intel",
-      "hps": 9.722,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 15.644,
+      "source": "experiments/readme-hardware-20261025/summary.json (m5.8xlarge, streaming kernel)"
+    },
+    {
+      "name": "Intel Xeon E5-2686 v4",
+      "sub": "Broadwell · 32 threads",
+      "category": "intel",
+      "hps": 12.954,
+      "source": "experiments/readme-hardware-20261025/summary.json (r4.8xlarge, AVX2)"
     },
     {
       "name": "AWS Graviton4",
-      "sub": "Neoverse V2 · 16 threads",
+      "sub": "Neoverse V2 · 32 threads",
       "category": "arm",
-      "hps": 21.503,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md (SHA3 + prefetch kernel)"
+      "hps": 39.287,
+      "source": "experiments/readme-hardware-20261025/summary.json (m8g.8xlarge, NEON + SHA3 kernel)"
     },
     {
       "name": "AWS Graviton3",
-      "sub": "Neoverse V1 · 16 threads",
+      "sub": "Neoverse V1 · 32 threads",
       "category": "arm",
-      "hps": 18.17,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md (SHA3 + prefetch kernel)"
+      "hps": 27.703,
+      "source": "experiments/readme-hardware-20261025/summary.json (m7g.8xlarge, NEON + SHA3 kernel)"
     },
     {
       "name": "AWS Graviton2",
-      "sub": "Neoverse N1 · 16 threads",
+      "sub": "Neoverse N1 · 30 threads",
       "category": "arm",
-      "hps": 11.047,
-      "source": "experiments/cpu-campaign-20261024/RESULTS.md"
+      "hps": 18.627,
+      "source": "experiments/readme-hardware-20261025/summary.json (m6g.8xlarge, NEON)"
     }
   ],
   "best": [
@@ -117,10 +124,16 @@
       "hps": 49.393
     },
     {
+      "name": "Arm server",
+      "sub": "AWS Graviton4 · 32 threads",
+      "category": "arm",
+      "hps": 39.287
+    },
+    {
       "name": "AMD EPYC · Zen 4",
-      "sub": "EPYC 9R14 server · 24 threads",
+      "sub": "EPYC 9R14 server · 32 threads",
       "category": "amd",
-      "hps": 35.698
+      "hps": 38.175
     },
     {
       "name": "Apple M4 Max",
@@ -129,16 +142,10 @@
       "hps": 30.94
     },
     {
-      "name": "Arm server",
-      "sub": "AWS Graviton4 · 16 threads",
-      "category": "arm",
-      "hps": 21.503
-    },
-    {
       "name": "Intel Xeon",
-      "sub": "Sapphire Rapids 8488C · 12 threads",
+      "sub": "Sapphire Rapids 8488C · 32 threads",
       "category": "intel",
-      "hps": 13.099
+      "hps": 26.0
     }
   ],
   "note_best": "Peak measured result per CPU generation; full per-CPU tables in docs/PERFORMANCE.md."

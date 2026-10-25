@@ -59,7 +59,9 @@ def main():
                 print('HOLD present; not launching', label, cloud.now().isoformat(), flush=True)
                 announced = True
             time.sleep(20)
-        if done(label):
+        force = label.endswith('!')  # explicit rerun of a completed host
+        label = label.rstrip('!')
+        if done(label) and not force:
             print('SKIP done', label, flush=True)
             continue
         s = cloud.ledger()
