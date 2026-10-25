@@ -39,6 +39,9 @@ and its evidence has been collected. Never overlap these workloads.
 3. Screen each challenger at 32 and 64 workers in two opposite-order pairs:
    one 15-second warmup plus two measured 15-second rounds per invocation.
    Keep every completed observation, including slower variants.
+   `run_native.py` freezes the order as 32 workers then 64, ring 32 then ring 16
+   at each count. Shortlist the largest positive paired geometric delta for the
+   first confirmation; a positive screen alone never passes the shipping gate.
 4. A screen is only a shortlist. If a challenger is promising, confirm it against
    ring 64 at that worker count with four fresh alternating pairs, one 30-second
    warmup and two measured 30-second rounds. Require a lower descriptive 95%
@@ -51,6 +54,21 @@ and its evidence has been collected. Never overlap these workloads.
 6. Only an accepted native result may motivate a hardware-gated production path.
    Preserve the current implementation for unmeasured identities. Validate its
    actual automatic path, fallback/ISA gate and caches before landing it.
+
+The screen controller uses the unchanged paired harness from
+`experiments/cpu-followups-20261025/bench.py`, copied into the frozen upload.
+It requires an operator-written `prior-evidence-collected.json` marker, an
+inactive prior controller and verified restored host settings before starting.
+Every child has a deadline and process-group cleanup. The outer systemd service
+must also have a bounded runtime and default control-group termination.
+
+The diagnostic profiles use grouped userspace cycles, retired instructions, core
+data-cache requests to L2, and those requests missing L2. Event definitions are
+captured from the host's own `perf list --json`. These are whole-invocation
+profiles with no uncounted warmup. Failed or incompletely scheduled counters are
+uninterpretable, and the L2 counters do not measure DRAM bandwidth. This host has
+core/IBS PMUs but no exposed Data Fabric PMU. Profiling and hash throughput runs
+are separate; profiling overhead is not part of the throughput comparison.
 
 Collect all evidence and restore cap/pages/swap before the rental cleanup point.
 The existing six-hour Cherry reservation is USD 7.20. If a ready experiment needs
