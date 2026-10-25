@@ -2,8 +2,8 @@
 
 Prepared 2026-10-25. Hardware measurements are pending; the local WSL host has
 no package-energy counters. This protocol measures the current legacy 2 GiB
-Argon2id workload. Requalify conclusions when the PoW changes; see
-[Faraday readiness](FARADAY_READINESS.md).
+Argon2id workload. Requalify conclusions if the PoW changes; these measurements
+do not predict performance for a different algorithm.
 
 ## Current baseline
 
@@ -30,6 +30,10 @@ before ordering. No rental has been created for this campaign.
 At Cherry's displayed base rate, two hours is EUR 2.052 before any taxes,
 configuration changes or account-funding requirements. Reserve time for setup,
 verification, collecting results and deleting the rental as well as hashing.
+The authenticated USD checkout on 2026-10-25 shows USD 1.20/hour for the
+prebuilt Lithuania 192 GB configuration (plan 984, hourly cycle 37), or
+USD 2.40 for two hours. The card top-up form permits USD 1 minimum; account
+credit is separate from actual rental expenditure. No server has been ordered.
 A CPU's supported channel count and a total RAM figure do not establish the
 installed DIMM/channel population. Get the actual layout before selecting a
 configuration for the 12-channel experiment.
