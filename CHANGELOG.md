@@ -5,6 +5,14 @@ user benefit, name the hardware for measured gains, and include required upgrade
 steps. Keep test results and implementation details in the engineering docs.
 Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
+## v0.2.26
+
+- **Help improve mining on your hardware:** fixes missing CPU and GPU performance reports during pool mining and includes memory and CPU settings so future optimizations can target comparable machines. Your telemetry opt-out preference is preserved.
+
+**For self-hosted telemetry collectors:** update the collector before upgrading
+miners to this release. The official collector is already updated. See the
+[deployment guide](https://github.com/zpalmtree/seine/blob/v0.2.26/telemetry/deploy/PRODUCTION.md).
+
 ## v0.2.25
 
 - **Faster startup and restarts on AMD EPYC 9355P.**
