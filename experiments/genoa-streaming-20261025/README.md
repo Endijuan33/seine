@@ -1,13 +1,14 @@
 # Genoa productive streaming eligibility
 
-Status on 2026-10-25: **native validation deferred; candidate not enabled on
-master**. All 545 local workspace tests passed (six ignored). One allocation
+Status on 2026-10-25: **EC2 validation running; candidate not enabled on master**.
+The frozen experiment launched at 06:07 EDT after shared quota became free.
+All 545 local workspace tests passed (six ignored). An earlier allocation
 attempt failed before creating an instance; its security group and temporary
-key were deleted, and a tag lookup confirmed no task instance existed. The
-shared quota was then occupied by another benchmark. When the user's Cherry
-verification and funding completed, the waiting coordinator was stopped to
-prioritize the original bare-metal package-energy experiment. Rental spend for
-this attempt is zero; the frozen bundle and original USD 3.25 cap are retained.
+key were deleted, and a tag lookup confirmed no task instance existed. Waiting
+attempts incurred no rental cost. The resumed run retains its original frozen
+bundle, one-lease USD 3.25 cap and 110-minute shutdown-to-terminate timer.
+The quota observer now checks every five seconds; this changes only pre-launch
+waiting, not the measurement protocol or another campaign's instances.
 
 This experiment adds AMD family 19h/model 11h to streaming **trial** eligibility.
 It preserves runtime ISA checks, the default starting kernel, count-specific
@@ -21,8 +22,10 @@ This is throughput validation, not a package-energy or whole-system H/W test.
 
 ## Frozen protocol
 
-One exclusively owned `c7a.8xlarge` in us-east-1, 32 physical CPUs / 64 GiB.
-Require native AMD family 25/model 17, all expected instructions, no swap, and
+One exclusively owned `c7a.8xlarge` in us-east-1, 32 vCPUs (one thread per
+guest-exposed core) and 64 GiB guest RAM. This is a Linux VM, not a full bare-metal
+EPYC socket; physical memory-channel population and DIMM speed are unobserved.
+Require AMD family 25/model 17, all expected instructions, no swap, and
 an independent shutdown timer with EC2 shutdown-to-terminate. The account's
 existing 32-vCPU quota must be free; do not interrupt another campaign.
 Live rate checked through AWS Pricing: $1.64224/hour. One 110-minute lease has
