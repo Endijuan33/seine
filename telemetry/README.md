@@ -140,6 +140,13 @@ Check `systemctl status seine-telemetry-backup.timer`, backup file freshness and
 free disk space during operations. Restored records retain their original receipt
 times and remain subject to collector cleanup.
 
+After the first backup succeeds, install and enable
+`seine-telemetry-check.{service,timer}` the same way. Its five-minute checks cover
+HTTPS, database connectivity, retention, disk headroom and backup freshness;
+failures appear in systemd/journald. It does not send external notifications.
+The current host and maintenance commands are in
+[the production runbook](deploy/PRODUCTION.md).
+
 ## Analysis
 
 Connect privately with `psql` or a preferred SQL client:
