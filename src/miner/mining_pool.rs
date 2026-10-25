@@ -16,8 +16,8 @@ use crate::config::{Config, WorkAllocation};
 use crate::daemon_api::{is_unauthorized_error, ApiClient};
 use crate::dev_fee::{effective_pool_dev_fee_percent, DevFeeTracker, DEV_ADDRESS, DEV_FEE_PERCENT};
 use crate::pool::{
-    PoolClient, PoolEvent, PoolJob, POOL_NOTIFICATION_MINER_BLOCK_FOUND,
-    POOL_NOTIFICATION_POOL_BLOCK_SOLVED,
+    PoolClient, PoolEvent, PoolJob, PoolSubmitAck, PoolSubmitRetry,
+    POOL_NOTIFICATION_MINER_BLOCK_FOUND, POOL_NOTIFICATION_POOL_BLOCK_SOLVED,
 };
 use crate::types::{decode_hex, difficulty_to_target, parse_target};
 
@@ -1534,6 +1534,7 @@ fn handle_active_pool_event(
                 recent_submit_lookup,
             );
             let mut desync_reason = None::<String>;
+            let retry_suffix = record_retried_share_outcome(stats, &ack);
             if ack.accepted {
                 stats.bump_accepted();
                 let backend_suffix = submit_timing
@@ -1541,7 +1542,7 @@ fn handle_active_pool_event(
                     .map(|pending| format!(" (backend={})", pending.backend_label))
                     .unwrap_or_default();
                 if mode.is_user() {
-                    success("SHARE", format!("accepted{backend_suffix}"));
+                    success("SHARE", format!("accepted{retry_suffix}{backend_suffix}"));
                 }
                 if let Some(display) = tui.as_mut() {
                     display.mark_block_found();
@@ -1559,7 +1560,10 @@ fn handle_active_pool_event(
                     .map(|pending| format!(" (backend={})", pending.backend_label))
                     .unwrap_or_default();
                 if mode.is_user() {
-                    warn("SHARE", format!("rejected ({reason}){backend_suffix}"));
+                    warn(
+                        "SHARE",
+                        format!("rejected ({reason}){retry_suffix}{backend_suffix}"),
+                    );
                 }
                 maybe_log_pool_submit_timing(
                     mode,
@@ -1617,6 +1621,9 @@ fn handle_active_pool_event(
                 }
             }
         }
+        PoolEvent::SubmitRetry(retry) => {
+            note_pool_submit_retry(mode, stats, &retry);
+        }
         PoolEvent::Job(job) => {
             *latest_job = Some(job.clone());
             assign_pool_job(
@@ -1637,6 +1644,42 @@ fn handle_active_pool_event(
         }
     }
     Ok(())
+}
+
+/// Counts the final outcome of a share that was resubmitted after busy
+/// rejects and returns a log suffix such as " after 2 retries".
+fn record_retried_share_outcome(stats: &Stats, ack: &PoolSubmitAck) -> String {
+    if ack.retries == 0 {
+        return String::new();
+    }
+    stats.record_retried_share_outcome(ack.accepted);
+    let plural = if ack.retries == 1 { "y" } else { "ies" };
+    format!(" after {} retr{plural}", ack.retries)
+}
+
+fn note_pool_submit_retry(mode: PoolConnectionMode, stats: &Stats, retry: &PoolSubmitRetry) {
+    stats.bump_share_retries();
+    if !mode.is_user() {
+        return;
+    }
+    let message = format!(
+        "pool busy ({}); resubmitting {} nonce={} in {} (retry {}/{})",
+        retry.reason,
+        if retry.block_candidate {
+            "block candidate"
+        } else {
+            "share"
+        },
+        retry.nonce,
+        format_pool_duration(retry.delay),
+        retry.retry_number,
+        retry.max_retries,
+    );
+    if retry.block_candidate {
+        warn("SHARE", message);
+    } else if retry.retry_number == 1 {
+        info("SHARE", message);
+    }
 }
 
 fn force_pool_session_resync(
@@ -1767,6 +1810,7 @@ fn handle_inactive_pool_event(
                     .map(|job| &mut job.pending_submit_nonces),
                 recent_submit_lookup,
             );
+            let retry_suffix = record_retried_share_outcome(stats, &ack);
             if ack.accepted {
                 stats.bump_accepted();
                 let backend_suffix = submit_timing
@@ -1776,7 +1820,7 @@ fn handle_inactive_pool_event(
                 if mode.is_user() {
                     success(
                         "SHARE",
-                        format!("accepted ({}){backend_suffix}", mode.as_str()),
+                        format!("accepted ({}){retry_suffix}{backend_suffix}", mode.as_str()),
                     );
                 }
             } else {
@@ -1789,7 +1833,10 @@ fn handle_inactive_pool_event(
                 if mode.is_user() {
                     warn(
                         "SHARE",
-                        format!("rejected ({reason}) ({}){backend_suffix}", mode.as_str()),
+                        format!(
+                            "rejected ({reason}) ({}){retry_suffix}{backend_suffix}",
+                            mode.as_str()
+                        ),
                     );
                 }
             }
@@ -1811,6 +1858,9 @@ fn handle_inactive_pool_event(
                     );
                 }
             }
+        }
+        PoolEvent::SubmitRetry(retry) => {
+            note_pool_submit_retry(mode, stats, &retry);
         }
         PoolEvent::Job(job) => {
             if inactive_job
