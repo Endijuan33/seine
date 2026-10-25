@@ -2,6 +2,44 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 bare-metal EPYC 9355P SMT and package-power efficiency
+
+Qualified one Cherry EPYC 9355P (AuthenticAMD family 26/model 2), 32 physical
+cores/64 hardware threads, one socket/NUMA node, and twelve populated 16 GiB
+DDR5-4800 channels. Linux powercap package energy and the stock HSMP 280 W cap
+were readable. All 21 full-size reference transitions passed with dirty arenas
+and guard blocks intact. Frozen miner source: `36f40e6`; no kernel/default change
+was made for this experiment.
+
+At the stock cap, the fresh 32/48/64-worker SMT sweep measured 59.10/64.63/65.92
+whole-invocation H/s. Four paired 64-versus-32 comparisons gave **+11.54% H/s**
+and **-8.12% package J/hash**. Actual package power at 64 workers averaged
+246.63 W; 64 workers led the observed throughput/efficiency points.
+
+The separate 120-second power comparison fixed 64 workers and alternated stock
+280 W versus 240 W caps in four fresh pairs. Stock measured **67.63 H/s at
+249.98 package W**; 240 W cap measured **66.56 H/s at 213.03 package W**. The
+paired changes were **-13.41% J/hash** (descriptive 95% interval -13.49 to
+-13.31%), **-14.78% package watts**, and **-1.58% H/s**. All four energy pairs
+improved and the throughput interval retained more than 95%, passing the
+predeclared efficiency gate. This is a manual host power setting, not a new
+miner default or evidence of wall-plug efficiency.
+
+Both phases use fixed streaming, explicit 2 MiB HugeTLB, automatic affinity and
+the legacy 2 GiB workload. Their different invocation lengths explain why
+their absolute H/s should stay in separate series. Energy includes startup,
+allocation, work, fences and teardown; it excludes separately unmeasured DRAM
+and wall losses. The counters and workload are repeatable within this one host,
+not an architecture-wide confidence statement.
+
+The 269-file collected archive verified before further host work. Cap, hugepage
+pool and unused swap were restored after measurements. Nine reusable JSON/CSV
+records retain sample counts, raw numerators/denominators, configuration, source
+identity and evidence hashes. Protocol, plots and raw-analysis entry point:
+[`experiments/cherry-epyc-energy-20261025`](experiments/cherry-epyc-energy-20261025/README.md).
+Separate productive cold/cached tuning validation is still required for any
+automatic-policy change; the rental remains owned by that follow-up campaign.
+
 ## 2026-10-25 native AMD tuner tests retain hardware identity
 
 Found a validation blocker while auditing AMD tuning without a new rental:

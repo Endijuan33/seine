@@ -1,9 +1,25 @@
 # AMD CPU efficiency campaign
 
-Prepared 2026-10-25. Hardware measurements are pending; the local WSL host has
-no package-energy counters. This protocol measures the current legacy 2 GiB
-Argon2id workload. Requalify conclusions if the PoW changes; these measurements
-do not predict performance for a different algorithm.
+Updated 2026-10-25 after the first qualified bare-metal measurements. This
+campaign measures the current legacy 2 GiB Argon2id workload; conclusions apply
+to that algorithm and the measured configuration.
+
+## Measured EPYC 9355P efficiency
+
+On a 32-core/64-thread EPYC 9355P with twelve populated DDR5-4800 channels,
+64 streaming workers measured **66.56 H/s at 213.03 W of CPU package power**
+with a 240 W cap. Four alternating pairs against the stock 280 W cap retained
+**98.42% of throughput** while reducing **package energy per hash by 13.41%**.
+All measurements include startup, allocation, work and teardown. Power is from
+the CPU package counter; wall-plug and separate DRAM energy are unmeasured.
+
+The [complete report](../experiments/cherry-epyc-energy-20261025/RESULTS.md)
+separates worker scaling from the longer power comparison. Its
+[JSON records](../experiments/cherry-epyc-energy-20261025/benchmark-records.json)
+and [CSV records](../experiments/cherry-epyc-energy-20261025/benchmark-records.csv)
+carry hardware, settings, duration, repetitions, variation and evidence hashes
+for future README/website graphs. These are manual fixed-configuration results;
+productive automatic-tuning follow-ups are a separate campaign.
 
 ## Current baseline
 
@@ -46,40 +62,33 @@ challengers, confirmation requirements and memory-pressure behavior.
 
 ## Rental shortlist
 
-Public listings checked on 2026-10-25; prices and inventory must be rechecked
-before ordering. No rental has been created for this campaign.
+Original public shortlist, checked on 2026-10-25; recheck prices and inventory
+before a new order. The Cherry configuration was subsequently rented and
+qualified as EPYC 9355P, with all twelve channels populated and readable package
+counters. Its authenticated hourly rate is USD 1.20.
 
 | Provider / configuration | Listed rate | Fit |
 | --- | --- | --- |
-| [Cherry EPYC 9355](https://www.cherryservers.com/pricing/dedicated-servers/amd-epyc-9355?billing=3), 32 cores, 192 GB DDR5 | EUR 1.026/hour | First candidate for a short bare-metal Zen 5 session; installed DIMM layout and counter access unverified |
+| [Cherry EPYC 9355](https://www.cherryservers.com/pricing/dedicated-servers/amd-epyc-9355?billing=3), 32 cores, 192 GB DDR5 | EUR 1.026/hour listed; USD 1.20/hour authenticated | Measured 9355P host: twelve populated DDR5-4800 channels, readable package counters and HSMP cap |
 | [Latitude f4.metal.large](https://www.latitude.sh/pricing), EPYC 9275F, 24 cores, 768 GB | From USD 2.62/hour | Alternative Zen 5 host; installed channels and energy counters also need verification |
 | [Latitude m4.metal.xlarge](https://www.latitude.sh/pricing), EPYC 9455P, 48 cores, 768 GB | From USD 4.76/hour | Larger Zen 5 comparison at higher rental cost |
 | [Scaleway EM-I520E](https://www.scaleway.com/en/pricing/elastic-metal/), EPYC 8434P | EUR 1.562/hour before tax in PAR-1 | Revisit for energy on the previously measured family; does not answer the 12-channel Turin question |
 
-At Cherry's displayed base rate, two hours is EUR 2.052 before any taxes,
-configuration changes or account-funding requirements. Reserve time for setup,
-verification, collecting results and deleting the rental as well as hashing.
-The authenticated USD checkout on 2026-10-25 shows USD 1.20/hour for the
-prebuilt Lithuania 192 GB configuration (plan 984, hourly cycle 37), or
-USD 2.40 for two hours. Although the general card top-up form permits USD 1,
-deployment requires enough available credit for **eight hours (USD 9.60)**.
-The deployment attempt was blocked by this balance requirement; no server was
-created. Account credit is separate from actual rental expenditure.
+The authenticated checkout required eight hours of available credit (USD 9.60)
+before deployment, even for a shorter planned rental. Identity verification and
+funding subsequently completed, and the host was deployed. Available credit is
+separate from actual expenditure. Plan collection and server deletion as part of
+the rental window; shutting down a dedicated server is not the same as deleting
+its billable resource. Keep funding/access details in the private operational
+ledger rather than benchmark records.
 
-The first card payment was also held pending identity verification. The portal
-states that unverified pending transactions are refunded after 48 hours.
-[Cherry's verification guide](https://www.cherryservers.com/knowledge/docs/usage-billing/identity-verification)
-describes an iDenfy identity-document and camera flow that the account holder
-must complete. Establish these funding and identity requirements before asking
-an operator to deposit money; a small minimum top-up does not establish that
-the same balance permits deployment.
-A CPU's supported channel count and a total RAM figure do not establish the
-installed DIMM/channel population. Get the actual layout before selecting a
-configuration for the 12-channel experiment.
+The original two-hour measurement campaign completed within its window. A
+separately authorized follow-up retains the host for productive automatic-tuner
+validation. Its operational ledger owns the extended cleanup deadline.
 
 ## Host qualification
 
-Required for the proposed first session:
+Required when repeating these measurements on another host:
 
 - Exclusive Linux bare-metal access with host root, an exact CPU identity and
   all 12 channels populated for the memory-scaling comparison. Record DIMM

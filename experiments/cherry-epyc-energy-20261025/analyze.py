@@ -187,6 +187,24 @@ def plot(result, destination):
     fig.savefig(destination / 'efficiency.png', dpi=180)
     fig.savefig(destination / 'efficiency.svg')
     plt.close(fig)
+    if 'power' in result:
+        metrics = result['power']['metrics']
+        fig, axes = plt.subplots(1, 3, figsize=(11, 4), layout='constrained')
+        panels = [('invocation_completed_hashes_per_second', 'Completed hashes / second'),
+                  ('average_package_watts', 'Measured CPU package watts'),
+                  ('invocation_joules_per_completed_hash', 'Package joules / hash')]
+        for ax, (metric, title) in zip(axes, panels):
+            values = [metrics[metric][role]['arithmetic_mean'] for role in ('baseline', 'candidate')]
+            bars = ax.bar(['Stock 280 W cap', '240 W cap'], values, color=['#377eb8', '#ff7f00'])
+            ax.bar_label(bars, fmt='%.2f', padding=4)
+            ax.set(title=title, ylim=(0, max(values) * 1.15))
+            ax.grid(axis='y', alpha=.2)
+            ax.set_axisbelow(True)
+        fig.suptitle('EPYC 9355P · 64 workers · streaming kernel · 12 × DDR5-4800\n'
+            'Four alternating pairs, 120-second windows · whole-invocation CPU package energy', fontsize=11)
+        fig.savefig(destination / 'power-cap.png', dpi=180)
+        fig.savefig(destination / 'power-cap.svg')
+        plt.close(fig)
 
 
 if __name__ == '__main__':

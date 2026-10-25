@@ -1,10 +1,17 @@
-# EPYC 9355 package-energy qualification
+# EPYC 9355P package-energy qualification
 
-One hourly Cherry Servers EPYC 9355, 192 GB configuration, ordered on
-2026-10-25. Rate: USD 1.20/hour. Delete by **05:46 EDT**, including provisioning
-in the two-hour limit. The USD 13 account credit is separate from the USD 2.40
-planned rental expenditure. The operational ledger and private host inventory
-remain under ignored `data/cherry-epyc-energy-20261025/`.
+**Measurements complete.** See [results and paired comparisons](RESULTS.md),
+[graph-ready JSON](benchmark-records.json), [CSV](benchmark-records.csv), and
+[full numerical analysis](results.json).
+
+One hourly Cherry Servers advertised EPYC 9355/192 GB configuration, ordered on
+2026-10-25 and qualified as an **EPYC 9355P**. Rate: USD 1.20/hour. The original
+measurement plan below reserved two hours/USD 2.40, with deletion by 05:46 EDT.
+All three measurement phases finished within that original window. The user
+subsequently authorized a separate overnight campaign and rental extension for
+native automatic-tuner validation; this did not change these measurements or
+their deadlines. Operational accounting and private host inventory remain under
+ignored `data/cherry-epyc-energy-20261025/`.
 
 This is the legacy 2 GiB Argon2id workload. The frozen miner source is
 `36f40e6381ddc99d5b97b8cb3b5436b119a335c6`; its binary SHA-256 is
