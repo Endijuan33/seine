@@ -8,6 +8,19 @@ first; never list losses or no-gain results; keep it brief, skip internal
 refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
+## v0.2.25
+
+**Fewer lost shares when the pool is busy.** Shares the pool turns away with
+"server busy, retry" or "rate limited, retry" are now resubmitted a few times
+instead of being dropped, block candidates most persistently. They no longer
+count as rejected unless every retry fails; the dashboard shows how many were
+retried.
+
+**No more duplicate-share rejects after a dev-fee round.** If the pool changed
+your difficulty during a dev-fee round, Seine used to restart that job from its
+first nonce and resubmit shares it had already sent. It now carries on where it
+stopped.
+
 ## v0.2.24
 
 **About 33% faster CPU mining on the Ryzen 9 9950X3D.** At 8 workers it now
