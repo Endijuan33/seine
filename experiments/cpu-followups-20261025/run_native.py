@@ -89,6 +89,15 @@ def main():
         run('reduced-parity', [str(ROOT/'test-reduced'),'full_size_reduced_memory_parity','--ignored','--nocapture'], 180)
         parity = (OUT/'reduced-parity.log').read_text()
         assert parity.count('FULL_PARITY') == 6 and '1 passed; 0 failed' in parity
+        if args.host == 'epyc':
+            # The wide memory comparison uses 256-bit paths, whereas preferred()
+            # in the full-size unit test may select full-width AVX-512. Verify
+            # each exact wide path against RustCrypto outside every RSS sample.
+            for threshold, kernel in [(0,'avx512-256-stream'),(2,'avx512-256'),(3,'avx512-256')]:
+                name = 'wide-parity-t' + str(threshold)
+                run(name, [str(ROOT/'mine-reduced'),'2097152','1',str(threshold),kernel,'70','1','1'],180)
+                rows = [json.loads(line) for line in (OUT/(name+'.log')).read_text().splitlines()]
+                assert len(rows) == 2 and rows[0]['verified'] is True
         if args.host == 'intel':
             subprocess.run(['sudo','sysctl','-w','vm.nr_hugepages=12288'],check=True)
             assert int(pool.read_text()) == 12288

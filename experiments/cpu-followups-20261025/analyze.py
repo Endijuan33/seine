@@ -81,10 +81,21 @@ def analyze(root):
         assert math.isclose(window['completed_hps_lower_bound'], max(counts) / window['elapsed_start_request_through_stopped_seconds'])
         assert 'quarantined' not in text.lower()
         caches = {p.name: read(p) for p in folder.glob('tuning.json*') if p.is_file()}
+        start = re.search(r'starting with (\d+) threads \(([^)]+)\)', text)
+        assert start
         result['productive'][folder.name] = {'window': window, 'caches': caches,
+            'starting_threads': int(start[1]), 'starting_reason': start[2],
             'trajectory': [line for line in text.splitlines() if ('autotune' in line.lower() or 'cpu-kernel' in line.lower())],
             'identity': read(folder / 'identity.json')}
     assert len(result['productive']) == 8
+    for name, run in result['productive'].items():
+        if name.startswith('joint-warm-'):
+            cold = result['productive'][name.replace('joint-warm-', 'joint-', 1)]
+            expected_count = cold['caches'].get('tuning.json', {}).get('selected_threads')
+            run['cold_selected_threads'] = expected_count
+            run['count_cache_restored'] = (expected_count is not None and
+                run['starting_threads'] == expected_count and run['starting_reason'] == 'cached starting point')
+            run['kernel_cache_restore_messages'] = [line for line in run['trajectory'] if 'restoring confirmed' in line]
     for kind, prefix in [('cold', 'joint-'), ('warm', 'joint-warm-')]:
         ratios = [result['productive'][prefix+'candidate-'+suffix]['window']['completed_hps_lower_bound'] /
                   result['productive'][prefix+'control-'+suffix]['window']['completed_hps_lower_bound'] for suffix in ['a', 'b']]

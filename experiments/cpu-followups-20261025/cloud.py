@@ -83,6 +83,7 @@ def main():
         except Exception:
             aws('delete-security-group', '--group-id', group)
             key.unlink(missing_ok=True)
+            key.with_suffix('.pub').unlink(missing_ok=True)
             save('launch-failed-cleanup.json', {'security_group_deleted': True, 'key_removed': True})
             raise
         print(json.dumps(state))
@@ -118,7 +119,10 @@ def main():
             if volume:
                 assert not aws('describe-volumes', '--filters', 'Name=volume-id,Values=' + volume)['Volumes']
             record['root_volume_deleted'] = bool(volume)
-        aws('delete-security-group', '--group-id', state['security_group'])
+        # Launch failure may already have deleted this exact owned group. Keep
+        # cleanup retryable without treating an absent resource as a failure.
+        if aws('describe-security-groups', '--filters', 'Name=group-id,Values=' + state['security_group'])['SecurityGroups']:
+            aws('delete-security-group', '--group-id', state['security_group'])
         assert not aws('describe-security-groups', '--filters', 'Name=group-id,Values=' + state['security_group'])['SecurityGroups']
         record['security_group_deleted'] = True
         (root / 'ssh-key').unlink(missing_ok=True)
