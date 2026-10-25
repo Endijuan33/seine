@@ -262,7 +262,8 @@ Send the user a concise interpretation and next action rather than raw SQL outpu
 The command is invoked during agent work; it does not schedule unattended agent
 runs or notifications. Existing service health checks continue every five minutes.
 It neither modifies miner settings nor deploys changes. Backups remain local and
-external alerting remains unconfigured, as described in the production runbook.
+a separate stateful Discord alert timer handles fleet incidents, as described in
+the [production runbook](deploy/PRODUCTION.md#discord-fleet-alerts).
 
 ### Manual SQL
 
@@ -290,7 +291,8 @@ describe reporting installations and may not represent all miners.
 ## Verification and showcase
 
 ```sh
-python3 telemetry/test_agent_report.py
+python3 -m unittest discover -s telemetry -p 'test_a*.py'
+# Includes disposable PostgreSQL alert SQL tests when PostgreSQL 16 is installed.
 cargo +1.93.0 test -p seine-telemetry --features server
 cargo +1.93.0 test --bin seine --no-default-features hardware_telemetry
 cargo +1.93.0 check --workspace --all-targets --features seine-telemetry/server,amd

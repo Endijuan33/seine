@@ -26,6 +26,10 @@ if not reports or time.time() - max(p.stat().st_mtime for p in reports) > 27 * 3
 if any(time.time() - p.stat().st_mtime > 8 * 86400 for p in reports):
     raise SystemExit('Telemetry recovery backup expiry is overdue.')
 PY
+if [[ "${1:-}" == --infrastructure-only ]]; then
+    echo 'Telemetry HTTPS, database, retention, disk and backups are healthy.'
+    exit 0
+fi
 quality="$("${compose[@]}" exec -T db psql -X -U telemetry -d telemetry -qAt -v ON_ERROR_STOP=1 < "$deploy_dir/../data_quality.sql")"
 diagnostics="$("${compose[@]}" exec -T db psql -X -U telemetry -d telemetry -qAt -v ON_ERROR_STOP=1 < "$deploy_dir/../diagnostics.sql")"
 python3 - "$quality" "$diagnostics" <<'PYTHON'

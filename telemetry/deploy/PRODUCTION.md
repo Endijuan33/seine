@@ -27,8 +27,9 @@ journalctl -u seine-telemetry-check.service -n 20
 The five-minute check verifies local HTTPS certificate/response, database queries,
 retention progress, disk headroom, backup freshness and sustained inventory-only
 reporting (sample completeness). A failed check appears in
-systemd/journald. No external alert destination is configured. Public DNS/reachability
-should also be checked from outside the server:
+systemd/journald. The separate five-minute alert timer sends confirmed incidents
+to the existing pool Discord alerts channel. Public DNS/reachability should also
+be checked from outside the server:
 
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' https://telemetry.seineminer.com/healthz
@@ -46,7 +47,9 @@ problem from a collector, backup or database failure.
 The check also flags miner reliability incidents affecting at least three
 installations of one version in 24 hours. `telemetry/agent_report.py` provides
 aggregate issue clusters and diagnostic coverage, including lower-volume issues.
-These checks are recorded in journald; external notifications are not configured.
+These checks are recorded in journald and evaluated independently by the alert runner.
+Legacy inventory-only reports produce their own version-specific alert; they do not
+prevent collector outages or miner failures from being reported.
 
 For deployment, first review the intended commit and create a fresh recovery backup.
 Then fast-forward the checkout and rebuild only the collector:
@@ -66,3 +69,69 @@ always verify a restore in a separate database before replacing live data.
 Official miner builds use the GitHub repository variable `SEINE_TELEMETRY_URL`.
 Changing it affects future builds; shipped clients keep their saved endpoint and
 opt-out preference. The policy is published at <https://seineminer.com/privacy/>.
+
+## Discord fleet alerts
+
+`seine-telemetry-alerts.timer` runs `telemetry/alerts.py` every five minutes.
+It uses the pool's existing Discord alerts destination, stored separately as
+`DISCORD_WEBHOOK_URL` in root-only `/etc/seine/telemetry-alerts.env`. Never commit
+or print that file. It is independent of the collector container and does not
+restart miners, Stratum, the daemon, or the collector.
+
+The runner evaluates these independent categories:
+
+- Infrastructure: HTTPS, database, retention, disk and recovery backup checks.
+- Ingestion: no periodic release reports for two hours (including an empty DB).
+- Sample quality: five installations of one version with three inventory-only
+  reports spanning two hours within the last six hours.
+- Reliability: errors/quarantines or unclean previous runs on three distinct
+  installations of one version in 24 hours. An unclean run is not proof of a crash.
+- Performance: matching installation, hardware/environment, build target/features
+  and backend settings across the recent 36 hours versus the preceding part of
+  the seven-day window. Each period/version requires three reports spanning 24
+  hours. At least five paired installations, a median rate ratio at or below
+  0.8, and at least 60% (minimum three) down 20% are required. Each installation
+  has equal weight; duplicate devices cannot inflate the population. This is
+  an observational screening alert, not proof of a release regression.
+- Monitor: a query times out or cannot be read. Failed queries do not clear
+  previously reported incidents in the affected categories.
+
+Opening and clearing require two observations at least four minutes apart;
+normal delivery occurs on the next five-minute tick. Repeats are suppressed
+for four hours. A gap longer than 15 minutes resets pending confirmation.
+Clearing means the threshold cleared or its observations aged out, not that
+all affected miners demonstrably recovered. Missing diagnostic coverage is
+not evidence of healthy miners; inspect coverage with `agent_report.py`.
+
+State is stored atomically in `/var/lib/seine-telemetry-alerts/state.json` with
+an exclusive process lock. Only successful HTTP delivery acknowledges a notice;
+HTTP failures (including rate limits) retry on the next timer tick. Delivery
+is at least once: a process crash between HTTP success and saving state can
+repeat a notice. At most ten messages are sent per run, oldest unsent first.
+Messages contain aggregate counts and bounded hardware/version labels, never
+installation IDs, raw logs or credentials. Mentions and redirects are disabled.
+
+To inspect without writing state or sending messages:
+
+```sh
+python3 /opt/seine/telemetry/alerts.py --dry-run
+systemctl status seine-telemetry-alerts.timer
+journalctl -u seine-telemetry-alerts.service -n 20
+```
+
+To install after configuring the root-only environment file and reviewing the
+commit (no collector rebuild needed):
+
+```sh
+install -m 0644 telemetry/deploy/seine-telemetry-alerts.{service,timer} /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now seine-telemetry-alerts.timer
+systemctl start seine-telemetry-alerts.service
+```
+
+Disable with `systemctl disable --now seine-telemetry-alerts.timer`; retain state
+unless intentionally resetting incident deduplication. The original health timer
+continues independently. The alert runner can run when Docker is stopped, but
+cannot deliver during host/network loss or a Discord outage. Journald records
+delivery failures. Outside-in uptime checks and off-host backups remain separate
+operational gaps; this change does not claim to cover them.
