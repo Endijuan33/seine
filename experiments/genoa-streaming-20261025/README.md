@@ -44,6 +44,9 @@ IPv4 and small evidence downloads. No automatic extra lease or budget reset.
 from raw evidence. Cold and cached rates are completed-hash lower bounds over
 startup through shutdown. Two paired windows describe this host/session only.
 
+The local coordinator uses `/usr/bin/python3` (Python 3.12), including the safe
+tar extraction filter. It rejects older interpreters before allocating a lease.
+
 ## Landing gate
 
 All correctness/resource checks must pass, both cold candidate runs must

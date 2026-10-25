@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Wait for free quota, run one frozen lease, collect evidence and always clean up."""
 import datetime as dt
 import hashlib
@@ -59,6 +59,7 @@ def interrupted(signum, frame):
 
 
 def main():
+    assert hasattr(tarfile, 'data_filter'), 'use /usr/bin/python3 with safe tar extraction support'
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     assert not (DATA / 'operation.json').exists(), 'one lease only; inspect previous operation before retrying'
