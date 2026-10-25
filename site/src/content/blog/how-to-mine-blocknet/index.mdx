@@ -9,9 +9,9 @@ faq:
   - q: How much RAM do I need to mine Blocknet?
     a: Each mining thread needs about 2 GB of RAM, because every Argon2id hash works through a 2 GiB block of memory. A machine with 16 GB can therefore run roughly six to seven threads after leaving room for the system. Seine measures your memory and picks a safe thread count automatically.
   - q: When do Blocknet mining payouts arrive on bntpool.com?
-    a: Bntpool.com pays with PPLNS over a six-hour window. A block's reward can only be paid after it is 60 blocks deep, about five hours at five-minute blocks, and balances are sent once they reach 0.1 BNT. Expect the first payment several hours after your first accepted shares.
+    a: The bntpool.com pool pays with PPLNS over a six-hour window. A block's reward can only be paid after it is 60 blocks deep, about five hours at five-minute blocks, and balances are sent once they reach 0.1 BNT. Expect the first payment several hours after your first accepted shares.
   - q: What does it cost to mine Blocknet with seine on bntpool.com?
-    a: Seine is free and open source and keeps a 1% dev fee when you mine on bntpool.com, or 2.5% on other pools and in solo mode. Bntpool.com charges its own 2.5% pool fee on each block. Your electricity cost is the other expense, so measure your power draw before running a machine around the clock.
+    a: Seine is free and open source and keeps a 1% dev fee when you mine on bntpool.com, or 2.5% on other pools and in solo mode. The pool charges its own 2.5% fee on each block. Your electricity cost is the other expense, so measure your power draw before running a machine around the clock.
 ---
 
 Blocknet is a privacy cryptocurrency with a memory-hard proof of work, so ordinary computers can mine it: desktops, laptops, servers and NVIDIA graphics cards. This guide takes you from nothing to accepted shares with **seine**, a free, open-source miner that tunes itself to your hardware, mining on the bntpool.com pool.
@@ -65,7 +65,7 @@ From here seine keeps tuning while it mines. It compares thread counts and CPU k
 
 ## How long until you get paid?
 
-Bntpool.com uses PPLNS: each block's reward is shared among the shares submitted in the six hours before it was found. A reward can't be spent until its block is 60 blocks deep, which is about five hours at Blocknet's five-minute block time. Once your confirmed balance reaches 0.1 BNT, the pool sends it to your address.
+The bntpool.com pool uses PPLNS: each block's reward is shared among the shares submitted in the six hours before it was found. A reward can't be spent until its block is 60 blocks deep, which is about five hours at Blocknet's five-minute block time. Once your confirmed balance reaches 0.1 BNT, the pool sends it to your address.
 
 You can follow your hashrate, shares and balance on [bntpool.com](https://bntpool.com) by looking up your address. The pool shows rewards from blocks that haven't confirmed yet separately, because those can still change.
 

@@ -4,6 +4,7 @@
 .page-head h1 { margin: 10px 0 0; font-weight: 600; font-size: clamp(2.1rem, 4.6vw, 3.2rem); line-height: 1.06; letter-spacing: -0.03em; text-wrap: balance; max-width: 24ch; }
 .page-head .lead { margin: 14px 0 0; color: var(--ink-2); max-width: 40rem; }
 .page-head .meta { margin-top: 16px; font: 13px/1.4 var(--mono); color: var(--ink-3); }
+.page-head:has(+ .posts) { border-bottom: 0; margin-bottom: 0; } /* the list draws its own top rule */
 .crumbs { font: 13px/1 var(--mono); color: var(--ink-3); }
 .crumbs a { text-decoration: none; }
 .crumbs a:hover { color: var(--ink); }
