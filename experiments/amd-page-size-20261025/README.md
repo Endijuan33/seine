@@ -1,8 +1,14 @@
 # EPYC 9355P: 2 MiB versus 1 GiB HugeTLB
 
+Completed: [native results](RESULTS.md) measured **+0.908% whole-invocation H/s**
+and **−0.330% package J/hash** with 1 GiB pages, passing both predeclared gates.
+All 128 pages allocated and all 21 native reference transitions passed. Two
+[JSON](benchmark-records.json)/[CSV](benchmark-records.csv) graph records retain
+the same executable and complete measurement scope. No default policy changed.
+
 Preregistered on 2026-10-25 after a read-only capability check found a zero-sized
-1 GiB HugeTLB pool exposed by the qualified host. **Allocation feasibility and
-performance are unmeasured.** Do not change either page pool during the earlier
+1 GiB HugeTLB pool exposed by the qualified host. Allocation feasibility and
+performance were unmeasured when this protocol was frozen. Do not change either page pool during the earlier
 productive-tuner or streaming-ring experiments.
 
 This compares page backing with the **same frozen ring-64 streaming executable**

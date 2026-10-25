@@ -1,5 +1,5 @@
 {
-  "scope": "Experimental binaries only. No shipping ring-size change; native screening and conditional confirmation still required.",
+  "scope": "Native screening and fresh confirmation complete. Ring 16 at 64 workers gained 0.367% but failed the predeclared lower-bound-above-1% gate; no energy phase and no shipping ring-size change.",
   "toolchain": "Rust 1.93.0",
   "build_args": [
     "build",
@@ -21,7 +21,8 @@
       "patch": "ring-64.patch",
       "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "local_reference_transitions_passed": 21,
-      "native_status": "NOT_RUN_YET"
+      "native_status": "CONTROL_SCREEN_AND_CONFIRMATION_COMPLETE",
+      "native_reference_transitions_passed": 21
     },
     "32": {
       "source_revision": "28191b798b8dc18fdf6ebcaf44fd549b35264870",
@@ -33,7 +34,8 @@
       "patch": "ring-32.patch",
       "patch_sha256": "f25866e1847f953f8b7d7595a3f0cd4280bc6fa18546ff581c8cdeaa4320c703",
       "local_reference_transitions_passed": 21,
-      "native_status": "NOT_RUN_YET"
+      "native_status": "SCREEN_COMPLETE_NOT_SELECTED",
+      "native_reference_transitions_passed": 21
     },
     "16": {
       "source_revision": "28191b798b8dc18fdf6ebcaf44fd549b35264870",
@@ -45,7 +47,8 @@
       "patch": "ring-16.patch",
       "patch_sha256": "19963652541010c970dde101be2d54b523e9f1caf1951ca343d0cf7d4ed09bba",
       "local_reference_transitions_passed": 21,
-      "native_status": "NOT_RUN_YET"
+      "native_status": "SCREEN_AND_CONFIRMATION_COMPLETE_ADOPTION_GATE_REJECTED",
+      "native_reference_transitions_passed": 21
     }
   },
   "reconstruction": "Each measured runtime is the recorded runtime_source_base plus its exact ring patch. Source revision alone does not identify modified variants. Other tracked differences in preparation are tests and experimental harnesses, not runtime/library/build files."

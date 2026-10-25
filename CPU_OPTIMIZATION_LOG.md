@@ -2,6 +2,39 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 Turin page size and streaming-buffer locality
+
+On the qualified 32-core/64-thread EPYC 9355P, four alternating same-binary
+120-second whole-invocation pairs compared explicit 2 MiB and 1 GiB HugeTLB at
+64 fixed streaming workers and the stock 280 W cap. One-GiB pages measured
+**68.256 H/s, 251.618 package W and 3.6864 J/hash**, versus **67.642 H/s,
+250.180 W and 3.6986 J/hash** for two-MiB pages. Paired H/s improved **0.908%**
+(descriptive 95% interval +0.859 to +0.966%); package J/hash fell **0.330%**
+(−0.455 to −0.168%). Package watts rose 0.575%; this is an energy-per-hash
+improvement, not lower power. No automatic page policy changed.
+
+The host reserved all 128 one-GiB pages. The actual-mapping verifier passed 21
+full-size dirty-reuse/guard transitions. Every run verified 64 requested arenas
+without fallback or allocation failure; no swap/OOM appeared. Both pools and
+swap were restored, and all 104 archive entries verified. The metric includes
+startup/work/fences/teardown, excludes pool setup and unmeasured DRAM/wall energy,
+and describes four pairs on one host. The combined 1 GiB/240 W configuration
+was not measured in this experiment.
+
+Separately, smaller streaming buffers were screened at 32 and 64 workers.
+At 32 workers, 32/16-block buffers changed completed backend H/s by −1.153%/
+−3.164%; at 64, changes were −0.021%/+0.245%. Fresh four-pair confirmation of
+16 blocks at 64 workers gave **+0.367%** (descriptive interval +0.282 to +0.459%),
+below the required lower bound above +1%. No energy phase ran and the shipping
+64-block buffer remains. All variants passed 21 native reference transitions;
+143 final archive entries verified. Diagnostic core-L2 counters and non-atomic
+HSMP bandwidth estimates are preserved separately and are not DRAM byte counts.
+
+[Page-size results and two graph records](experiments/amd-page-size-20261025/RESULTS.md).
+[Buffer screening, confirmation and ten records](experiments/amd-ring-locality-20261025/RESULTS.md).
+Validation also passed the expanded ring-boundary integration test, scoped Rust
+1.93 formatting, 15 ring evidence tests and 14 page comparison/admission/export tests.
+
 ## 2026-10-25 Turin challenger ordering — accepted
 
 On the bare-metal EPYC 9355P (32 cores/64 threads, 192 GiB, twelve DDR5-4800

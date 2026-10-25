@@ -1,5 +1,11 @@
 # Streaming-ring locality on SMT Turin
 
+Completed: [screening and fresh confirmation](RESULTS.md) retained the shipping
+64-block buffer. The 16-block/64-worker candidate gained 0.367% in confirmation,
+below the predeclared lower-bound-above-1% gate; no energy phase or kernel change
+followed. [JSON](benchmark-records.json)/[CSV](benchmark-records.csv) retain all
+ten screening/confirmation graph points, including slower variants.
+
 Prepared before measuring these variants, during the separate productive-tuner
 campaign on 2026-10-25. No shipping kernel change is authorized by this protocol.
 

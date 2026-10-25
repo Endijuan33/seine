@@ -21,6 +21,22 @@ carry hardware, settings, duration, repetitions, variation and evidence hashes
 for future README/website graphs. These are manual fixed-configuration results;
 productive automatic-tuning follow-ups are a separate campaign.
 
+## Measured explicit 1 GiB pages
+
+On the same qualified EPYC 9355P at the stock 280 W cap, four alternating
+same-binary pairs measured **68.256 H/s with 1 GiB pages**, versus **67.642 H/s
+with 2 MiB pages**, using 64 streaming workers. The paired gain was **0.908%**;
+package energy per hash improved **0.330%**. Both throughput and energy cover
+the whole invocation, including startup and teardown. Pool preparation occurs
+outside that interval. All 128 required one-GiB pages allocated successfully.
+
+The [complete page-size report](../experiments/amd-page-size-20261025/RESULTS.md)
+and [graph records](../experiments/amd-page-size-20261025/benchmark-records.json)
+retain actual package watts, paired uncertainty and reference/backing checks.
+This is the existing explicit `large-1g` configuration; automatic page selection
+is unchanged. The combination of 1 GiB pages and a 240 W cap remains a separate,
+unmeasured configuration.
+
 ## Current baseline
 
 Use current `master`, not the older `codex/linux-numa-defaults` checkout. The
@@ -59,8 +75,11 @@ were effectively unchanged. Both confirmation cycles and all challengers remain.
 The [complete report](../experiments/amd-overnight-20261025/RESULTS.md) separates
 these automatic results from fixed-kernel energy measurements and retains the
 original failed resource fixture plus its successful, identical-binary retest.
-Next, compare smaller streaming buffers and explicit 1 GiB pages under controlled
-conditions before considering further automatic-policy changes.
+The [buffer-size experiment](../experiments/amd-ring-locality-20261025/RESULTS.md)
+retained the shipping 64-block implementation: a 0.367% fresh gain at 64 workers
+did not meet its predeclared +1% lower-bound adoption gate. Explicit 1 GiB page
+results are reported above. A full productive comparison of shorter, high-count
+kernel samples is the next automatic-tuning experiment; its outcome is pending.
 
 ## Rental shortlist
 
