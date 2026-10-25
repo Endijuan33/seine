@@ -32,8 +32,18 @@ configuration changes or account-funding requirements. Reserve time for setup,
 verification, collecting results and deleting the rental as well as hashing.
 The authenticated USD checkout on 2026-10-25 shows USD 1.20/hour for the
 prebuilt Lithuania 192 GB configuration (plan 984, hourly cycle 37), or
-USD 2.40 for two hours. The card top-up form permits USD 1 minimum; account
-credit is separate from actual rental expenditure. No server has been ordered.
+USD 2.40 for two hours. Although the general card top-up form permits USD 1,
+deployment requires enough available credit for **eight hours (USD 9.60)**.
+The deployment attempt was blocked by this balance requirement; no server was
+created. Account credit is separate from actual rental expenditure.
+
+The first card payment was also held pending identity verification. The portal
+states that unverified pending transactions are refunded after 48 hours.
+[Cherry's verification guide](https://www.cherryservers.com/knowledge/docs/usage-billing/identity-verification)
+describes an iDenfy identity-document and camera flow that the account holder
+must complete. Establish these funding and identity requirements before asking
+an operator to deposit money; a small minimum top-up does not establish that
+the same balance permits deployment.
 A CPU's supported channel count and a total RAM figure do not establish the
 installed DIMM/channel population. Get the actual layout before selecting a
 configuration for the 12-channel experiment.
