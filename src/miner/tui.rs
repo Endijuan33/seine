@@ -104,6 +104,8 @@ pub struct TuiStateInner {
     pub submitted: u64,
     pub stale_shares: u64,
     pub accepted: u64,
+    /// Resubmits after retryable ("server busy, retry") pool rejects.
+    pub share_retries: u64,
     pub pool_address: String,
     pub pool_pending: String,
     pub pool_paid: String,
@@ -157,6 +159,7 @@ impl TuiStateInner {
             submitted: 0,
             stale_shares: 0,
             accepted: 0,
+            share_retries: 0,
             pool_address: "---".to_string(),
             pool_pending: "---".to_string(),
             pool_paid: "---".to_string(),
@@ -430,7 +433,7 @@ fn draw_compact_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiSta
             } else {
                 "Stale"
             },
-            state.stale_shares,
+            rejected_shares_display(state, format_plain_u64),
             state.height
         )),
     ];
@@ -699,7 +702,7 @@ fn draw_stats_wide(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner
 
     // Mining panel
     let submitted_str = format_u64(state.submitted);
-    let stale_shares_str = format_u64(state.stale_shares);
+    let stale_shares_str = rejected_shares_display(state, format_u64);
     let accepted_str = format_u64(state.accepted);
     let rejected_or_stale_label = if state.mode == "pool" {
         "Rejected"
@@ -759,7 +762,7 @@ fn draw_stats_narrow(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInn
 
     // Mining
     let submitted_str = format_u64(state.submitted);
-    let stale_shares_str = format_u64(state.stale_shares);
+    let stale_shares_str = rejected_shares_display(state, format_u64);
     let accepted_str = format_u64(state.accepted);
     let rejected_or_stale_label = if state.mode == "pool" {
         "Rejected"
@@ -776,6 +779,21 @@ fn draw_stats_narrow(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInn
         .borders(Borders::ALL)
         .border_style(BORDER_STYLE);
     frame.render_widget(Paragraph::new(mining_lines).block(mining_block), rows[2]);
+}
+
+/// Rejected/stale count, with busy-reject resubmits alongside in pool mode so
+/// an overloaded pool is visible without inflating the rejected count.
+fn rejected_shares_display(state: &TuiStateInner, format: fn(u64) -> String) -> String {
+    let rejected = format(state.stale_shares);
+    if state.mode == "pool" && state.share_retries > 0 {
+        format!("{rejected} ({} retried)", format(state.share_retries))
+    } else {
+        rejected
+    }
+}
+
+fn format_plain_u64(value: u64) -> String {
+    value.to_string()
 }
 
 fn draw_devices(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner, wide: bool) {
@@ -1394,6 +1412,21 @@ mod tests {
         press(&mut state, KeyCode::Char('-'));
         assert!(!state.thread_change_pending);
         assert!(!render_text(&state, 80, 24).contains("[+] [-]"));
+    }
+
+    #[test]
+    fn rejected_shares_display_shows_pool_retries_separately() {
+        let mut state = TuiStateInner::new();
+        state.mode = "pool".to_string();
+        state.stale_shares = 3;
+        assert_eq!(rejected_shares_display(&state, format_u64), "3");
+        state.share_retries = 1_250;
+        assert_eq!(
+            rejected_shares_display(&state, format_u64),
+            "3 (1,250 retried)"
+        );
+        state.mode = "solo".to_string();
+        assert_eq!(rejected_shares_display(&state, format_u64), "3");
     }
 
     #[test]

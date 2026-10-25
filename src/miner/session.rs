@@ -46,6 +46,7 @@ impl SessionHistory {
         next.submitted = snapshot.submitted;
         next.stale_shares = snapshot.stale_shares;
         next.accepted = snapshot.accepted;
+        next.share_retries = snapshot.share_retries;
         if let Some(old) = previous.as_ref() {
             let old = old.lock().unwrap_or_else(|e| e.into_inner());
             next.avg_hashrate.clone_from(&old.avg_hashrate);

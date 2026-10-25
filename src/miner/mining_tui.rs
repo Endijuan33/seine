@@ -137,6 +137,7 @@ impl TuiDisplay {
             s.submitted = snapshot.submitted;
             s.stale_shares = snapshot.stale_shares;
             s.accepted = snapshot.accepted;
+            s.share_retries = snapshot.share_retries;
             s.device_hashrates = device_hashrates;
             s.backends_desc = backend_descriptions(view.backends);
         }
