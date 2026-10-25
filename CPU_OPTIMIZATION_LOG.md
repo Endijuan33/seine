@@ -11,6 +11,8 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
 ## Newest-first index
 
+- `2026-10-25 native Ice Lake: the x86 regression follows function layout`
+- `2026-10-24 parked CPU worker task budgets and spawn failure recovery`
 - `2026-10-24 streaming-store kernel integration on validated EPYC`
 - `2026-10-24 sequential Milan/Turin investigation and streaming-store candidate`
 
@@ -62,6 +64,106 @@ This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 - `Baseline`
 - `Benchmark protocol`
 
+## 2026-10-25 native Ice Lake: the x86 regression follows function layout
+
+These are native paired timings on an AWS c6i.4xlarge (Xeon Platinum 8375C).
+Runs used 12 workers on 2 MiB HugeTLB arenas, 15-second windows with one warmup
+round, and completed hashes per second including the fence. All binaries are
+CPU-only Rust 1.93.0 release builds. Their identities, per-pair rates and the
+archive checksum are in `experiments/arm-enum-isolation/native-icelake-20261025.json`.
+
+| Comparison | Kernel | Paired deltas | Geometric |
+|---|---|---|---|
+| ungated `f20e7bb` vs v0.2.21 | AVX2 | +0.39, −0.47% | −0.04% |
+| ungated `f20e7bb` vs v0.2.21 | AVX-512 | −1.09, −1.09% | −1.09% |
+| gated `c68ade5` vs ungated | AVX2 | −3.21, +0.41, −2.58, −1.54% | −1.74% |
+| gated `c68ade5` vs ungated | AVX-512 | +1.07, −0.23, +2.74, +0.65% | +1.05% |
+
+Gating the enum to AArch64 moves the AVX-512 result toward baseline but makes
+AVX2 worse. It is a layout perturbation, not a fix.
+
+**2×2 alignment ablation (AVX-512).** v0.2.21 and ungated `f20e7bb` were each
+built twice: normally, and with `-C llvm-args=-align-all-functions=6`, using
+separate target directories and four distinct verified binaries. Four passes
+rotated and reversed the run order on the same host.
+
+| Pair | Paired deltas | Geometric |
+|---|---|---|
+| ARM vs v0.2.21, original builds | −1.46, −0.87, −0.85, −1.28% | **−1.11%** |
+| ARM vs v0.2.21, both 64-byte aligned | −0.72, +0.24, −0.06, +2.20% | **+0.41%** |
+
+Mean completed rates were v0.2.21 11.33, ARM 11.20, aligned v0.2.21 11.37
+and aligned ARM 11.41 H/s. The consistent −1.1% disappears once both builds
+use the same function-entry alignment. The ARM refactor does not make x86
+hashing code slower; it moves where the x86 fill loops land. This is
+consistent with, but does not uniquely prove, a layout cause. Forced alignment
+can still change other layout properties. PR49's enum gating (`c68ade5`) is
+not adopted: it only shifted the loss between AVX2 and AVX-512. The independent −0.8 to −1.0% seen
+for tuner-only PR41 fits the same explanation.
+
+Protocol deviation: Codex's usage ran out before the main Ice Lake controller
+finished. The takeover stopped the controller during its last cached-restart
+episode and ran the unchanged alignment protocol with only the
+"main controller COMPLETE" precondition removed. All miners were stopped and
+the hugepage pool was verified empty before it started. The lease was
+terminated and verified after collection.
+
+## 2026-10-24 parked CPU worker task budgets and spawn failure recovery
+
+The memory-recovery change preserved CPU-sized parked lanes but also eagerly
+created an OS thread for every lane. The architecture campaign reproduced the
+resulting startup regression from `fbe9e86`: with affinity restricted to 16 CPUs,
+`memory.high=3 GiB`, and `pids.max=12`, the legacy one-slot backend starts while
+the 16-slot backend fails creating worker 9 with EAGAIN. This is backend startup
+evidence, not a full pool-session or performance measurement.
+
+This follow-up separates the CPU/user search maximum, startup worker slots, and
+the RAM-safe manual/offline limit. Linux cgroup-v2 PID headroom takes the minimum
+remaining budget across ancestors. The startup reserve accounts for event and
+control threads, both user/dev pool clients, HTTP runtimes, optional TUI/API/daemon
+threads, plus explicit DNS/driver margin. Already-running API Tokio workers are
+included in `pids.current`; they are not reserved a second time. This remains a
+best-effort preflight, not a guarantee against competing tasks or driver threads.
+Zero residual capacity reports a clear error instead of forcing one worker.
+
+Automatic CPU worker creation also handles resource exhaustion after preflight:
+join and release the failed attempt, then retry at half the successfully spawned
+count (at least one). Attempts strictly decrease; an inability to create the
+first worker returns an error. Explicit fixed counts and non-resource errors
+remain failures. The original nonce stride never changes; the controller caps
+active workers to actual provisioned slots. Restarting can provision more slots;
+the saved higher count and CPU-only cache maximum survive the restriction.
+Manual TUI requests carry their live RAM/worker limit to the supervisor so its
+pre-start RAM estimate cannot widen a reduced limit or reject later recovery.
+
+Validation in this implementation worktree: 485 root-binary CPU-only tests passed, five
+hardware/resource-dependent tests ignored; Linux all-feature compile check passed.
+Windows GNU CPU-only cross-compilation, including the tests, also passed.
+Injected spawn failures exercise real small-arena workers, cleanup, manual-count
+failure, recovery, park/resume, nonce uniqueness and fixed-stride coverage, plus
+cancel/fence completion. Filesystem fixtures cover nested/sibling PID usage,
+unlimited levels and invalid/missing usage. Policy/manual-control tests cover
+bounded probing, unchanged cache maxima, and stale supervisor limits.
+
+Windows portability follow-up: the spawn retry classifier also recognizes
+155/164 (thread limits) and 1451 through 1455 (pool/quota/commit exhaustion), in
+addition to 8/14/1450. Values are checked against Microsoft's
+[0–499 error codes](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-)
+and [1300–1699 error codes](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--1300-1699-).
+Two additional pure tests run on Linux and cover supported Windows codes,
+non-resource failures, and keeping Windows raw-code interpretation Windows-only.
+The 485-test figure above excludes these new tests and the workspace libraries'
+seven tests; combined/native confirmation remains with the architecture campaign.
+
+Native confirmation is owned by the architecture campaign. The ignored
+`miner::adaptive_cpu::tests::pid_budget_startup_probe` keeps its existing controller
+interface (`SEINE_PID_PROBE_LEGACY`, `--expect all-pass`). Its candidate deliberately
+bypasses PID preflight to exercise OS spawn failure and retry under `TasksMax=12`;
+it logs provisioned slots and the unchanged stride. A full startup/preflight test
+needs a larger budget for networking/control (for example, 24 tasks with 16 CPUs
+in plain CPU-only pool mode). A 12-task backend-only pass must not be presented
+as proof that the full pool/API runtime fits. No release or hardware run was
+performed by the implementation session.
 ## 2026-10-24 streaming-store kernel integration on validated EPYC
 
 - Adopted the distinct `avx512-256-stream` implementation: a 64 KiB recent-block

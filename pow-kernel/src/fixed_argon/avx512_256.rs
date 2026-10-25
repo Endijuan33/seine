@@ -385,7 +385,7 @@ pub(super) unsafe fn compress_into_mid_prefetch(
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
-        prefetch_pow_block(&*memory_blocks_base.add(next_ref));
+        prefetch_pow_block::<{ super::ISA_AVX512_256 }>(&*memory_blocks_base.add(next_ref));
     }
 
     // Phase 3b: Pair adjacent columns 1+2, 3+4, and 5+6 after the prefetch.
@@ -623,9 +623,11 @@ pub(super) unsafe fn compress_into_mid_prefetch_ring(
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
         if next_index - next_ref < 64 {
-            prefetch_pow_block(&*ring_base.add(next_ref & 63));
+            prefetch_pow_block::<{ super::ISA_AVX512_256_STREAM }>(&*ring_base.add(next_ref & 63));
         } else {
-            prefetch_pow_block(&*memory_blocks_base.add(next_ref));
+            prefetch_pow_block::<{ super::ISA_AVX512_256_STREAM }>(
+                &*memory_blocks_base.add(next_ref),
+            );
         }
     }
 

@@ -10,16 +10,20 @@ pub enum CpuKernel {
     Neon,
     /// Cached recent blocks with non-temporal arena stores; selected by measured tuning.
     Avx512256Stream,
+    /// Runtime-guarded NEON path using SHA3 XOR/rotate and 64-byte prefetch coverage.
+    /// Automatically compared with baseline NEON on hosts with SHA3 support.
+    NeonSha3,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Scalar,
         Self::Avx2,
         Self::Avx512,
         Self::Avx512256,
         Self::Neon,
         Self::Avx512256Stream,
+        Self::NeonSha3,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -30,6 +34,7 @@ impl CpuKernel {
             Self::Avx512256 => "avx512-256",
             Self::Neon => "neon",
             Self::Avx512256Stream => "avx512-256-stream",
+            Self::NeonSha3 => "neon-sha3",
         }
     }
 
@@ -51,6 +56,8 @@ impl CpuKernel {
             }
             #[cfg(target_arch = "aarch64")]
             Self::Neon => true,
+            #[cfg(target_arch = "aarch64")]
+            Self::NeonSha3 => std::arch::is_aarch64_feature_detected!("sha3"),
             _ => false,
         }
     }
@@ -78,7 +85,8 @@ impl std::str::FromStr for CpuKernel {
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
             .ok_or_else(|| {
-                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, or neon".to_string()
+                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, neon, or neon-sha3"
+                    .to_string()
             })
     }
 }
