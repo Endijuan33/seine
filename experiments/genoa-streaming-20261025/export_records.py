@@ -2,11 +2,24 @@
 """Export audited Genoa VM observations without implying full-socket or power data."""
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 import statistics
 
 from assess import assess
+
+
+def apply_review(analysis, provenance, manifest_bytes, review):
+    """Bind an explicit adoption decision to the exact audited evidence/builds."""
+    assert not analysis['protocol_checks']['tuning_gate_failures']
+    assert review['decision'] == 'accept_automatic_trial_eligibility'
+    assert review['result_manifest_sha256'] == hashlib.sha256(manifest_bytes).hexdigest()
+    assert review['binary_sha256'] == provenance['sha256']
+    for phase in ('cold', 'warm'):
+        assert review[phase + '_paired_deltas_pct'] == analysis[phase]['paired_deltas_pct']
+    assert review['fixed_control_delta_pct'] == analysis['fixed']['fixed-avx2-control']['geometric_delta_pct']
+    analysis['protocol_checks']['landing_status'] = 'Accepted for automatic trials on AMD family 19h/model 11h'
 
 
 def records(analysis, provenance, manifest):
@@ -82,12 +95,16 @@ if __name__ == '__main__':
     parser.add_argument('collected', type=Path)
     parser.add_argument('provenance', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--review', type=Path, help='Explicit adoption decision bound to the measured evidence')
     parser.add_argument('--include-rejected', action='store_true',
                         help='Export rejected tuning outcomes with explicit rejection labels')
     args = parser.parse_args()
-    result = records(assess(args.collected, include_rejected=args.include_rejected),
-                     json.loads(args.provenance.read_text()),
-                     json.loads((args.collected / 'result-manifest.json').read_text()))
+    analysis = assess(args.collected, include_rejected=args.include_rejected)
+    provenance = json.loads(args.provenance.read_text())
+    manifest_bytes = (args.collected / 'result-manifest.json').read_bytes()
+    if args.review:
+        apply_review(analysis, provenance, manifest_bytes, json.loads(args.review.read_text()))
+    result = records(analysis, provenance, json.loads(manifest_bytes))
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'benchmark-records.json').write_text(json.dumps(result, indent=2) + '\n')
     columns = ('id', 'hardware', 'instance_type', 'hardware_scope', 'phase', 'role', 'selection',

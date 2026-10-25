@@ -8,6 +8,14 @@ first; never list losses or no-gain results; keep it brief, skip internal
 refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
+## Unreleased
+
+**About 8% faster cached CPU mining on the tested AMD EPYC 9R14.** Automatic
+tuning can now try the streaming kernel on validated Genoa processors and keep
+it after two confirmed gains. In a 32-vCPU AWS VM with a 24-worker ceiling and
+2 MiB huge pages, paired productive runs improved 2.85% during cold discovery
+and 7.99% on cached restarts. No kernel override is required.
+
 ## v0.2.25
 
 **Fewer lost shares when the pool is busy.** Shares the pool turns away with

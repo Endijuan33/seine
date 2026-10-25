@@ -43,8 +43,8 @@ fn candidates_for(
     .into_iter()
     .filter(|k| supported.contains(k))
     .collect();
-    // Native Genoa 9R14: +27.19% at 24 workers; Turin and Ryzen 9950X3D
-    // also have repeated streaming wins. See high-end-streaming-20261025.
+    // Genoa 9R14 VM: +2.85% cold / +7.99% cached productive mining;
+    // Turin and Ryzen also have repeated wins. See genoa-streaming-20261025.
     // Identity limits automatic experiments; the independent ISA/OS support
     // check remains mandatory. Turin needs a measured win per worker
     // count/backing; validated Ryzen also starts on it (`startup_kernel_for`).

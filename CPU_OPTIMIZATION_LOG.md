@@ -2,6 +2,35 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 Genoa automatic streaming eligibility — accepted
+
+On an AWS c7a.8xlarge EPYC 9R14 VM (32 guest vCPUs, 64 GiB allocated RAM),
+adding AuthenticAMD family 19h/model 11h to streaming trial eligibility improved
+paired productive cold windows by **2.85%** and own-cache restarts by **7.99%**.
+Two 900-second cold pairs and two 180-second cached pairs used automatic worker
+and kernel selection, an explicit 24-worker ceiling and reserved 2 MiB HugeTLB.
+Rates count logged completed hashes over service-start request through stopped;
+they include startup, exploration and shutdown and omit final unlogged hashes.
+
+Both cold candidate legs independently confirmed streaming through two A/B/A
+cycles at 12 workers, then selected 18 workers; their cached restarts restored
+18 workers and subsequently logged streaming-cache reuse. The controls selected
+24/23 workers. Fixed AVX2 build controls were **0.59% slower** in the candidate
+(-0.82/-0.36% pairs); the automatic gains are not adjusted for that variation.
+All 21 full-size dirty-arena/guard parity transitions passed. Memory pressure,
+parking, CPU contention, constrained restart and opt-out completed without
+swap or OOM. The remembered count of 3 survived pressure; restart recovery
+reached 2 from 1 within its window, not a demonstrated return to 3.
+
+Only candidate eligibility changes: startup, ISA checks, confirmation thresholds,
+count-specific comparisons and resource handling remain intact. Neighbouring
+Genoa models remain excluded. Finite windows in one VM do not establish a
+population confidence interval or bare-metal full-socket throughput; physical
+memory channels, package power and wall power were unmeasured.
+
+[Protocol, frozen source patch, decision and graph records](experiments/genoa-streaming-20261025/README.md).
+All 156 evidence files verified before immediate rental termination at 07:44 EDT.
+
 ## 2026-10-25 bare-metal EPYC 9355P SMT and package-power efficiency
 
 Qualified one Cherry EPYC 9355P (AuthenticAMD family 26/model 2), 32 physical

@@ -1,14 +1,12 @@
 # Genoa productive streaming eligibility
 
-Status on 2026-10-25: **EC2 validation running; candidate not enabled on master**.
-The frozen experiment launched at 06:07 EDT after shared quota became free.
-All 545 local workspace tests passed (six ignored). An earlier allocation
-attempt failed before creating an instance; its security group and temporary
-key were deleted, and a tag lookup confirmed no task instance existed. Waiting
-attempts incurred no rental cost. The resumed run retains its original frozen
-bundle, one-lease USD 3.25 cap and 110-minute shutdown-to-terminate timer.
-The quota observer now checks every five seconds; this changes only pre-launch
-waiting, not the measurement protocol or another campaign's instances.
+Status on 2026-10-25: **validation complete; automatic trial eligibility accepted**.
+Cold discovery improved **2.85%** and cached restarts **7.99%** in two paired
+windows each on the tested EPYC 9R14 VM. See [RESULTS.md](RESULTS.md) for the
+full measurement scope and adoption review. The instance was terminated at
+07:44 EDT immediately after evidence collection; its volume and security group
+were verified deleted. The duration-based upper cost estimate is $2.765,
+not an AWS invoice.
 
 This experiment adds AMD family 19h/model 11h to streaming **trial** eligibility.
 It preserves runtime ISA checks, the default starting kernel, count-specific
@@ -19,6 +17,23 @@ Control source: `751e808`. The candidate differs only in eligibility and its
 tests. Frozen executable SHA-256 values are recorded before rental launch.
 CPU-only portable Rust 1.93.0 release builds use the same toolchain and flags.
 This is throughput validation, not a package-energy or whole-system H/W test.
+
+Graph-ready [JSON](benchmark-records.json) and [CSV](benchmark-records.csv)
+contain four records with per-run hashes, duration, variability, source and
+binary identities, and explicit VM/power scope. Re-export from the verified
+private archive with:
+
+```sh
+python3 experiments/genoa-streaming-20261025/export_records.py \
+  data/genoa-streaming-20261025/collected \
+  experiments/genoa-streaming-20261025/frozen-builds.json \
+  experiments/genoa-streaming-20261025 \
+  --review experiments/genoa-streaming-20261025/adoption-review.json
+python3 experiments/genoa-streaming-20261025/plot.py
+```
+
+The explicit review is bound to the exact result-manifest and binary checksums.
+Omitting it retains the assessor's pending-review status.
 
 `frozen-builds.json` records the measured revisions, build settings and binary
 checksums. To reconstruct the measured candidate after branch rebases, check out

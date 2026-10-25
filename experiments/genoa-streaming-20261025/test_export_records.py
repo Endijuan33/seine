@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import unittest
+import hashlib
 
-from export_records import records
+from export_records import apply_review, records
 
 
 def fixture():
@@ -33,6 +34,23 @@ def fixture():
 
 
 class RecordTests(unittest.TestCase):
+    def test_adoption_review_requires_exact_evidence_and_builds(self):
+        data, provenance, _ = fixture()
+        data.update(cold={'paired_deltas_pct': [3, 2]}, warm={'paired_deltas_pct': [7, 8]},
+                    fixed={'fixed-avx2-control': {'geometric_delta_pct': -0.5}})
+        data['protocol_checks']['tuning_gate_failures'] = []
+        review = {'decision': 'accept_automatic_trial_eligibility',
+                  'result_manifest_sha256': hashlib.sha256(b'fixture').hexdigest(),
+                  'binary_sha256': provenance['sha256'], 'cold_paired_deltas_pct': [3, 2],
+                  'warm_paired_deltas_pct': [7, 8], 'fixed_control_delta_pct': -0.5}
+        apply_review(data, provenance, b'fixture', review)
+        self.assertTrue(data['protocol_checks']['landing_status'].startswith('Accepted'))
+        with self.assertRaises(AssertionError):
+            apply_review(data, provenance, b'different evidence', review)
+        data['protocol_checks']['tuning_gate_failures'] = ['missing restoration']
+        with self.assertRaises(AssertionError):
+            apply_review(data, provenance, b'fixture', review)
+
     def test_vm_scope_unknown_physical_memory_and_ratio_of_totals(self):
         result = records(*fixture())
         self.assertEqual(len(result['records']), 4)
