@@ -1,6 +1,6 @@
 ---
 title: Melhor hardware para minerar Blocknet
-description: O melhor hardware para minerar Blocknet, por hashrate medido. O AMD EPYC Zen 5 lidera com 49,4 H/s. Veja como a RAM por thread e a largura de banda definem sua taxa.
+description: "Compare hardware de mineração Blocknet com resultados medidos: EPYC 9355P chega a 68,3 H/s. Veja RAM, threads, páginas e os dados do benchmark."
 tags: [Hardware, Hashrate, Guia de mineração, Argon2id, NVIDIA]
 faq:
   - q: 'Um PC gamer consegue minerar Blocknet?'
@@ -11,8 +11,8 @@ faq:
     a: 'O seine minera com placas de vídeo NVIDIA nos downloads para Windows e Linux, usando todas as placas que detecta junto com o processador. No Windows, o runtime CUDA está incluído, então você só precisa do driver NVIDIA. No Linux, instale o driver e as bibliotecas NVRTC. A primeira execução ajusta cada placa e lembra o resultado.'
   - q: 'Por que a largura de banda da memória importa na mineração de Blocknet?'
     a: 'Cada hash do Blocknet grava um bloco inteiro de 2 GiB de memória e lê dados de volta de todo ele, muito mais do que qualquer cache de processador comporta. Por isso o hashrate depende da velocidade com que o sistema de memória movimenta os dados. Máquinas com mais largura de banda de memória e RAM suficiente para muitas threads mineram mais rápido.'
-sourceHash: ecf2c85971db
-translation: reviewed
+sourceHash: 140f540005ba
+translation: draft
 ---
 
 Este guia mostra quais máquinas mineram Blocknet mais rápido com o seine, quantas threads a sua RAM permite e qual hashrate esperar, para que você possa escolher um hardware ou avaliar o computador que já tem.
@@ -20,14 +20,20 @@ Este guia mostra quais máquinas mineram Blocknet mais rápido com o seine, quan
 ## Qual é o melhor hardware para minerar Blocknet?
 
 <Answer>
-O melhor hardware para minerar Blocknet combina alta largura de banda de memória com RAM suficiente para 2 GB por thread. Nas medições do seine, um servidor AMD EPYC Zen 5 lidera com 49,4 H/s em 32 threads, seguido pelo AWS Graviton4 e pelo AMD EPYC Zen 4. As placas de vídeo NVIDIA somam seu hashrate a isso.
+A configuração mais rápida nestas medições é um AMD EPYC 9355P a 68,3 H/s: 64 threads de mineração, 192 GiB de RAM e huge pages de 1 GiB preparadas manualmente no Linux. A mineração de Blocknet se beneficia da largura de banda da memória e de RAM suficiente para 2 GiB por thread. Placas NVIDIA podem somar seu hashrate ao da CPU.
 </Answer>
 
 A prova de trabalho do Blocknet é o Argon2id com um bloco de memória de 2 GiB por hash. Isso a torna [memory-hard](/pt-br/blog/argon2id-proof-of-work-explained/): o hashrate depende tanto da largura de banda e da latência da memória quanto do número de núcleos, e de quantos desses blocos de 2 GiB cabem na RAM ao mesmo tempo. Um sistema de memória forte é o que as melhores máquinas da tabela abaixo têm em comum.
 
-## Melhor hashrate medido por geração
+## Nova medição em servidor físico: EPYC 9355P
 
-Estes são os melhores resultados medidos com o seine em cada geração de hardware. A última coluna é a RAM que as threads de mineração usam para seus blocos de memória: threads × 2 GiB.
+Em 25 de outubro de 2026, um EPYC 9355P de 32 núcleos e 64 threads, com 192 GiB distribuídos por doze canais de memória DDR5-4800, atingiu **68,256 H/s**, arredondados para **68,3 H/s**. Essa configuração manual fixa usou 64 threads de mineração, o kernel streaming, huge pages de 1 GiB e um limite de potência do pacote de 280 W. A taxa é o total de hashes concluídos dividido pelo tempo total decorrido em quatro execuções novas de 120 segundos, incluindo a inicialização e o encerramento.
+
+O [experimento de tamanho de página](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md) registra a revisão exata do código-fonte, o SHA-256 do executável, as verificações de alocação de páginas e o método de medição. Seus [registros legíveis por máquina](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json) preservam a configuração e os numeradores e denominadores brutos. Trata-se de um soquete completo configurado manualmente; as medições de nuvem e Mac abaixo descrevem suas próprias máquinas e configurações.
+
+## Comparação medida de servidores em nuvem e Mac
+
+Estes resultados de nuvem e Mac usam as máquinas e configurações descritas abaixo. A memória de mineração corresponde aos blocos das threads: threads × 2 GiB.
 
 | Hardware | Chip exato | Threads | Hashrate | Memória de mineração |
 |---|---|---|---|---|
@@ -84,7 +90,7 @@ Nos [Macs com Apple Silicon](/pt-br/blog/mine-blocknet-on-mac/), o seine minera 
 
 ## O que o seine ajusta automaticamente?
 
-Você não precisa configurar nada para chegar aos resultados acima. Execute o seine, cole seu endereço ou `@name` e aceite o pool padrão, o bntpool.com. O [guia de mineração](/pt-br/blog/how-to-mine-blocknet/) mostra esses passos. Enquanto minera, o seine:
+Para minerar no dia a dia, execute o seine, cole seu endereço ou `@name` e aceite o pool padrão, bntpool.com. O [guia de mineração](/pt-br/blog/how-to-mine-blocknet/) explica essas etapas. O resultado manual do EPYC acima tem suas próprias configurações; a mineração automática faz o seguinte:
 
 - **Dimensiona o número de threads** de acordo com a sua RAM e os seus núcleos, depois compara números de threads em trabalho real de mineração e fica com o melhor.
 - **Escolhe o kernel de CPU**, como AVX2, AVX-512, o kernel de streaming no EPYC Zen 5 ou SHA3 no Arm, trocando só depois de dois ganhos confirmados.

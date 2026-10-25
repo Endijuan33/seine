@@ -17,6 +17,7 @@
   "heroStats": "Ölçülen sonuçlar",
   "dlTitle": "İndir",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Windows kurulum kılavuzu",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

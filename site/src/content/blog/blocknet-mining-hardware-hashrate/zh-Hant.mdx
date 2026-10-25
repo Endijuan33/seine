@@ -1,6 +1,6 @@
 ---
 title: 挖 Blocknet 用什麼硬體最好
-description: 依實測算力看挖 Blocknet 的最佳硬體：AMD EPYC Zen 5 以 49.4 H/s 領先。了解每個執行緒所需記憶體與記憶體頻寬如何決定你的算力。
+description: "用實測結果比較 Blocknet 挖礦硬體：EPYC 9355P 達到 68.3 H/s。查看準確的 RAM、執行緒數、分頁設定和基準測試證據，了解各項結果的測量配置。"
 tags: [硬體, 算力, 挖礦指南, Argon2id, NVIDIA]
 faq:
   - q: '遊戲電腦能挖 Blocknet 嗎？'
@@ -11,8 +11,8 @@ faq:
     a: 'seine 的 Windows 與 Linux 版本使用 NVIDIA 顯示卡挖礦，會在處理器之外同時使用偵測到的每一張顯示卡。在 Windows 上已內建 CUDA 執行環境，只需安裝 NVIDIA 驅動程式。在 Linux 上需安裝驅動程式與 NVRTC 函式庫。首次啟動時會為每張顯示卡調校並記住結果。'
   - q: '為什麼記憶體頻寬對挖 Blocknet 很重要？'
     a: '每次 Blocknet 雜湊都要寫滿一整塊 2 GiB 的記憶體，並從其中各處讀回資料，遠遠超出任何處理器快取的容量。因此算力取決於記憶體系統搬運資料的速度。記憶體頻寬較高、記憶體足以執行更多執行緒的電腦挖得最快。'
-sourceHash: ecf2c85971db
-translation: reviewed
+sourceHash: 140f540005ba
+translation: draft
 ---
 
 本指南介紹哪些電腦用 seine 挖 Blocknet 最快、你的記憶體能支援多少個執行緒，以及能達到多少算力，協助你挑選硬體，或評估手邊已有的電腦。
@@ -20,14 +20,20 @@ translation: reviewed
 ## 挖 Blocknet 用什麼硬體最好？
 
 <Answer>
-最適合挖 Blocknet 的硬體，要同時具備高記憶體頻寬與足夠的記憶體（每個執行緒 2 GB）。在 seine 的實測中，AMD EPYC Zen 5 伺服器以 32 個執行緒、49.4 H/s 領先，其次是 AWS Graviton4 與 AMD EPYC Zen 4。NVIDIA 顯示卡的算力還能再疊加上去。
+這些測量中最快的配置是達到 68.3 H/s 的 AMD EPYC 9355P：64 個挖礦執行緒、192 GiB RAM，以及在 Linux 上手動準備的 1 GiB 大型分頁。Blocknet 挖礦受益於記憶體頻寬，以及足夠為每個執行緒提供 2 GiB 的 RAM。NVIDIA 顯示卡可以在 CPU 之外加上自身雜湊率。
 </Answer>
 
 Blocknet 的工作量證明是 Argon2id，每次雜湊使用一塊 2 GiB 的記憶體。這讓它成為[記憶體密集型](/zh-hant/blog/argon2id-proof-of-work-explained/)演算法：算力既取決於核心數，也同樣取決於記憶體頻寬與延遲，以及記憶體中能同時容納多少個 2 GiB 記憶體區塊。下表中排名在前的電腦，共同點就是強大的記憶體系統。
 
-## 各代硬體的最佳實測算力
+## 新增實體伺服器測量：EPYC 9355P
 
-以下是 seine 在各代硬體上實測的最佳結果。最後一欄是挖礦執行緒的記憶體區塊所佔用的記憶體：執行緒數 × 2 GiB。
+2026年10月25日，一顆 32 核心／64 硬體執行緒的 EPYC 9355P，搭配十二通道 DDR5-4800、共 192 GiB 記憶體，測得 **68.256 H/s**，四捨五入為 **68.3 H/s**。這項固定的手動配置使用 64 個挖礦執行緒、streaming 運算核心程式、1 GiB 大型分頁和 280 W 封裝功耗上限。速率由四次各 120 秒的全新執行中完成的雜湊總數除以總耗時得出，包含啟動和結束時間。
+
+[分頁大小實驗](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md)記錄了準確的原始碼修訂版本、可執行檔 SHA-256、分頁配置檢查和測量方法。[機器可讀記錄](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json)保留了配置以及原始分子和分母。這是手動設定整個處理器插槽的結果；下方雲端伺服器和 Mac 的測量各有自己的機器與設定。
+
+## 雲端伺服器與 Mac 實測比較
+
+這些雲端伺服器和 Mac 結果採用下文所述的機器與設定。挖礦記憶體指各執行緒記憶體區塊占用的空間：執行緒數 × 2 GiB。
 
 | 硬體 | 確切晶片 | 執行緒數 | 算力 | 挖礦記憶體 |
 |---|---|---|---|---|
@@ -84,7 +90,7 @@ seine 也會把執行緒數限制在處理器的邏輯核心數以內，所以�
 
 ## seine 會自動調校哪些項目？
 
-要達到上面的結果，你不需要做任何設定。執行 seine，貼上你的地址或 `@name`，接受預設礦池 bntpool.com 即可。[挖礦指南](/zh-hant/blog/how-to-mine-blocknet/)詳細介紹了這些步驟。在挖礦過程中，seine 會：
+日常挖礦時，執行 seine，貼上地址或 `@name`，然後接受預設礦池 bntpool.com。[挖礦指南](/zh-hant/blog/how-to-mine-blocknet/)介紹了這些步驟。上方手動 EPYC 測量有其專用設定；自動挖礦則執行以下操作：
 
 - **決定執行緒數**：依你的記憶體與核心數決定，再用真實的挖礦工作比較不同執行緒數，保留最佳值。
 - **選擇 CPU 運算核心程式**：例如 AVX2、AVX-512、Zen 5 EPYC 上的串流核心程式或 Arm 上的 SHA3，只有在兩次確認有提升後才會切換。

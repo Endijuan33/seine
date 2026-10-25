@@ -17,6 +17,7 @@
   "heroStats": "نتائج مُقاسة",
   "dlTitle": "تنزيل",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "دليل الإعداد على Windows",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

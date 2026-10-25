@@ -17,6 +17,7 @@
   "heroStats": "측정 결과",
   "dlTitle": "다운로드",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Windows 설정 가이드",
   "dlMacArm": "macOS · Apple 실리콘",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

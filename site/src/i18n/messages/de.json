@@ -17,6 +17,7 @@
   "heroStats": "Gemessene Ergebnisse",
   "dlTitle": "Download",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Einrichtungsanleitung für Windows",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

@@ -17,6 +17,7 @@
   "heroStats": "Hasil pengukuran",
   "dlTitle": "Unduh",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Panduan penyiapan Windows",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

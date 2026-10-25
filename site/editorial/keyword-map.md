@@ -51,6 +51,8 @@ explain the collision to readers (owner decision 2026-10-25: assume the reader k
 | mine crypto on old pc or laptop | `/blog/mine-crypto-on-old-pc-or-laptop/` | Decide whether a spare old desktop or laptop can mine, size threads to its RAM, keep it cool, and start safely with seine on bntpool.com | mining on an old laptop, mine crypto on laptop, old computer crypto mining, laptop mining 8GB RAM, seine efficiency profile, 用旧电脑挖矿 / 用舊電腦挖礦, 笔记本电脑挖矿 / 筆記型電腦挖礦 |
 | seed phrase explained | `/blog/seed-phrase-explained/` | Explain what a wallet seed (recovery) phrase is, how it becomes keys, how to store it and why never to share it, with Blocknet's 12-word seed as the example | what is a seed phrase, recovery phrase, mnemonic phrase, 12-word seed, how to store seed phrase, BIP39 explained, blocknet recovery seed, 助记词是什么 / 助記詞是什麼 |
 
+| mine blocknet on windows | `/blog/mine-blocknet-on-windows/` | Install and verify the Windows ZIP, run native PowerShell commands, complete first-run prompts and confirm accepted shares | Windows Blocknet miner, seine Windows setup, Blocknet NVIDIA Windows, 在 Windows 上挖 Blocknet |
+
 ## Boundaries
 
 | Broad owner | Narrow owner | Boundary |
@@ -83,3 +85,5 @@ explain the collision to readers (owner decision 2026-10-25: assume the reader k
 
 bntpool.com's blog (blocknet-pool repo, `frontend/blog/`) owns pool-side jobs (joining the pool,
 PPLNS payouts, miner stats, the reward schedule, the fair launch). Don't target those here.
+
+The Windows guide owns the native Windows ZIP/checksum/PowerShell walkthrough. The general mining guide remains the cross-platform overview; the huge-pages guide owns detailed page setup.

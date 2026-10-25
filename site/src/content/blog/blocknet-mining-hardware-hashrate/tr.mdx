@@ -1,6 +1,6 @@
 ---
 title: Blocknet madenciliği için en iyi donanım
-description: Ölçülen hashrate'e göre Blocknet madenciliği için en iyi donanım. AMD EPYC Zen 5, 49,4 H/s ile önde. İş parçacığı başına RAM ve bellek bant genişliği hızınızı nasıl belirler?
+description: "Blocknet madencilik donanımlarını ölçümlerle karşılaştırın: EPYC 9355P 68,3 H/s’ye ulaşıyor. RAM, iş parçacıkları, sayfa ayarları ve test verilerini inceleyin."
 tags: [Donanım, Hashrate, Madencilik rehberi, Argon2id, NVIDIA]
 faq:
   - q: 'Bir oyun bilgisayarı Blocknet madenciliği yapabilir mi?'
@@ -11,8 +11,8 @@ faq:
     a: 'seine, Windows ve Linux indirmeleriyle NVIDIA ekran kartlarında madencilik yapar ve algıladığı her kartı işlemciyle birlikte kullanır. Windows''ta CUDA çalışma zamanı dahildir, bu yüzden yalnızca NVIDIA sürücüsüne ihtiyacınız olur. Linux''ta sürücüyü ve NVRTC kütüphanelerini kurun. İlk açılışta her kart ayarlanır ve sonuç hatırlanır.'
   - q: 'Blocknet madenciliğinde bellek bant genişliği neden önemlidir?'
     a: 'Her Blocknet hash''i 2 GiB''lık bir bellek bloğunun tamamını yazar ve bloğun her yerinden veri geri okur; bu, herhangi bir işlemci önbelleğinin tutabileceğinden çok daha fazladır. Bu yüzden hashrate, bellek sisteminin veriyi ne kadar hızlı taşıdığına bağlıdır. Bellek bant genişliği yüksek ve çok sayıda iş parçacığına yetecek RAM''e sahip makineler en hızlı madencilik yapar.'
-sourceHash: ecf2c85971db
-translation: reviewed
+sourceHash: 140f540005ba
+translation: draft
 ---
 
 Bu rehber, seine ile hangi makinelerin Blocknet madenciliğini en hızlı yaptığını, RAM'inizin kaç iş parçacığına izin verdiğini ve ne kadar hashrate bekleyebileceğinizi gösterir; böylece donanım seçebilir ya da zaten sahip olduğunuz bilgisayarı değerlendirebilirsiniz.
@@ -20,14 +20,20 @@ Bu rehber, seine ile hangi makinelerin Blocknet madenciliğini en hızlı yaptı
 ## Blocknet madenciliği için en iyi donanım hangisi?
 
 <Answer>
-En iyi Blocknet madencilik donanımı, yüksek bellek bant genişliğini iş parçacığı başına 2 GB'a yetecek RAM ile birleştirir. seine'in ölçümlerinde bir AMD EPYC Zen 5 sunucu 32 iş parçacığında 49,4 H/s ile önde gelir; onu AWS Graviton4 ve AMD EPYC Zen 4 izler. NVIDIA ekran kartları da kendi hashrate'lerini bunun üzerine ekler.
+Bu ölçümlerdeki en hızlı yapılandırma, 68,3 H/s ile AMD EPYC 9355P’dir: 64 madencilik iş parçacığı, 192 GiB RAM ve Linux’ta elle hazırlanmış 1 GiB huge pages. Blocknet madenciliği, bellek bant genişliğinden ve iş parçacığı başına 2 GiB sağlayacak yeterli RAM’den yararlanır. NVIDIA kartları, CPU’nun yanına kendi hash güçlerini ekleyebilir.
 </Answer>
 
 Blocknet'in iş kanıtı, hash başına 2 GiB'lık bir bellek bloğu kullanan Argon2id'dir. Bu onu [bellek yoğun](/tr/blog/argon2id-proof-of-work-explained/) kılar: hashrate, çekirdek sayısı kadar bellek bant genişliğine ve gecikmesine, ayrıca bu 2 GiB'lık bloklardan kaçının aynı anda RAM'e sığdığına bağlıdır. Aşağıdaki tablodaki en iyi makinelerin ortak noktası güçlü bir bellek sistemidir.
 
-## Nesillere göre ölçülen en iyi hashrate
+## Fiziksel sunucuda yeni ölçüm: EPYC 9355P
 
-Bunlar, her donanım nesli için seine ile ölçülen en iyi sonuçlardır. Son sütun, madencilik iş parçacıklarının bellek blokları için kullandığı RAM'dir: iş parçacığı sayısı × 2 GiB.
+25 Ekim 2026 tarihinde, 32 çekirdekli/64 iş parçacıklı ve on iki DDR5-4800 bellek kanalına dağıtılmış 192 GiB belleğe sahip bir EPYC 9355P, **68,256 H/s** değerine, yuvarlandığında **68,3 H/s** değerine ulaştı. Bu sabit elle yapılandırmada 64 madencilik iş parçacığı, streaming kernel, 1 GiB huge pages ve 280 W paket güç sınırı kullanıldı. Hız, başlangıç ve kapanış dahil olmak üzere her biri 120 saniyelik dört yeni çalıştırmada tamamlanan toplam hash sayısının geçen toplam süreye bölünmesiyle hesaplandı.
+
+[Sayfa boyutu deneyi](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/RESULTS.md), kaynak kodunun tam revizyonunu, çalıştırılabilir dosyanın SHA-256 değerini, sayfa ayırma kontrollerini ve ölçüm yöntemini kaydeder. [Makine tarafından okunabilir kayıtlar](https://github.com/zpalmtree/seine/blob/master/experiments/amd-page-size-20261025/benchmark-records.json), yapılandırmayı ve ham pay ile payda değerlerini korur. Burada tam bir soket elle yapılandırılmıştır; aşağıdaki bulut ve Mac ölçümleri kendi makinelerini ve ayarlarını açıklar.
+
+## Bulut sunucularının ve Mac’in ölçümlü karşılaştırması
+
+Bu bulut ve Mac sonuçları aşağıda açıklanan makineleri ve ayarları kullanır. Madencilik belleği, iş parçacıklarının bellek blokları için gereken alandır: iş parçacığı sayısı × 2 GiB.
 
 | Donanım | Tam çip | İş parçacığı | Hashrate | Madencilik belleği |
 |---|---|---|---|---|
@@ -84,7 +90,7 @@ Evet. Windows ve Linux'ta seine, algıladığı her CPU çekirdeğinde ve her NV
 
 ## seine neleri otomatik olarak ayarlar?
 
-Yukarıdaki sonuçlara ulaşmak için hiçbir şeyi yapılandırmanız gerekmez. seine'i çalıştırın, adresinizi veya `@name` adınızı yapıştırın ve varsayılan havuz bntpool.com'u kabul edin. [Madencilik rehberi](/tr/blog/how-to-mine-blocknet/) bu adımları anlatır. seine madencilik yaparken:
+Günlük madencilik için seine’ı çalıştırın, adresinizi veya `@name` adınızı yapıştırın ve varsayılan havuz bntpool.com’u kabul edin. [Madencilik rehberi](/tr/blog/how-to-mine-blocknet/) bu adımları açıklar. Yukarıdaki elle yapılandırılmış EPYC sonucunun kendine özgü ayarları vardır; otomatik madencilik şunları yapar:
 
 - **İş parçacığı sayısını** RAM'inize ve çekirdeklerinize göre belirler, ardından gerçek madencilik işi üzerinde iş parçacığı sayılarını karşılaştırır ve en iyisini tutar.
 - **CPU kernel'ini seçer**; örneğin AVX2, AVX-512, Zen 5 EPYC'de streaming kernel'i veya Arm'da SHA3. Yalnızca iki doğrulanmış kazançtan sonra geçiş yapar.

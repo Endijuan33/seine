@@ -17,6 +17,7 @@
   "heroStats": "实测结果",
   "dlTitle": "下载",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Windows 设置指南",
   "dlMacArm": "macOS · Apple 芯片",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

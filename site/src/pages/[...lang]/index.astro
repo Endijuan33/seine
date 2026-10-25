@@ -3,7 +3,7 @@ import { Picture } from 'astro:assets';
 import dashboard from '../../assets/dashboard.webp';
 import heroSquare from '../../assets/hero-square.webp';
 import benchmarks from '../../data/benchmarks.json';
-import { LOCALES, localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
+import { LOCALES, localizePath, localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
 import { useTranslations, type UiKey } from '../../i18n/ui';
 import Base from '../../layouts/Base.astro';
 import { DEFAULT_IMAGE, ORGANIZATION, REPO, SITE_URL } from '../../lib/site';
@@ -97,6 +97,7 @@ const scriptVars = {
       </table>
       <div class="dl-foot">
         <span id="release-line" set:html={t('dlReleaseLineHtml')} />
+        <a href={localizePath('/blog/mine-blocknet-on-windows/', locale)}>{t('dlWindowsGuide')}</a>
         <a href={`${REPO}/blob/master/docs/BUILDING.md`}>{t('dlBuild')}</a>
       </div>
     </div>

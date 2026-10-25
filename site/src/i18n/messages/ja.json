@@ -17,6 +17,7 @@
   "heroStats": "実測結果",
   "dlTitle": "ダウンロード",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Windows セットアップガイド",
   "dlMacArm": "macOS · Apple シリコン",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

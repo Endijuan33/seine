@@ -17,6 +17,7 @@
   "heroStats": "ผลการวัดจริง",
   "dlTitle": "ดาวน์โหลด",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "คู่มือการตั้งค่าบน Windows",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",

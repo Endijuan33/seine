@@ -17,6 +17,7 @@
   "heroStats": "Μετρημένα αποτελέσματα",
   "dlTitle": "Λήψη",
   "dlWindows": "Windows",
+  "dlWindowsGuide": "Οδηγός εγκατάστασης στα Windows",
   "dlMacArm": "macOS · Apple Silicon",
   "dlLinux": "Linux",
   "dlLinuxArm": "Linux · ARM64",
