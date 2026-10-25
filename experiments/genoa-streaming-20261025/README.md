@@ -1,5 +1,14 @@
 # Genoa productive streaming eligibility
 
+Status on 2026-10-25: **native validation deferred; candidate not enabled on
+master**. All 545 local workspace tests passed (six ignored). One allocation
+attempt failed before creating an instance; its security group and temporary
+key were deleted, and a tag lookup confirmed no task instance existed. The
+shared quota was then occupied by another benchmark. When the user's Cherry
+verification and funding completed, the waiting coordinator was stopped to
+prioritize the original bare-metal package-energy experiment. Rental spend for
+this attempt is zero; the frozen bundle and original USD 3.25 cap are retained.
+
 This experiment adds AMD family 19h/model 11h to streaming **trial** eligibility.
 It preserves runtime ISA checks, the default starting kernel, count-specific
 comparisons, two confirmations, and cache scoping. Existing native 9R14 evidence
