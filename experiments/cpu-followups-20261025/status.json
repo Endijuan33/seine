@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "owner": "root follow-up session",
+  "budget_cap_usd": 10,
+  "reserved_usd": 8.16864,
+  "physical_energy": "deferred by user",
+  "tasks": {
+    "joint_tuning": {
+      "source": "7477914",
+      "status": "native cold/cached validation running; not promoted",
+      "local_tests": "54 adaptive passed, 2 ignored; prior full suite507 passed,5ignored plus one new focused regression"
+    },
+    "intel_regression": {
+      "source": "PR49 c68ade5",
+      "status": "native legacy and enum ablations running; equal-alignment rebuild pending desktop reservation release",
+      "known_limit": "original static normalization does not establish semantic equivalence or causality"
+    },
+    "reduced_memory": {
+      "source": "aeab118",
+      "status": "actual offline nonce prototype implemented; full-size parity passed; native throughput pending",
+      "full_size_owned_buffer_bytes": [
+        1356865536,
+        1105207296
+      ]
+    }
+  },
+  "hardware": {
+    "intel": "owned timed lease active",
+    "skylake": "owned timed lease active",
+    "epyc": "planned after both Intel leases are cleaned"
+  },
+  "alignment_preflight": "Shared Cargo target reused control artifact for ARM build; identical SHA caught before any timing. Invalid pair excluded. Rebuild will use separate target directory."
+}
