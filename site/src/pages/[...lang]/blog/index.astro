@@ -1,0 +1,48 @@
+---
+import '../../../styles/blog.css';
+import { localeDef, localeFromParam, localeStaticPaths, localizePath } from '../../../i18n/locales';
+import { useTranslations } from '../../../i18n/ui';
+import Base from '../../../layouts/Base.astro';
+import { getPosts } from '../../../lib/blog';
+import { ORGANIZATION, SITE_URL, breadcrumbList, formatDate, isoDate } from '../../../lib/site';
+
+export const getStaticPaths = localeStaticPaths;
+
+const locale = localeFromParam(Astro.params.lang);
+const t = useTranslations(locale);
+const lang = localeDef(locale).htmlLang;
+const posts = await getPosts(locale);
+const home = localizePath('/', locale);
+const url = SITE_URL + localizePath('/blog/', locale);
+
+const schema = [
+    {
+        '@context': 'https://schema.org', '@type': 'Blog', '@id': `${url}#blog`, name: t('blogRssTitle'), url,
+        inLanguage: lang, publisher: ORGANIZATION,
+        blogPost: posts.map((p) => ({ '@type': 'BlogPosting', headline: p.title, url: p.url, datePublished: isoDate(p.date) })),
+    },
+    breadcrumbList([['seine', SITE_URL + home], [t('navBlog'), url]]),
+];
+---
+<Base locale={locale} path="/blog/" title={t('blogMetaTitle')} description={t('blogMetaDescription')} schema={schema}>
+<main class="wrap">
+  <header class="page-head">
+    <nav class="crumbs" aria-label={t('breadcrumb')}><a href={home}>seine</a> / {t('navBlog')}</nav>
+    <h1>{t('blogTitle')}</h1>
+    <p class="lead">{t('blogSub')}</p>
+  </header>
+  <ul class="posts">
+    {posts.length === 0 && <li><p>{t('blogEmpty')}</p></li>}
+    {posts.map((p) => (
+      <li><a href={p.path}>
+        <div>
+          <time datetime={isoDate(p.date)}>{formatDate(p.date, lang)}</time>
+          <h2>{p.title}</h2>
+          <p>{p.description}</p>
+        </div>
+        {!p.customImage && <img src={`/blog/og/${locale}/${p.slug}-card.jpg`} width="600" height="315" alt="" loading="lazy" decoding="async">}
+      </a></li>
+    ))}
+  </ul>
+</main>
+</Base>
