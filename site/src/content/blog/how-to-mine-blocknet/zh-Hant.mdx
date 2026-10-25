@@ -1,33 +1,25 @@
 ---
-title: 如何挖 Blocknet：Argon2id 隱私幣挖礦指南
+title: 如何挖 Blocknet
 description: 幾分鐘內在 Windows、macOS 或 Linux 上開始挖 Blocknet：準備地址、下載 seine，用 CPU 與 NVIDIA 顯示卡在 bntpool.com 礦池挖礦。
 tags: [挖礦指南, Blocknet, Argon2id, bntpool]
 faq:
-  - q: '可以挖 Blocknet 嗎？'
-    a: '可以。Blocknet 是 blocknetcrypto.com 上於 2026 年 2 月上線的隱私幣，採用 Argon2id 工作量證明，任何人都可以用 CPU 或 NVIDIA 顯示卡挖礦。你可能看到的「權益證明」說法描述的是另一個使用 BLOCK 代幣的更早專案，兩者只是同名，並非同一條鏈。'
   - q: '挖 Blocknet 需要多少記憶體？'
     a: '每個挖礦執行緒約需 2 GB 記憶體，因為每次 Argon2id 雜湊都要處理一塊 2 GiB 的記憶體。因此一台 16 GB 記憶體的電腦在為系統留出空間後，大約能執行六到七個執行緒。seine 會偵測你的記憶體並自動選擇安全的執行緒數。'
   - q: '在 bntpool.com 挖 Blocknet，收益什麼時候入帳？'
     a: 'bntpool.com 採用六小時區間的 PPLNS 方式支付。區塊獎勵要等該區塊獲得 60 個確認（以五分鐘出塊約五小時）後才能支付，餘額達到 0.1 BNT 後發送。第一筆收益預計在第一批份額被接受幾小時後入帳。'
-  - q: '用 seine 在 bntpool.com 挖 Blocknet 要花多少錢？'
-    a: 'seine 免費開源，在 bntpool.com 挖礦時收取 1% 的開發者費用，在其他礦池與單獨挖礦時為 2.5%。bntpool.com 會對每個區塊另收 2.5% 的礦池費用。另一項開銷是電費，所以在讓電腦全天候運轉之前，請先測量它的功耗。'
-sourceHash: 3909a011e94d
+  - q: '可以同時用 CPU 與顯示卡挖 Blocknet 嗎？'
+    a: '可以。在 Windows 與 Linux 上，seine 會同時使用電腦上的每個 CPU 核心與每張 NVIDIA 顯示卡挖礦，兩者的算力會相加。它在執行中分別為處理器與每張顯示卡調校，無需修改任何設定，就能讓你的全部硬體發揮出最大算力。'
+sourceHash: 7033d5ddefc8
 translation: reviewed
 ---
 
-Blocknet 是一種採用記憶體困難型工作量證明的隱私幣，一般電腦就能挖：桌上型電腦、筆電、伺服器與 NVIDIA 顯示卡都可以。本指南使用 **seine**（一款會依你的硬體自動調校的免費開源挖礦軟體），帶你從零開始，在 bntpool.com 礦池上挖到第一批被接受的份額。
-
-<Note>
-本文所說的 Blocknet 是 [blocknetcrypto.com](https://blocknetcrypto.com) 上的專案：一種 2026 年 2 月上線的工作量證明隱私幣，每次雜湊使用 2 GiB 記憶體的 Argon2id 演算法。它不是使用 BLOCK 代幣的那個更早的 Blocknet 專案，後者採用權益證明，無法挖礦。
-</Note>
+本指南帶你從下載 **seine** 開始，到在 bntpool.com 礦池上獲得第一批被接受的份額與收益，適用於 Windows、macOS 與 Linux。
 
 ## 如何挖 Blocknet？
 
 <Answer>
 準備一個 Blocknet 地址或 Blocknet ID 短名稱，下載適合你系統的 seine，執行它，並在提示時貼上你的地址。接受預設礦池 bntpool.com，就已經在挖礦了。seine 會立即開始計算雜湊，並在執行中持續調整執行緒數與 CPU 運算核心程式。
 </Answer>
-
-下文逐步介紹每個環節，以及開始挖礦之後會發生什麼。
 
 ## 開始之前需要準備什麼？
 
@@ -44,7 +36,7 @@ Blocknet 是一種採用記憶體困難型工作量證明的隱私幣，一般�
 |---|---|---|
 | Windows（x86_64） | `seine-windows-x86_64.zip` | NVIDIA；已內建 CUDA 執行環境 |
 | Linux（x86_64） | `seine-linux-x86_64.tar.gz` | NVIDIA，需安裝驅動程式 |
-| Linux（ARM64） | `seine-linux-aarch64.tar.gz` | 僅 CPU，需要 glibc 2.39 或更新版本 |
+| Linux（ARM64） | `seine-linux-aarch64.tar.gz` | CPU（glibc 2.39 或更新版本） |
 | macOS（Apple 晶片） | `seine-macos-aarch64.tar.gz` | CPU |
 | macOS（Intel） | `seine-macos-x86_64.tar.gz` | CPU |
 
@@ -82,7 +74,16 @@ bntpool.com 採用 PPLNS：每個區塊的獎勵在其被找到前六小時內�
 | Arm 伺服器（AWS Graviton4） | 16 | 21.5 H/s |
 | Intel Xeon（Sapphire Rapids 8488C） | 12 | 13.1 H/s |
 
-M4 Max 的數據是其最大吞吐量設定下的結果；較安靜的 14 執行緒設定約為 29 H/s。所有已測試 CPU 的結果請見[效能頁面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)。
+所有已測試 CPU 的結果請見[效能頁面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)。
+
+## seine 如何讓同一顆 CPU 挖得更快？
+
+seine 為每個處理器系列提供多個 Argon2id 運算核心程式，並在挖礦過程中於你的電腦上實測比較。在我們測試的硬體上，選對運算核心程式帶來了很大的提升：
+
+- **AWS Graviton4：** 帶預取的 SHA3 運算核心程式比一般 NEON 快 56%（從 13.80 提升到 21.50 H/s）。
+- **AMD EPYC 9R45（Zen 5）：** 串流（streaming）運算核心程式比 AVX2 快 30%（24 執行緒下從 34.47 提升到 44.74 H/s）。
+
+這些都無需你手動選擇。seine 只在確認有提升後才切換運算核心程式，並記住結果供下次啟動使用。
 
 ## 如何獲得更高的算力？
 

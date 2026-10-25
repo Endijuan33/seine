@@ -369,7 +369,7 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
 
 **Update 2026-10-25:** the owner approved **49.4 H/s for AMD EPYC · Zen 5 (EPYC 9R45, 32 threads)** for the site, from a new 32-thread run. It replaces the 44.7 H/s / 24-thread headline below on the site and in posts.
   - Source: AWS m8a.8xlarge, seine v0.2.22, avx512-256-stream kernel, 32 threads, 49.39 H/s mean of 4 runs, 2026-10-25 (in-progress AWS hardware campaign).
-  - TODO: link the evidence file (`experiments/readme-hardware-20261025/summary.json`) once the Turin entry is written; `benchmarks.json` and `PERFORMANCE.md` on master still show 44.7 until then.
+  - Evidence: `seine:experiments/readme-hardware-20261025/summary.json`, host "zen5-turin" (AMD EPYC 9R45, 32 cores, no SMT), in seine PR #59 (`codex/zen5-turin-result`), which also updates `benchmarks.json`, `PERFORMANCE.md` and the README. TODO: switch this to the master path once #59 merges.
 
 
 | Label (big type) | Exact chip (small text) | H/s |

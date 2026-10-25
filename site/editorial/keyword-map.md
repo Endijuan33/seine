@@ -19,11 +19,9 @@ rankings. The build fails if a published post has no row here.
 
 ## Name collisions
 
-"Blocknet" also names an older project (BLOCK token, proof of stake), and "BNT" is Bancor's
-ticker. Google's AI Overview currently tells "blocknet mining" searchers that the coin can't
-be mined. Every coin-specific post carries a short note that it's the Argon2id privacy coin at
-blocknetcrypto.com. Titles use "Blocknet" with "Argon2id", "privacy coin" or "mining", and
-never bare "BNT" or "BLOCK". See `research/2026-10-keyword-research.md`.
+"Blocknet" also names an older project (BLOCK token) and "BNT" is Bancor's ticker, so titles
+pair "Blocknet" with "mining", "miner" or "Argon2id" rather than standing alone. Posts don't
+explain the collision to readers (owner decision 2026-10-25: assume the reader knows Blocknet).
 
 ## Current ownership
 
@@ -36,4 +34,3 @@ never bare "BNT" or "BLOCK". See `research/2026-10-keyword-research.md`.
 | Broad owner | Narrow owner | Boundary |
 |---|---|---|
 | `/blog/how-to-mine-blocknet/` | (future) `/blog/blocknet-mining-hardware-hashrate/` | The guide shows one best-per-generation table and links out; the hardware post owns buying advice and full per-chip results. |
-| `/blog/how-to-mine-blocknet/` | (future) `/blog/is-blocknet-proof-of-stake/` | The guide carries a one-paragraph disambiguation note; the explainer owns the BNT vs BLOCK comparison. |

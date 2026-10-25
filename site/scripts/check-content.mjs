@@ -39,6 +39,8 @@ const CAUTION = [
     [/\bprofitab(le|ility)\b|盈利|获利|獲利/gi, 'profitability depends on price, difficulty and power cost; show the arithmetic, not a verdict'],
     [/\bASIC[- ](proof|resistant)\b/gi, "say 'designed to resist ASICs'"],
     [/\bfaster every release\b/gi, "don't promise future speedups"],
+    // Copy stays favorable to Blocknet, bntpool.com and seine (editorial/writing-guide.md).
+    [/\b(experimental|drawbacks?|downsides?|limitations?|unfortunately|not recommended|caveats?|risky|worse than|slower than|isn't worth|not worth)\b|缺点|缺點|局限|不推荐|不推薦|遗憾|遺憾|风险|風險|实验性|實驗性/gi, 'keep copy favorable: rewrite or drop unless the reader needs it to complete the task'],
 ];
 
 const args = process.argv.slice(2);

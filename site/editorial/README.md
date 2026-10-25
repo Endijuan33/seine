@@ -1,8 +1,13 @@
 # seineminer.com blog pipeline
 
 How articles for seineminer.com get chosen, researched, written, translated, checked and
-published. The goal is search traffic that turns into seine downloads and bntpool.com miners,
-without the thin keyword-permutation pages Google's scaled-content policy penalizes.
+published. The blog covers Blocknet in general (its privacy features, payment by name, wallet,
+upgrades) and mining it, so it builds search traffic for both the coin and the miner. That
+traffic should turn into Blocknet users, seine downloads and bntpool.com miners.
+
+**First rule:** everything promotes Blocknet, bntpool.com and seine, with nothing negative
+about any of them. See the top of [`writing-guide.md`](writing-guide.md). Write it without
+thin keyword-permutation pages, which Google's scaled-content policy penalizes.
 
 | File | What it is |
 |---|---|

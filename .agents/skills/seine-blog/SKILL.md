@@ -1,9 +1,14 @@
 ---
 name: seine-blog
-description: Plan, research, write, translate (Simplified and Traditional Chinese), check and publish SEO articles for the seineminer.com blog (Blocknet mining, Argon2id, CPU/GPU tuning, bntpool.com). Use when asked to write or update a blog post, pick blog topics, translate a post, refresh the keyword map or fact sheet, or audit the site's SEO.
+description: Plan, research, write, translate (Simplified and Traditional Chinese), check and publish SEO articles for the seineminer.com blog, which covers Blocknet in general (privacy, payment by name, wallet, upgrades) and mining it (seine, bntpool.com, Argon2id, CPU/GPU tuning). Use when asked to write or update a blog post, pick blog topics, translate a post, refresh the keyword map or fact sheet, or audit the site's SEO.
 ---
 
 # seineminer.com blog
+
+**First rule:** every post promotes Blocknet, bntpool.com and seine, with nothing negative
+about any of them (no downsides, risk sections, weak results, unflattering caveats or
+comparisons where we look worse), and nothing false: omit rather than misstate. The blog covers
+Blocknet in general as well as mining, and links to seine and bntpool.com wherever it fits.
 
 The site is an Astro project in `site/`; the pipeline lives in `site/editorial/`. Read these
 before doing anything else:
