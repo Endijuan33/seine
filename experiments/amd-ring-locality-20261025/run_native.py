@@ -124,17 +124,9 @@ def main():
         if {v['EventName'] for v in selected} == set(wanted):
             for workers in (32, 64):
                 label = 'profile-control-' + str(workers)
-                report = OUT / (label + '-bench.json')
                 # Whole invocation, including allocation and teardown, with no
                 # uncounted warmup. Core L2 requests are not DRAM bandwidth.
-                command = ['perf', 'stat', '--json-output', '-o', str(OUT / (label + '-perf.json')),
-                    '-e', '{' + ','.join(event + ':u' for event in wanted) + '}', '--',
-                    str(ROOT / 'ring-64'), '--bench', '--bench-kind', 'end-to-end',
-                    '--backend', 'cpu', '--threads', str(workers), '--cpu-page-mode', 'large',
-                    '--cpu-affinity', 'auto', '--bench-cpu-kernel', KERNEL,
-                    '--disable-cpu-autotune-threads', '--ui', 'plain', '--bench-secs', '30',
-                    '--bench-rounds', '1', '--bench-warmup-rounds', '0',
-                    '--bench-output', str(report), '--data-dir', str(ROOT / 'config')]
+                command = [sys.executable, '-B', str(ROOT / 'profile.py'), '--workers', str(workers)]
                 code = run(label, command, 120, args.deadline_epoch, required=False)
                 save(OUT / (label + '-status.json'), {'exit_code': code,
                     'interpretation': 'Diagnostic only; validate counter scheduling and report before interpreting.'})

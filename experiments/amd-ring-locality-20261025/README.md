@@ -69,6 +69,13 @@ profiles with no uncounted warmup. Failed or incompletely scheduled counters are
 uninterpretable, and the L2 counters do not measure DRAM bandwidth. This host has
 core/IBS PMUs but no exposed Data Fabric PMU. Profiling and hash throughput runs
 are separate; profiling overhead is not part of the throughput comparison.
+The read-only HSMP sysfs interface is also available: `profile.py` records its
+DDR-bandwidth, clock and thermal-limit readings every two seconds only while
+each diagnostic invocation runs. These integer GB/s firmware estimates are
+separate non-atomic reads, not integrated byte counters. They may help diagnose
+saturation but cannot establish precise bytes per hash. Units follow the
+[Linux HSMP documentation](https://docs.kernel.org/arch/x86/amd_hsmp.html).
+No HSMP observer runs during the throughput or energy comparisons.
 
 `confirm.py` runs four fresh throughput pairs for the recorded shortlist. A
 failed +1% lower-bound gate completes as a rejected experiment without spending
