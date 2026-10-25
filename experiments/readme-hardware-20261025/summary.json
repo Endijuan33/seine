@@ -1,0 +1,279 @@
+{
+  "campaign": "readme-hardware-20261025",
+  "release": {
+    "version": "v0.2.22",
+    "commit": "6e5411768d5d67365ecaff3abc30d280fb30cb0d",
+    "url": "https://github.com/zpalmtree/seine/releases/tag/v0.2.22"
+  },
+  "arm_candidate": {
+    "pr": 44,
+    "commit": "f20e7bb1772be024a12ac5cdcc92685ba89d3ddd",
+    "kernel_selection": "explicit --bench-cpu-kernel neon-sha3 (runtime-guarded by is_aarch64_feature_detected!(\"sha3\"); generic build, no RUSTFLAGS)"
+  },
+  "metric": "completed hashes / actual elapsed seconds including the round-end fence; mean over invocations (each invocation = 1x20 s warmup + 2x20 s measured rounds)",
+  "hosts": [
+    {
+      "label": "zen3-milan",
+      "host": "Zen 3 Milan",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "complete",
+          "error": null
+        }
+      ],
+      "leases": [
+        {
+          "type": "c6a.8xlarge",
+          "lifecycle": "on-demand",
+          "zone": "us-east-1a",
+          "launched_at": "2026-10-25T02:29:35+00:00",
+          "verified_terminated_at": "2026-10-25T02:42:14.589092+00:00",
+          "ondemand_usd_per_hour": 1.224,
+          "spot_price_at_launch_usd_per_hour": null,
+          "cost": {
+            "billable_hours_rounded_up_to_minute": 0.21666666666666667,
+            "conservative_usd": 0.3666632420091324,
+            "expected_usd": 0.3666632420091324,
+            "extras_usd": 0.10146324200913243
+          },
+          "state_reason": {
+            "Code": "Client.UserInitiatedShutdown",
+            "Message": "Client.UserInitiatedShutdown: User initiated shutdown"
+          }
+        }
+      ],
+      "status": "complete",
+      "instance_type": "c6a.8xlarge",
+      "lifecycle": "on-demand",
+      "zone": "us-east-1a",
+      "cpu": {
+        "brand": "AMD EPYC 7R13 Processor",
+        "vendor": "AuthenticAMD",
+        "family": "25",
+        "model": "1",
+        "stepping": "1",
+        "microcode": "0xa0011e1",
+        "arm_midr": null,
+        "seine_cpu_identity": {
+          "vendor": "AuthenticAMD",
+          "family": 25,
+          "model": 1,
+          "stepping": 1
+        },
+        "flags": {
+          "avx2": true,
+          "avx512f": false,
+          "avx512vl": false,
+          "avx512_vnni": false,
+          "amx_tile": false,
+          "sha3": false,
+          "asimd": false,
+          "sve": false,
+          "sve2": false
+        }
+      },
+      "topology": {
+        "logical_cpus": 32,
+        "physical_cores": 16,
+        "threads_per_core": 2,
+        "sockets": 1,
+        "numa_nodes": 2,
+        "numa_node_cpus": {
+          "node0": "0-7,16-23",
+          "node1": "8-15,24-31"
+        },
+        "l3_instances": [
+          {
+            "shared_cpu_list": "0-7,16-23",
+            "size": "32768K"
+          },
+          {
+            "shared_cpu_list": "8-15,24-31",
+            "size": "32768K"
+          }
+        ]
+      },
+      "memory": {
+        "mem_total_gib": 61.49591827392578,
+        "mem_available_before_gib": 60.15671920776367,
+        "hugetlb_2mib_pages_reserved": 27956,
+        "ordinary_available_after_reservation_gib": 5.598217010498047,
+        "hugetlb_restored_to_zero": true,
+        "hugetlb_retry_after_compaction": false
+      },
+      "kernel_os": "7.0.0-1014-aws",
+      "worker_counts": [
+        16,
+        24,
+        26
+      ],
+      "max_fitting_workers": 26,
+      "variants_timed": [
+        {
+          "name": "v022-avx2",
+          "binary": "seine-v022",
+          "kernel": "avx2"
+        }
+      ],
+      "parity": {
+        "verify-v022-x86": {
+          "exit_code": 0,
+          "passed": [
+            "scalar",
+            "avx2"
+          ],
+          "unsupported": [
+            "avx512",
+            "avx512-256",
+            "neon",
+            "avx512-256-stream"
+          ],
+          "sha256": "8e1e21ea79e5784b05787164e3ee647aca260545588f828d4dbd121d2f969b1b",
+          "covers_binary": [
+            "seine-v022"
+          ],
+          "status": null
+        }
+      },
+      "grid": [
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "workers": 16,
+          "samples_completed_hps": [
+            11.640957459854471,
+            11.60610246280441
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 11.62352996132944
+        },
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "workers": 24,
+          "samples_completed_hps": [
+            10.634151368591612,
+            10.61589648807283
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 10.62502392833222
+        },
+        {
+          "variant": "v022-avx2",
+          "kernel": "avx2",
+          "binary": "seine-v022",
+          "workers": 26,
+          "samples_completed_hps": [
+            10.401976985901856,
+            10.40495526654703
+          ],
+          "rejected": 0,
+          "mean_completed_hps": 10.403466126224444
+        }
+      ],
+      "grid_order": [
+        "p1-w16-v022-avx2",
+        "p1-w24-v022-avx2",
+        "p1-w26-v022-avx2",
+        "p2-w26-v022-avx2",
+        "p2-w24-v022-avx2",
+        "p2-w16-v022-avx2"
+      ],
+      "best_grid_cell": {
+        "variant": "v022-avx2",
+        "kernel": "avx2",
+        "binary": "seine-v022",
+        "workers": 16,
+        "n_runs": 4,
+        "values_completed_hps": [
+          11.640957459854471,
+          11.60610246280441,
+          11.610821251051467,
+          11.64410765926419
+        ],
+        "mean_completed_hps": 11.625497208243635,
+        "stdev_completed_hps": 0.01980663304062153,
+        "confirm_values": [
+          11.610821251051467,
+          11.64410765926419
+        ]
+      },
+      "runner_up_cell": {
+        "variant": "v022-avx2",
+        "kernel": "avx2",
+        "binary": "seine-v022",
+        "workers": 24,
+        "n_runs": 4,
+        "values_completed_hps": [
+          10.634151368591612,
+          10.61589648807283,
+          10.60493802312677,
+          10.630520031500438
+        ],
+        "mean_completed_hps": 10.621376477822913,
+        "stdev_completed_hps": 0.01350377093585492,
+        "confirm_values": [
+          10.60493802312677,
+          10.630520031500438
+        ]
+      },
+      "runner_up_basis": "single kernel: same kernel at second-best worker count",
+      "confirmation_reversed_grid_choice": false,
+      "best": {
+        "variant": "v022-avx2",
+        "kernel": "avx2",
+        "binary": "seine-v022",
+        "workers": 16,
+        "mean_completed_hps": 11.625497208243635,
+        "n_runs": 4
+      },
+      "rejected_invocations": [],
+      "skipped_for_deadline": [],
+      "accepted_invocations": 10,
+      "max_steal_pct": 0.0018810959264867711,
+      "binaries": {
+        "seine-v022": {
+          "sha256": "d336f33f6f610b868a2f0f6ccedfa7316481c62fb4e209db4a8b5d891a6df260",
+          "seine_version": "0.2.22",
+          "git_commit_label": "6e5411768d5d",
+          "source_fingerprint": "7ad8df30888fb8f1",
+          "build_features": "default,nvidia"
+        }
+      },
+      "pricing": {
+        "ondemand_usd_per_hour": 1.224,
+        "ondemand_source": {
+          "usd_per_hour": 1.224,
+          "source": "AWS Pricing API get-products",
+          "retrieved_utc": "2026-10-25T02:29:27.787279+00:00"
+        },
+        "spot_price_paid_usd_per_hour": null,
+        "hps_per_ondemand_usd_per_hour": 9.497955235493166
+      },
+      "guest_wall_seconds": 682.499638594,
+      "evidence_archive_sha256": "b3c220ef9d3679da228c8f04941814d4ae07bdb6e89312c8421f3eb886d9830d",
+      "evidence_files_verified": 57
+    }
+  ],
+  "cost": {
+    "leases": 1,
+    "closed_verified": 1,
+    "conservative_total_usd": 0.3666632420091324,
+    "expected_total_usd": 0.3666632420091324,
+    "basis": "per-lease launch -> verified termination, rounded up to the minute; on-demand rate (spot unavailable), + 16 GiB gp3 + public IPv4 + $0.10 transfer contingency per lease",
+    "budget_cap_usd": 30,
+    "launch_stop_usd": 28.0
+  },
+  "spot_blocked": {
+    "at": "2026-10-25T01:11:47.494982+00:00",
+    "reason": "AuthFailure.ServiceLinkedRoleCreationNotPermitted: The provided credentials do not have permission to create the service-linked role for EC2 Spot Instances. (first Milan launch attempt 01:11 UTC; no instance created)"
+  },
+  "cleanup": {
+    "final_audit": null,
+    "cleanup_verified_at": null,
+    "security_group_deleted": null
+  }
+}
