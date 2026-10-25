@@ -71,6 +71,9 @@ const headings = (body) => [...stripCode(body).matchAll(/^(#{2,3}) (.+)$/gm)].ma
 const slugs = readdirSync(BLOG, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const sources = slugs.map((s) => readPost(s, 'index.mdx')).filter(Boolean);
 const published = new Set(sources.filter((p) => p.data && !p.data.draft).map((p) => p.slug));
+const existing = new Set(sources.map((p) => p.slug));
+// A published post may only link to published posts; a draft may also link to other drafts.
+const linkable = (p) => (p.data?.draft ? existing : published);
 const keywordMap = existsSync(new URL('editorial/keyword-map.md', ROOT)) ? readFileSync(new URL('editorial/keyword-map.md', ROOT), 'utf8') : '';
 
 if (hashIdx >= 0) {
@@ -92,7 +95,7 @@ function checkLinks(p, prefix, errors) {
         if (base === '/' && frag && !HOME_ANCHORS.includes(frag)) errors.push(`link to missing home section #${frag}`);
         else if (base.startsWith('/blog/') && base !== '/blog/') {
             const target = base.slice(6).replace(/\/$/, '');
-            if (!published.has(target)) errors.push(`link to unknown or draft post ${href}`);
+            if (!linkable(p).has(target)) errors.push(`link to unknown or draft post ${href}`);
             else if (!base.endsWith('/')) errors.push(`write ${href} with a trailing slash`);
         } else if (!['/', '/blog/'].includes(base)) errors.push(`link to unknown page ${href}`);
     }
@@ -120,7 +123,7 @@ function checkSource(p) {
     if (!d.draft && !keywordMap.includes(`/blog/${p.slug}/`)) errors.push(`no row for /blog/${p.slug}/ in editorial/keyword-map.md`);
     if (/^# /m.test(stripCode(p.body))) errors.push("the body has an H1 ('# '); the title is the only H1, start at '##'");
     for (const f of faq) if (/[`*[\]<>\n]/.test(f.a ?? '')) errors.push(`FAQ answer must be one line of plain text: ${f.q}`);
-    for (const s of d.related ?? []) if (!published.has(s)) errors.push(`related post '${s}' doesn't exist or is a draft`);
+    for (const s of d.related ?? []) if (!linkable(p).has(s)) errors.push(`related post '${s}' doesn't exist or is a draft`);
     checkLinks(p, null, errors);
 
     const n = (d.description ?? '').length;
