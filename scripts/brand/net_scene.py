@@ -123,7 +123,7 @@ elif V == 'B':  # net sharp in the foreground, glowing block just behind it
         cube((x, 1.6, z), s, rot=(random.random(), random.random(), random.random()))
     cam_loc, tgt, lens, focus = (-0.6, -6.5, 0.3), (0.6, 0.4, 0.0), 50, 4.3
 elif V == 'C':  # net running diagonally across the frame, blocks caught in it, hero block in front
-    net_sheet(20 * SHEET, 7 * SHEET, int(100 * SHEET), int(36 * SHEET), [(-2.0, 0.4, 0.5, 0.45), (1.2, -0.6, 0.45, 0.4), (3.4, 0.8, 0.4, 0.35)], sag=0.8,
+    net_sheet(20 * SHEET, 7 * SHEET, int(100 * SHEET), int(36 * SHEET), [(-2.0, 0.4, 0.22, 0.45), (1.2, -0.6, 0.2, 0.4), (3.4, 0.8, 0.18, 0.35)], sag=0.8,
               tilt=(0, math.radians(-24), math.radians(-12)), loc=(0, 0.6, 0))
     for x, y, z, s in ((-2.0, 0.9, 0.5, 0.45), (1.1, 0.9, -0.5, 0.42), (3.2, 0.9, 1.0, 0.36)):
         cube((x, y, z), s, rot=(random.random(), random.random(), random.random()))

@@ -19,91 +19,91 @@
   "servers": [
     {
       "name": "AMD EPYC 9R45",
-      "sub": "Zen 5 Turin · 24 workers",
+      "sub": "Zen 5 Turin · 24 threads",
       "category": "amd",
       "hps": 44.742,
       "source": "experiments/epyc-investigation/INTEGRATED_VALIDATION.md (c8a.8xlarge, streaming kernel)"
     },
     {
       "name": "AMD EPYC 9R14",
-      "sub": "Zen 4 Genoa · 24 workers",
+      "sub": "Zen 4 Genoa · 24 threads",
       "category": "amd",
       "hps": 35.698,
       "source": "experiments/high-end-streaming-20261025 (c7a.8xlarge, streaming kernel)"
     },
     {
       "name": "AMD EPYC 7R13",
-      "sub": "Zen 3 Milan · 16 workers",
+      "sub": "Zen 3 Milan · 16 threads",
       "category": "amd",
       "hps": 11.63,
       "source": "experiments/readme-hardware-20261025 (c6a.8xlarge, AVX2)"
     },
     {
       "name": "AMD EPYC 7R32",
-      "sub": "Zen 2 Rome · 12 workers",
+      "sub": "Zen 2 Rome · 12 threads",
       "category": "amd",
       "hps": 6.012,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "AMD EPYC 7571",
-      "sub": "Zen 1 Naples · 16 workers",
+      "sub": "Zen 1 Naples · 16 threads",
       "category": "amd",
       "hps": 4.596,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "Intel Xeon 8488C",
-      "sub": "Sapphire Rapids · 12 workers",
+      "sub": "Sapphire Rapids · 12 threads",
       "category": "intel",
       "hps": 13.099,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "Intel Xeon 6975P-C",
-      "sub": "Granite Rapids · 12 workers",
+      "sub": "Granite Rapids · 12 threads",
       "category": "intel",
       "hps": 12.916,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "Intel Xeon 8375C",
-      "sub": "Ice Lake · 12 workers",
+      "sub": "Ice Lake · 12 threads",
       "category": "intel",
       "hps": 12.205,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "Intel Xeon 8275CL",
-      "sub": "Cascade Lake · 12 workers",
+      "sub": "Cascade Lake · 12 threads",
       "category": "intel",
       "hps": 10.247,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "Intel Xeon E5-2666 v3",
-      "sub": "Haswell · 11 workers",
+      "sub": "Haswell · 11 threads",
       "category": "intel",
       "hps": 9.722,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
     },
     {
       "name": "AWS Graviton4",
-      "sub": "Neoverse V2 · 16 workers",
+      "sub": "Neoverse V2 · 16 threads",
       "category": "arm",
       "hps": 21.503,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md (SHA3 + prefetch kernel)"
     },
     {
       "name": "AWS Graviton3",
-      "sub": "Neoverse V1 · 16 workers",
+      "sub": "Neoverse V1 · 16 threads",
       "category": "arm",
       "hps": 18.17,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md (SHA3 + prefetch kernel)"
     },
     {
       "name": "AWS Graviton2",
-      "sub": "Neoverse N1 · 16 workers",
+      "sub": "Neoverse N1 · 16 threads",
       "category": "arm",
       "hps": 11.047,
       "source": "experiments/cpu-campaign-20261024/RESULTS.md"
@@ -111,14 +111,14 @@
   ],
   "best": [
     {
-      "name": "Zen 5",
-      "sub": "AMD EPYC 9R45 · 24 workers",
+      "name": "AMD EPYC · Zen 5",
+      "sub": "EPYC 9R45 server · 24 threads",
       "category": "amd",
       "hps": 44.742
     },
     {
-      "name": "Zen 4",
-      "sub": "AMD EPYC 9R14 · 24 workers",
+      "name": "AMD EPYC · Zen 4",
+      "sub": "EPYC 9R14 server · 24 threads",
       "category": "amd",
       "hps": 35.698
     },
@@ -129,20 +129,14 @@
       "hps": 30.94
     },
     {
-      "name": "Graviton4",
-      "sub": "AWS Neoverse V2 · 16 workers",
+      "name": "Arm server",
+      "sub": "AWS Graviton4 · 16 threads",
       "category": "arm",
       "hps": 21.503
     },
     {
-      "name": "Graviton3",
-      "sub": "AWS Neoverse V1 · 16 workers",
-      "category": "arm",
-      "hps": 18.17
-    },
-    {
-      "name": "Sapphire Rapids",
-      "sub": "Intel Xeon 8488C · 12 workers",
+      "name": "Intel Xeon",
+      "sub": "Sapphire Rapids 8488C · 12 threads",
       "category": "intel",
       "hps": 13.099
     }
