@@ -2027,7 +2027,7 @@ fn maybe_warn_linux_hugepages_setup(cfg: &Config, mode: RuntimeMode) {
     );
     info(
         tag,
-        "hugepages | docs: see README.md -> \"Linux HugePages (CPU Throughput)\"",
+        "hugepages | docs: see docs/guides/linux-hugepages.md",
     );
     info(
         tag,
@@ -2085,7 +2085,7 @@ fn maybe_warn_linux_1g_hugepages_setup(cpu_lanes: u64, mode: RuntimeMode) {
     );
     info(
         tag,
-        "hugepages-1g | docs: see README.md -> \"WSL/Linux HugeTLB provisioning\"",
+        "hugepages-1g | docs: see docs/guides/linux-hugepages.md#1-gib-pages",
     );
 }
 
