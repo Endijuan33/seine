@@ -63,7 +63,9 @@ def main():
     fields = {r['field'].rstrip(':'): r['data'] for r in hardware['lscpu']}
     assert fields['Vendor ID'] == 'AuthenticAMD'
     assert int(fields['CPU family']) == 25 and int(fields['Model']) == 17
-    assert int(fields['CPU(s)']) == 32 and fields.get('Hypervisor vendor') == 'AWS'
+    # Prior c7a.8xlarge native evidence reports KVM through lscpu. This is an
+    # EC2 Linux VM, not a bare-metal host; both labels identify that scope.
+    assert int(fields['CPU(s)']) == 32 and fields.get('Hypervisor vendor') in ('KVM', 'AWS')
     assert int(fields['Thread(s) per core']) == 1
     assert {'avx2', 'avx512f', 'avx512vl'} <= set(fields['Flags'].split())
     assert len(Path('/proc/swaps').read_text().splitlines()) == 1
