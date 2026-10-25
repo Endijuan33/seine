@@ -133,7 +133,7 @@ def diagnostics(root):
         counters = [json.loads(line) for line in Path(str(prefix) + '-perf.json').read_text().splitlines()]
         assert len(counters) == 4 and all(v['pcnt-running'] == 100 for v in counters)
         assert len({v['event-runtime'] for v in counters}) == 1
-        assert report['bench_kind'] == 'end-to-end' and report['bench_secs'] == 30
+        assert report['bench_kind'] == 'end_to_end' and report['bench_secs'] == 30
         assert report['rounds'] == 1 and report['warmup_rounds'] == 0
         assert report['cpu_threads'] == workers and hsmp['exit_code'] == 0
         assert report['config_fingerprint']['cpu_kernel'] == 'avx512-256-stream'
