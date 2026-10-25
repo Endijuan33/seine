@@ -38,7 +38,7 @@ html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
 img { display: block; max-width: 100%; height: auto; }
-code { font: 0.9em var(--mono); }
+code { direction: ltr; unicode-bidi: isolate; font: 0.9em var(--mono); }
 .wrap { max-width: var(--wrap); margin: 0 auto; padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
