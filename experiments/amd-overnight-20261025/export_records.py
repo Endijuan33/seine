@@ -79,6 +79,6 @@ if __name__ == '__main__':
         'completed_hashes_lower_bound', 'invocation_seconds', 'hps', 'hps_is_lower_bound',
         'hps_sample_cv', 'power_scope', 'power_cap_w', 'package_watts', 'candidate_status')
     with (args.output / 'benchmark-records.csv').open('w', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, extrasaction='ignore')
+        writer = csv.DictWriter(handle, fieldnames=columns, extrasaction='ignore', lineterminator='\n')
         writer.writeheader()
         writer.writerows(result['records'])
