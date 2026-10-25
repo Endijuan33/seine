@@ -52,3 +52,86 @@ assert row == valid['report_id']
 assert query("SELECT median_hps FROM telemetry_backend_performance WHERE cpu_model='Example CPU (fixture)'") == '10'
 assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%private-field-fixture%'") == '0'
 print('PASS: valid upload, rate limit, strict fields, empty/oversized/invalid-window rejection, database persistence and population-weighted performance view')
+
+# The collector accepts both generations while rejecting v2 fields disguised as v1.
+legacy = report()
+legacy['schema_version'] = 1
+legacy['hardware'].pop('resources')
+legacy['hardware']['cpu_model'] = 'Legacy CPU (fixture)'
+for backend in legacy['backends']:
+    backend['settings'].pop('cpu_backing_mib')
+    backend['settings'].pop('cpu_affinity')
+assert send(legacy) == 204
+bad_version = report()
+bad_version['schema_version'] = 1
+assert send(bad_version) == 422
+
+
+def insert(value, hours):
+    payload = json.dumps(value).replace("'", "''")
+    query("INSERT INTO telemetry_reports (report_id,installation_id,received_at,payload) "
+          f"VALUES ('{value['report_id']}','{value['installation_id']}',"
+          f"now()-interval '{hours} hours','{payload}'::jsonb)")
+
+
+def analysis(filename):
+    return json.loads(subprocess.check_output(
+        ['psql', DATABASE, '-qAt', '-v', 'ON_ERROR_STOP=1', '-f',
+         str(Path(__file__).with_name(filename))], text=True))
+
+
+# Exact settings are not enough: environments, builds, RAM and resource limits
+# must separate otherwise identical CPUs. Free RAM remains a diagnostic snapshot.
+for cohort in range(5):
+    for installation in range(5):
+        identity = uuid.uuid4().hex
+        for index, hours in enumerate((26, 13, 1)):
+            sample = report()
+            sample['installation_id'] = identity
+            sample['hardware']['cpu_model'] = 'Analysis CPU (fixture)'
+            if cohort == 1:
+                sample['hardware']['runtime_environment'] = 'wsl'
+            elif cohort == 2:
+                sample['build_features'] = 'cpu-only'
+            elif cohort == 3:
+                sample['hardware']['memory_gib'] = 128
+            elif cohort == 4:
+                sample['hardware']['resources']['effective_memory_gib'] = 32
+            sample['hardware']['resources']['available_memory_gib'] = 20 + index
+            sample['backends'][0]['hashes'] = 3600 * (10 + index * 10 + cohort * 100)
+            # One report has two identical devices; it still counts as one report.
+            if index == 0:
+                duplicate = json.loads(json.dumps(sample['backends'][0]))
+                duplicate['instance'] = 2
+                sample['backends'].append(duplicate)
+            insert(sample, hours)
+
+candidates = analysis('agent_report.sql')['performance_candidates']
+candidates = [c for c in candidates if c['cpu'] == 'Analysis CPU (fixture)']
+assert len(candidates) == 5, candidates
+assert sorted(c['median_hps'] for c in candidates) == [20, 120, 220, 320, 420]
+assert all(c['installations'] == 5 for c in candidates)
+view = json.loads(query("SELECT json_agg(v) FROM telemetry_backend_performance v "
+                        "WHERE cpu_model='Analysis CPU (fixture)'"))
+assert sorted(v['median_hps'] for v in view) == [20, 120, 220, 320, 420]
+assert all(v['installations'] == 5 for v in view)
+
+# Recent inventory-only reporters cannot be confused with healthy sparse cohorts.
+identities = [uuid.uuid4().hex for _ in range(5)]
+for index, identity in enumerate(identities):
+    for hours in (4, 2, 1):
+        empty = report()
+        empty['installation_id'] = identity
+        empty['miner_version'] = 'quality-fixture'
+        empty['backends'] = []
+        insert(empty, hours)
+    quality = analysis('data_quality.sql')
+    assert quality['status'] == ('error' if index == 4 else 'ok'), quality
+for identity in identities:
+    recovered = report()
+    recovered['installation_id'] = identity
+    recovered['miner_version'] = 'quality-fixture'
+    insert(recovered, 0)
+assert analysis('data_quality.sql')['status'] == 'ok'
+print('PASS: schema 1/2 compatibility, environment/build/RAM/limit cohort separation, '
+      'per-report deduplication, stable cohort thresholds, sustained empty-sample detection and recovery')

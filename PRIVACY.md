@@ -25,12 +25,15 @@ expire under the retention policy below.
 
 Reports contain the CPU model, vendor and architecture identifiers, supported
 CPU kernels, core counts, memory capacity, operating system and version, and
-whether the miner runs natively or under WSL. They include the miner version,
-build target and features, and whether it is a debug build.
+whether the miner runs natively or under WSL. Report-time resource snapshots include
+the allowed CPU count, OS-estimated available parallelism, effective memory limit
+and available memory, including container limits where supported. They include
+the miner version, build target and features, and whether it is a debug build.
 
 For active mining backends, reports include GPU model and memory where available,
-the number of enabled workers or lanes, CPU kernel and requested page policy,
-available GPU tuning settings, hash counts and measurement durations. Reports
+the number of enabled workers or lanes, CPU kernel, requested page and affinity
+policies, allocator-observed memory backing by page type, available GPU tuning
+settings, hash counts and measurement durations. Reports
 identify measurement windows in which settings changed or telemetry samples
 were missed so those windows can be excluded from performance comparisons.
 

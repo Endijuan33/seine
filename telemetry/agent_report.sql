@@ -8,6 +8,19 @@ WITH reports AS (
            payload->>'miner_version' AS version,
            payload #>> '{hardware,cpu_model}' AS cpu,
            payload #>> '{hardware,os}' AS os,
+           jsonb_build_object(
+               'os_version', payload #> '{hardware,os_version}',
+               'runtime_environment', payload #> '{hardware,runtime_environment}',
+               'memory_gib', payload #> '{hardware,memory_gib}',
+               'logical_cpus', payload #> '{hardware,logical_cpus}',
+               'physical_cores', payload #> '{hardware,physical_cores}',
+               'cpu_vendor', payload #> '{hardware,cpu_vendor}',
+               'cpu_family', payload #> '{hardware,cpu_family}',
+               'cpu_model_id', payload #> '{hardware,cpu_model_id}',
+               'build_target', payload->'build_target',
+               'build_features', payload->'build_features',
+               'resources', NULLIF(payload #> '{hardware,resources}', 'null'::jsonb) - 'available_memory_gib'
+           ) AS context,
            payload->'backends' AS backends
     FROM telemetry_reports
     WHERE received_at >= now() - interval '7 days'
@@ -33,7 +46,7 @@ WITH reports AS (
            count(DISTINCT installation_id) AS installations
     FROM reports GROUP BY 1 ORDER BY 1
 ), samples AS (
-    SELECT installation_id, received_at, version, cpu, os,
+    SELECT installation_id, received_at, version, cpu, os, context,
            sample->'settings' AS settings,
            (sample->>'hashes')::double precision /
              NULLIF((sample->>'observed_secs')::double precision, 0) AS hps
@@ -42,22 +55,22 @@ WITH reports AS (
       AND (sample->>'observed_secs')::double precision >= 60
 ), per_report AS (
     -- Identical devices in one report must not inflate independent observations.
-    SELECT installation_id, received_at, version, cpu, os, settings,
+    SELECT installation_id, received_at, version, cpu, os, context, settings,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS hps
-    FROM samples GROUP BY 1, 2, 3, 4, 5, 6
+    FROM samples GROUP BY 1, 2, 3, 4, 5, 6, 7
 ), per_installation AS (
-    SELECT installation_id, version, cpu, os, settings,
+    SELECT installation_id, version, cpu, os, context, settings,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS hps
-    FROM per_report GROUP BY 1, 2, 3, 4, 5
+    FROM per_report GROUP BY 1, 2, 3, 4, 5, 6
     HAVING count(*) >= 3 AND max(received_at) - min(received_at) >= interval '24 hours'
 ), performance AS (
-    SELECT version, cpu, os, settings, count(*) AS installations,
+    SELECT version, cpu, os, context, settings, count(*) AS installations,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS median_hps,
            percentile_cont(0.1) WITHIN GROUP (ORDER BY hps) AS p10_hps,
            percentile_cont(0.9) WITHIN GROUP (ORDER BY hps) AS p90_hps
-    FROM per_installation GROUP BY 1, 2, 3, 4
+    FROM per_installation GROUP BY 1, 2, 3, 4, 5
     HAVING count(*) >= 5
-    ORDER BY installations DESC, version, cpu, os, settings LIMIT 20
+    ORDER BY installations DESC, version, cpu, os, context, settings LIMIT 20
 )
 SELECT jsonb_build_object(
     'window_days', 7,

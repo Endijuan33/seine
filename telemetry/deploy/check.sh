@@ -26,4 +26,6 @@ if not reports or time.time() - max(p.stat().st_mtime for p in reports) > 27 * 3
 if any(time.time() - p.stat().st_mtime > 8 * 86400 for p in reports):
     raise SystemExit('Telemetry recovery backup expiry is overdue.')
 PY
-echo 'Telemetry HTTPS, database, retention, disk and backups are healthy.'
+quality="$("${compose[@]}" exec -T db psql -X -U telemetry -d telemetry -qAt -v ON_ERROR_STOP=1 < "$deploy_dir/../data_quality.sql")"
+python3 -c 'import json, sys; q = json.load(sys.stdin); sys.exit("Telemetry data quality failed: sustained hardware-only reports without backend samples.") if q["status"] != "ok" else None' <<< "$quality"
+echo 'Telemetry HTTPS, database, retention, disk, backups and sample completeness are healthy.'

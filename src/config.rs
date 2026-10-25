@@ -3010,6 +3010,18 @@ fn cpu_capacity_from_budget(
     (capacity.max(1), usable(available) as usize)
 }
 
+/// Report-time headroom using the same cgroup-aware budget as CPU sizing.
+/// Regular mode deliberately excludes reserved HugeTLB pools from free memory.
+pub(crate) fn telemetry_memory_budget_gib() -> (Option<u32>, Option<u32>) {
+    detect_memory_budget_bytes(CpuPageMode::Regular).map_or((None, None), |budget| {
+        let gib = 1024 * 1024 * 1024;
+        (
+            Some(budget.effective_total.div_ceil(gib) as u32),
+            Some((budget.effective_available / gib) as u32),
+        )
+    })
+}
+
 fn detect_memory_budget_bytes(page_mode: CpuPageMode) -> Option<MemoryBudgetBytes> {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();

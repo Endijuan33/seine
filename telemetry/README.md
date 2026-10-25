@@ -48,16 +48,24 @@ The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
 
 - CPU model/vendor/family/model number, logical and physical core counts,
   rounded-up GiB RAM, OS/version, native/WSL classification and supported kernels.
+- Report-time allowed CPU count and OS-estimated available parallelism, effective
+  memory limit and available memory (including cgroup limits where supported).
 - Miner version, target, build features and whether it is a debug build.
 - Active mining backend model and memory where available, enabled workers/lanes,
-  CPU kernel and requested page policy, GPU register/launch settings where available.
+  CPU kernel, requested page/affinity policy and allocator-observed memory backing,
+  GPU register/launch settings where available.
 - Per-backend hashes and observation duration, plus a flag excluding windows with
   changed settings or missed telemetry samples from performance comparisons.
 
 GPU details describe active mining devices, rather than every installed adapter.
 Metal currently reports backend/memory/lanes; the CPU model identifies the Apple
-system. Requested CPU page policy is not proof of actual huge-page backing, and
-GPU launch settings are configured limits, not every adaptive launch's depth.
+system. Schema 2 reports allocator-observed CPU backing as MiB in this order:
+explicit large pages, explicit 1 GiB pages, transparent huge pages, regular pages,
+and heap. These counters include resident parked arenas and reflect the allocator's
+backing observations; they are not a continuous OS page-table survey. Affinity is
+configured policy, not measured per-worker NUMA placement. Resource fields are
+report-time snapshots; available memory excludes reserved HugeTLB pools. GPU
+launch settings are configured limits, not every adaptive launch's depth.
 These self-reported live rates include machine load and mining idle time; use them
 to prioritize controlled optimization experiments, not as benchmark proof.
 
@@ -109,6 +117,21 @@ always-running installations, expect about 24,000 reports/day. At an assumed
 4 KiB per report, that is about 3 GB of raw payload per 30 days, before PostgreSQL
 indexes, WAL and backups. Revisit disk sizing using measured production growth.
 
+### Schema rollout
+
+Deploy the updated collector **before** distributing miners that emit schema 2.
+The collector accepts schema 1 and 2 at the existing `/v1/reports` URL; the URL
+version does not change. Old reports omit resource/backing fields and remain
+readable. The old collector rejects schema 2, so releasing the new miner first
+would lose reports. No database table rewrite or miner/pool restart is needed for
+the collector upgrade; the performance view is replaced in place.
+
+The pool-mining hash sampling path feeds the same recorder as daemon mining.
+The pool regression test exercises its real sampling/accounting function without
+running a hashing workload. A fixed binary must reach users before their missing
+performance samples can recover; deploying the collector alone cannot recover
+hash counts from past inventory-only reports.
+
 ### Recovery backups
 
 For a checkout at `/opt/seine`, install the supplied daily backup timer:
@@ -142,7 +165,8 @@ times and remain subject to collector cleanup.
 
 After the first backup succeeds, install and enable
 `seine-telemetry-check.{service,timer}` the same way. Its five-minute checks cover
-HTTPS, database connectivity, retention, disk headroom and backup freshness;
+HTTPS, database connectivity, retention, disk headroom, backup freshness and
+performance-sample completeness;
 failures appear in systemd/journald. It does not send external notifications.
 The current host and maintenance commands are in
 [the production runbook](deploy/PRODUCTION.md).
@@ -166,8 +190,12 @@ packages are required. It exits nonzero on health, access or query failures whil
 preserving any successful part of the briefing.
 
 The window is seven days, debug builds are excluded, and inventory uses each
-installation's latest report. Performance groups match version, CPU, OS and
-backend settings. Each installation contributes one median; identical devices
+installation's latest report. Performance groups match version, CPU, OS/version,
+native/WSL runtime,
+RAM/core counts, build target/features, resource limits and backend settings
+(including measured CPU backing). Missing legacy fields form separate groups.
+Free memory is diagnostic only and does not split cohorts on every report. Each
+installation contributes one median; identical devices
 in one report do not count as additional observations. A cohort must contain at
 least five installations, each with three valid reports spanning at least 24 hours.
 Changed/missed sampling windows and samples under a minute are excluded. These
@@ -176,7 +204,13 @@ are conservative screening rules, not statistical confidence guarantees.
 Use the results to select hardware for controlled paired experiments. Consult the
 optimization logs before proposing work, and verify improvements on the target
 hardware before changing automatic defaults. Sparse data means "keep collecting,"
-not "hardware is slow." Low report counts alone are not proof of an outage.
+not "hardware is slow."
+A separate six-hour data-quality query counts inventory-only, sampled and stable
+reports. Five installations of the same version, each with at least three reports
+spanning two hours and no backend samples, fail both the agent briefing and the
+five-minute service check. This detects a broken sampling path even when HTTPS
+and the database are healthy. Low report counts alone are not an outage; unstable
+tuning windows remain visible in the stable-sample count.
 Send the user a concise interpretation and next action rather than raw SQL output.
 
 The command is invoked during agent work; it does not schedule unattended agent
@@ -203,12 +237,14 @@ GROUP BY 1 ORDER BY 2 DESC;
 
 Popularity counts installations, not messages or necessarily people. Performance
 first takes each installation's median, then reports population median/p10/p90
-for the same version, CPU, OS and backend settings. Debug builds, unstable windows
-and samples shorter than a minute are excluded. Results describe reporting installations and may not represent all miners.
+for matching version, CPU, environment, resources and backend settings. Debug
+builds, unstable windows and samples shorter than a minute are excluded. Results
+describe reporting installations and may not represent all miners.
 
 ## Verification and showcase
 
 ```sh
+python3 telemetry/test_agent_report.py
 cargo +1.93.0 test -p seine-telemetry --features server
 cargo +1.93.0 test --bin seine --no-default-features hardware_telemetry
 cargo +1.93.0 check --workspace --all-targets --features seine-telemetry/server,amd
@@ -216,7 +252,8 @@ cargo +1.93.0 check --workspace --all-targets --features seine-telemetry/server,
 
 For a disposable local PostgreSQL and collector, set `TELEMETRY_TEST_DATABASE`
 to that database's connection string, then run `python3 telemetry/test_integration.py`.
-It writes synthetic reports and checks validation, throttling, storage and analysis.
+It writes synthetic reports and checks validation, throttling, legacy uploads,
+storage, cohort separation, duplicate-device weighting and data-quality detection/recovery.
 Do not run it against production.
 
 Run the real collector against that disposable DB:

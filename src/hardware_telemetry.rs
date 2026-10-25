@@ -1,7 +1,9 @@
 //! Optional, best-effort hardware reporting. No wallet/config/log serialization.
 use anyhow::{bail, Context, Result};
 use crossbeam_channel::{bounded, Sender};
-use seine_telemetry::{BackendSample, BackendSettings, Hardware, Report, SCHEMA_VERSION};
+use seine_telemetry::{
+    BackendSample, BackendSettings, Hardware, Report, Resources, SCHEMA_VERSION,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -195,7 +197,22 @@ impl Recorder {
         }
     }
 
-    fn drain(&self) -> Vec<BackendSample> {
+    #[cfg(test)]
+    pub(crate) fn test_recorder() -> Self {
+        Self(
+            Arc::new(Mutex::new(BTreeMap::new())),
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_advance_window(&self, duration: Duration) {
+        for sample in self.0.lock().unwrap().values_mut() {
+            sample.first -= duration;
+        }
+    }
+
+    pub(crate) fn drain(&self) -> Vec<BackendSample> {
         let Ok(mut samples) = self.0.lock() else {
             return Vec::new();
         };
@@ -245,7 +262,14 @@ fn hardware() -> Hardware {
     sys.refresh_memory();
     sys.refresh_cpu_all();
     let identity = crate::runtime_identity::cpu_identity();
+    let (effective_memory_gib, available_memory_gib) = crate::config::telemetry_memory_budget_gib();
     Hardware {
+        resources: Some(Resources {
+            allowed_logical_cpus: core_affinity::get_core_ids().map(|ids| ids.len() as u32),
+            available_parallelism: thread::available_parallelism().ok().map(|v| v.get() as u32),
+            effective_memory_gib,
+            available_memory_gib,
+        }),
         os: std::env::consts::OS.into(),
         os_version: sysinfo::System::os_version(),
         runtime_environment: crate::runtime_identity::runtime_environment(),
@@ -297,7 +321,6 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
             let Ok(client) = http_client() else {
                 return;
             };
-            let hardware = hardware();
             let mut since = Instant::now();
             // Wait for productive work, then report hourly. A bounded channel wakes shutdown.
             let mut delay = Duration::from_secs(300);
@@ -329,7 +352,7 @@ pub(crate) fn start(options: &Options) -> Result<(Recorder, Worker)> {
                         }
                     },
                     debug_build: cfg!(debug_assertions),
-                    hardware: hardware.clone(),
+                    hardware: hardware(),
                     window_secs,
                     backends,
                 };

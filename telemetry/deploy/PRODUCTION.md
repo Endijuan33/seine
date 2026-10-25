@@ -25,7 +25,8 @@ journalctl -u seine-telemetry-check.service -n 20
 ```
 
 The five-minute check verifies local HTTPS certificate/response, database queries,
-retention progress, disk headroom and backup freshness. A failed check appears in
+retention progress, disk headroom, backup freshness and sustained inventory-only
+reporting (sample completeness). A failed check appears in
 systemd/journald. No external alert destination is configured. Public DNS/reachability
 should also be checked from outside the server:
 
@@ -34,6 +35,13 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://telemetry.seineminer.com/healt
 ```
 
 Expect HTTP 204. This public endpoint alone does not verify the database.
+
+Schema 2 miners require the upgraded collector; deploy it before the miner release.
+The upgraded collector still accepts schema 1 clients. After this upgrade, the
+completeness check may continue failing for old pool miners until they upgrade
+or their inventory-only reports leave the six-hour window. Use the agent
+briefing's per-version data-quality result to distinguish that known client
+problem from a collector, backup or database failure.
 
 For deployment, first review the intended commit and create a fresh recovery backup.
 Then fast-forward the checkout and rebuild only the collector:

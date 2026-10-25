@@ -1420,6 +1420,7 @@ fn collect_pool_backend_samples(
     for (slot, runtime) in backends.iter().zip(runtime_telemetry.into_iter()) {
         let backend_id = slot.id;
         let hashes = slot.backend.take_hashes();
+        backend_executor.record_hardware_sample(slot, hashes);
         let telemetry = slot.backend.take_telemetry();
         has_pending_work |= telemetry.pending_work > 0 || telemetry.active_lanes > 0;
         super::merge_backend_telemetry(
@@ -2916,6 +2917,74 @@ mod tests {
         POOL_DESYNC_STALE_ACK_THRESHOLD, POOL_DESYNC_STALE_ACK_WINDOW, POOL_MAX_INFLIGHT_SUBMITS,
         POOL_SUBMIT_ACK_TIMEOUT,
     };
+
+    #[test]
+    fn pool_hash_samples_reach_hardware_reports_without_changing_accounting() {
+        use crate::backend::{BackendEvent, BackendInstanceId, PowBackend, WorkAssignment};
+        use crate::hardware_telemetry::Recorder;
+        use crate::miner::{backend_executor::BackendExecutor, BackendSlot};
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        struct CountingBackend(AtomicU64);
+        impl PowBackend for CountingBackend {
+            fn name(&self) -> &'static str {
+                "cpu"
+            }
+            fn lanes(&self) -> usize {
+                2
+            }
+            fn set_instance_id(&self, _: BackendInstanceId) {}
+            fn set_event_sink(&self, _: crossbeam_channel::Sender<BackendEvent>) {}
+            fn start(&self) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn stop(&self) {}
+            fn assign_work(&self, _: WorkAssignment) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn cancel_work(&self) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn fence(&self) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn take_hashes(&self) -> u64 {
+                self.0.swap(0, Ordering::AcqRel)
+            }
+        }
+        let backend = Arc::new(CountingBackend(AtomicU64::new(99)));
+        let slots = vec![BackendSlot {
+            id: 7,
+            backend: backend.clone(),
+            lanes: 2,
+            runtime_policy: Default::default(),
+            capabilities: backend.capabilities(),
+        }];
+        let executor = BackendExecutor::new();
+        let recorder = Recorder::test_recorder();
+        executor.set_hardware_telemetry(recorder.clone());
+        let stats = Stats::new();
+        let mut job = test_active_job(1);
+        super::collect_pool_backend_samples(&slots, &executor, &stats, &mut job);
+        recorder.test_advance_window(Duration::from_secs(120));
+        backend.0.store(240, Ordering::Release);
+        super::collect_pool_backend_samples(&slots, &executor, &stats, &mut job);
+        // A zero poll must still extend the observation window and preserve the sample.
+        super::collect_pool_backend_samples(&slots, &executor, &stats, &mut job);
+        let samples = recorder.drain();
+        assert_eq!(samples.len(), 1);
+        assert_eq!(samples[0].instance, 7);
+        assert_eq!(samples[0].settings.backend, "cpu");
+        assert_eq!(samples[0].settings.lanes, 2);
+        assert_eq!(samples[0].hashes, 240, "first counter predates the window");
+        assert!(samples[0].observed_secs >= 120.0);
+        assert!(!samples[0].settings_changed);
+        assert_eq!(
+            job.round_hashes, 339,
+            "telemetry must not consume hashes twice"
+        );
+        assert_eq!(job.round_backend_hashes[&7], 339);
+    }
 
     fn test_daemon_client(server: &MockServer, token: &str) -> ApiClient {
         ApiClient::new(

@@ -965,6 +965,8 @@ pub trait PowBackend: Send + Sync {
             cpu_page_mode: None,
             gpu_register_cap: None,
             gpu_launch_depth: None,
+            cpu_backing_mib: None,
+            cpu_affinity: None,
         }
     }
 

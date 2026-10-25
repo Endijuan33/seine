@@ -539,6 +539,16 @@ impl PowBackend for CpuBackend {
             cpu_page_mode: Some(self.shared.page_mode.as_str().into()),
             gpu_register_cap: None,
             gpu_launch_depth: None,
+            cpu_backing_mib: Some(snapshot.backing_bytes.map(|bytes| bytes / (1024 * 1024))),
+            cpu_affinity: Some(
+                match self.affinity_mode {
+                    CpuAffinityMode::Auto => "auto",
+                    CpuAffinityMode::Os => "os",
+                    CpuAffinityMode::Off => "off",
+                    CpuAffinityMode::PcoreOnly => "pcore-only",
+                }
+                .into(),
+            ),
         }
     }
 
@@ -1688,6 +1698,26 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn hardware_report_uses_observed_backing_and_current_worker_count() {
+        let backend =
+            CpuBackend::with_tuning(4, CpuAffinityMode::Os, super::CpuBackendTuning::default());
+        backend.shared.desired_workers.store(2, Ordering::Release);
+        backend
+            .shared
+            .arena_explicit_large_bytes
+            .store(2 * 1024 * 1024 * 1024, Ordering::Release);
+        backend
+            .shared
+            .arena_regular_bytes
+            .store(2 * 1024 * 1024 * 1024, Ordering::Release);
+        let settings = backend.hardware_telemetry();
+        assert_eq!(settings.lanes, 2);
+        assert_eq!(settings.cpu_page_mode.as_deref(), Some("auto"));
+        assert_eq!(settings.cpu_affinity.as_deref(), Some("os"));
+        assert_eq!(settings.cpu_backing_mib, Some([2048, 0, 0, 2048, 0]));
+    }
 
     #[test]
     fn windows_thread_resource_codes_are_retryable() {

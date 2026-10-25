@@ -1329,6 +1329,8 @@ impl PowBackend for NvidiaBackend {
             cpu_page_mode: None,
             gpu_register_cap: tuning.map(|t| t.max_rregcount),
             gpu_launch_depth: tuning.map(|t| t.hashes_per_launch_per_lane),
+            cpu_backing_mib: None,
+            cpu_affinity: None,
         }
     }
 

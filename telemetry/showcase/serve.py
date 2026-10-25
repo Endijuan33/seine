@@ -53,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
                 status, body = response.status, response.read().decode()
         except urllib.error.HTTPError as error:
             status, body = error.code, error.read().decode()
-        except urllib.error.URLError:
+        except (urllib.error.URLError, TimeoutError):
             status, body = 503, 'Local collector unavailable'
         self.respond(200, json.dumps({'status': status, 'body': body}).encode(), 'application/json')
 

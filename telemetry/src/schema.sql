@@ -19,24 +19,44 @@ SELECT payload #>> '{hardware,cpu_model}' AS cpu_model,
 FROM telemetry_installations
 GROUP BY 1, 2;
 
--- Per-installation medians first: frequent reporters cannot dominate results.
+-- Context separates unlike runtime/resource environments; free RAM is diagnostic only.
+-- Append context to the existing view columns so CREATE OR REPLACE migrates in place.
 CREATE OR REPLACE VIEW telemetry_backend_performance AS
 WITH samples AS (
-    SELECT installation_id, payload->>'miner_version' AS miner_version,
+    SELECT installation_id, report_id, payload->>'miner_version' AS miner_version,
            payload #>> '{hardware,cpu_model}' AS cpu_model,
            payload #>> '{hardware,os}' AS os, sample->'settings' AS settings,
+           jsonb_build_object(
+               'os_version', payload #> '{hardware,os_version}',
+               'runtime_environment', payload #> '{hardware,runtime_environment}',
+               'memory_gib', payload #> '{hardware,memory_gib}',
+               'logical_cpus', payload #> '{hardware,logical_cpus}',
+               'physical_cores', payload #> '{hardware,physical_cores}',
+               'cpu_vendor', payload #> '{hardware,cpu_vendor}',
+               'cpu_family', payload #> '{hardware,cpu_family}',
+               'cpu_model_id', payload #> '{hardware,cpu_model_id}',
+               'build_target', payload->'build_target',
+               'build_features', payload->'build_features',
+               'resources', NULLIF(payload #> '{hardware,resources}', 'null'::jsonb) - 'available_memory_gib'
+           ) AS context,
            (sample->>'hashes')::double precision / NULLIF((sample->>'observed_secs')::double precision, 0) AS hps
     FROM telemetry_reports CROSS JOIN LATERAL jsonb_array_elements(payload->'backends') AS sample
     WHERE NOT (payload->>'debug_build')::boolean
       AND NOT (sample->>'settings_changed')::boolean
       AND (sample->>'observed_secs')::double precision >= 60
-), per_installation AS (
-    SELECT installation_id, miner_version, cpu_model, os, settings,
+), per_report AS (
+    -- Multiple identical GPUs in one report are not independent observations.
+    SELECT installation_id, report_id, miner_version, cpu_model, os, settings, context,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS hps
-    FROM samples GROUP BY 1, 2, 3, 4, 5
+    FROM samples GROUP BY 1, 2, 3, 4, 5, 6, 7
+), per_installation AS (
+    SELECT installation_id, miner_version, cpu_model, os, settings, context,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS hps
+    FROM per_report GROUP BY 1, 2, 3, 4, 5, 6
 )
 SELECT miner_version, cpu_model, os, settings, count(*) AS installations,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY hps) AS median_hps,
        percentile_cont(0.1) WITHIN GROUP (ORDER BY hps) AS p10_hps,
-       percentile_cont(0.9) WITHIN GROUP (ORDER BY hps) AS p90_hps
-FROM per_installation GROUP BY 1, 2, 3, 4;
+       percentile_cont(0.9) WITHIN GROUP (ORDER BY hps) AS p90_hps,
+       context
+FROM per_installation GROUP BY 1, 2, 3, 4, context;

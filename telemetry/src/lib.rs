@@ -1,7 +1,7 @@
 //! The upload allowlist, deliberately independent of miner config and logs.
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,6 +34,19 @@ pub struct Hardware {
     pub physical_cores: Option<u32>,
     pub memory_gib: u32,
     pub supported_cpu_kernels: Vec<String>,
+    /// Report-time resource snapshot; absent in schema 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<Resources>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Resources {
+    pub allowed_logical_cpus: Option<u32>,
+    /// OS estimate including CPU quotas where supported, not a measured duty cycle.
+    pub available_parallelism: Option<u32>,
+    pub effective_memory_gib: Option<u32>,
+    pub available_memory_gib: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +60,11 @@ pub struct BackendSettings {
     pub cpu_page_mode: Option<String>,
     pub gpu_register_cap: Option<u32>,
     pub gpu_launch_depth: Option<u32>,
+    /// Allocator-observed MiB: explicit large, 1 GiB, THP, regular, heap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_backing_mib: Option<[u64; 5]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_affinity: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -76,7 +94,7 @@ pub fn valid_id(value: &str) -> bool {
 impl Report {
     pub fn validate(&self) -> bool {
         let h = &self.hardware;
-        self.schema_version == SCHEMA_VERSION
+        (1..=SCHEMA_VERSION).contains(&self.schema_version)
             && valid_id(&self.installation_id)
             && valid_id(&self.report_id)
             && [
@@ -94,6 +112,17 @@ impl Report {
             && h.logical_cpus <= 65536
             && h.physical_cores.is_none_or(|v| v <= 65536)
             && h.memory_gib <= 1048576
+            && h.resources.as_ref().is_none_or(|r| {
+                r.allowed_logical_cpus.is_none_or(|v| v <= 65536)
+                    && r.available_parallelism.is_none_or(|v| v <= 65536)
+                    && r.effective_memory_gib.is_none_or(|v| v <= 1048576)
+                    && r.available_memory_gib.is_none_or(|v| v <= 1048576)
+            })
+            && (self.schema_version >= 2
+                || (h.resources.is_none()
+                    && self.backends.iter().all(|b| {
+                        b.settings.cpu_backing_mib.is_none() && b.settings.cpu_affinity.is_none()
+                    })))
             && h.supported_cpu_kernels.len() <= 32
             && h.supported_cpu_kernels.iter().all(|s| short(s))
             && (60..=86400).contains(&self.window_secs)
@@ -105,6 +134,16 @@ impl Report {
                 ) && optional_short(&b.settings.device_model)
                     && optional_short(&b.settings.cpu_kernel)
                     && optional_short(&b.settings.cpu_page_mode)
+                    && b.settings
+                        .cpu_affinity
+                        .as_deref()
+                        .is_none_or(|v| matches!(v, "auto" | "os" | "off" | "pcore-only"))
+                    && b.settings
+                        .cpu_backing_mib
+                        .is_none_or(|v| v.iter().all(|&mib| mib <= 1073741824))
+                    && (b.settings.backend == "cpu"
+                        || (b.settings.cpu_backing_mib.is_none()
+                            && b.settings.cpu_affinity.is_none()))
                     && b.settings.lanes <= 65536
                     && b.settings.memory_mib.is_none_or(|v| v <= 1073741824)
                     && b.observed_secs.is_finite()
@@ -147,6 +186,41 @@ mod tests {
         report.backends[0].observed_secs = 3600.0;
         report.hardware.cpu_model = "x".repeat(161);
         assert!(!report.validate());
+    }
+
+    #[test]
+    fn accepts_legacy_and_extended_reports_without_confusing_unknown_with_zero() {
+        let value: serde_json::Value =
+            serde_json::from_str(include_str!("../fixture.json")).unwrap();
+        let mut legacy = value.clone();
+        legacy["schema_version"] = 1.into();
+        legacy["hardware"]
+            .as_object_mut()
+            .unwrap()
+            .remove("resources");
+        for backend in legacy["backends"].as_array_mut().unwrap() {
+            backend["settings"]
+                .as_object_mut()
+                .unwrap()
+                .remove("cpu_backing_mib");
+            backend["settings"]
+                .as_object_mut()
+                .unwrap()
+                .remove("cpu_affinity");
+        }
+        let old: Report = serde_json::from_value(legacy).unwrap();
+        assert!(old.validate());
+        assert!(old.hardware.resources.is_none());
+        assert!(old.backends[0].settings.cpu_backing_mib.is_none());
+        let mut extended: Report = serde_json::from_value(value).unwrap();
+        assert!(extended.validate());
+        extended.schema_version = 1;
+        assert!(!extended.validate(), "new fields must advertise schema 2");
+        extended.schema_version = 3;
+        assert!(!extended.validate());
+        extended.schema_version = 2;
+        extended.backends[0].settings.cpu_backing_mib = Some([u64::MAX; 5]);
+        assert!(!extended.validate());
     }
 
     #[test]

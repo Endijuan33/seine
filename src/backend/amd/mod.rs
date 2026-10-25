@@ -378,6 +378,8 @@ impl PowBackend for AmdBackend {
             gpu_launch_depth: Some(
                 self.max_hashes_per_launch_per_lane.load(Ordering::Acquire) as u32
             ),
+            cpu_backing_mib: None,
+            cpu_affinity: None,
         }
     }
 
