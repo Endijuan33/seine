@@ -35,6 +35,15 @@ launch. Both builds must share any previously accepted improvements; never
 attribute unrelated earlier changes to this comparison. The baseline will be
 the then-current accepted policy. A rejected earlier experiment is not included.
 
+Apply `raw-trial-audit.patch` to **both** measurement builds. This experiment-only
+logging patch appends each completed comparison's exact hash counts and sample
+durations to its existing decision message. The winner cache alone is insufficient:
+a later comparison can replace the earlier promotion evidence for that context.
+Record this shared instrumentation in both build identities and preserve its
+patch; it is not part of the proposed shipping policy. `audit_decisions.py`
+recomputes every logged decision, including both confirmation cycles, drift,
+quantization and minimum sample requirements, directly from those raw values.
+
 Use the same qualified EPYC 9355P, 32 cores/64 threads, 192 GiB across twelve
 DDR5-4800 channels, one NUMA node and stock 280 W cap. Build portable CPU-only
 Rust 1.93.0 executables with identical flags. Reserve explicit 2 MiB HugeTLB;
@@ -60,6 +69,8 @@ lower descriptive 95% bound to exceed **+1%**, cached lower bound at least **-2%
 all correctness/resource gates, and manual review of short-sample decisions,
 drift/retries, selected counts and cache restoration. Verify every promotion
 against its recorded durations and counts; do not assume 30-second samples.
+Require short samples to have actually occurred in the candidate cold runs;
+warm cached runs may legitimately have no new kernel comparisons.
 Do not substitute shorter windows or fewer pairs if time becomes tight. Preserve
 rejected results and their exact patch without enabling the policy on master.
 
