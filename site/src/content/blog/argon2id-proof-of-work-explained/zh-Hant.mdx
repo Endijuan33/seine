@@ -11,7 +11,7 @@ faq:
     a: 'Argon2id 讓記憶體成為每次雜湊中成本最高的部分。每次 Blocknet 雜湊需要 2 GiB 高速記憶體，並在其中搬移數 GB 資料，因此專為雜湊打造的晶片仍需為每個核心配備大量記憶體。節點程式的程式碼把這個選擇描述為以記憶體密集型工作量證明來抵禦 ASIC，確保公平挖礦。'
   - q: '顯示卡能挖 Blocknet 的 Argon2id 嗎？'
     a: '可以。在 Windows 與 Linux 上，seine 會在 CPU 挖礦的同時使用電腦上的每張 NVIDIA 顯示卡，兩者的算力會相加。運算核心程式在啟動時編譯，第一次啟動時會為每張顯示卡調校並快取結果，所以開始之前無需任何設定。'
-sourceHash: efd0f96cbcb7
+sourceHash: 8c90b55fe4e0
 translation: reviewed
 ---
 
@@ -71,7 +71,7 @@ Blocknet 在共識程式碼中固定了 Argon2id 的每一項設定，因此每�
 
 這就是 seine 的[效能頁面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)說算力「既取決於核心數量，也同樣取決於記憶體頻寬與延遲」的原因。[Blocknet 挖礦硬體指南](/zh-hant/blog/blocknet-mining-hardware-hashrate/)列出了各代硬體的最佳結果。
 
-大分頁記憶體有幫助也是同樣的道理。一塊 2 GiB 區域需要 524,288 個一般的 4 KiB 分頁，或 1,024 個 2 MiB 分頁。分頁更少、更大，那些分散的讀取就會更少發生位址轉譯未命中，在 seine 驗證用的機器上帶來了約 4–6% 的提升。設定方式請見[大分頁記憶體指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md)。
+大分頁記憶體有幫助也是同樣的道理。一塊 2 GiB 區域需要 524,288 個一般的 4 KiB 分頁，或 1,024 個 2 MiB 分頁。分頁更少、更大，那些分散的讀取就會更少發生位址轉譯未命中，在 seine 驗證用的機器上帶來了約 4–6% 的提升。設定方式請見[大分頁記憶體指南](/zh-hant/blog/huge-pages-blocknet-mining/)。
 
 ## seine 的 CPU 運算核心程式如何充分利用 Argon2id？
 

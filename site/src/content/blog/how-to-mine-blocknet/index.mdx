@@ -23,7 +23,7 @@ Get a Blocknet address or a Blocknet ID shortname, download seine for your syste
 
 ## What do you need before you start?
 
-- **A Blocknet address.** Install the official Blocknet wallet, either the [command-line wallet](https://github.com/blocknetprivacy/blocknet/releases/latest) or the [desktop wallet](https://github.com/blocknetprivacy/blocknet-gui/releases/latest), and copy your address. Keep the wallet and its recovery phrase on your own computer; don't put them on a shared mining rig.
+- **A Blocknet address.** Install the official Blocknet wallet, either the [command-line wallet](https://github.com/blocknetprivacy/blocknet/releases/latest) or the [desktop wallet](https://github.com/blocknetprivacy/blocknet-gui/releases/latest), and copy your address. The [wallet guide](/blog/blocknet-wallet-for-mining/) walks through it step by step. Keep the wallet and its recovery phrase on your own computer; don't put them on a shared mining rig.
 - **Or a shortname.** If you have a [Blocknet ID shortname](/blog/blocknet-id-pay-by-name/) from [blocknet.id](https://blocknet.id), you can mine to `@name` instead of pasting the long address.
 - **About 2 GB of RAM per mining thread.** Seine sizes itself to your machine and leaves headroom for the system, so you don't need to work this out first.
 - **Windows, macOS or Linux.** On Windows and Linux, NVIDIA graphics cards are used automatically when a recent driver is installed.
@@ -52,7 +52,7 @@ On Windows, double-click `seine.exe`. On macOS or Linux, open a terminal in the 
 
 ## Step 3: enter your address and start mining
 
-Seine asks for your payout address or `@shortname`, then for a pool. Press Enter to accept the default, `stratum+tcp://bntpool.com:3333`. Within moments the dashboard shows your hashrate and your first shares.
+Seine asks for your payout address or `@shortname`, then for a pool. Press Enter to accept the default, `stratum+tcp://bntpool.com:3333`. Within moments [the dashboard](/blog/seine-dashboard-explained/) shows your hashrate and your first shares.
 
 From here seine keeps tuning while it mines. It compares thread counts and CPU kernels on real mining work, switches only after a confirmed gain, backs off if memory gets tight, and remembers what worked for the next start. It never reconnects to the pool to do this, so tuning costs you no mining time.
 
@@ -88,7 +88,7 @@ You don't have to choose any of this. Seine switches kernels only after a confir
 ## How can you get more hashrate?
 
 - **Mine on CPU and GPU together.** Seine does this by default on Windows and Linux, and the two hashrates add up.
-- **Reserve huge pages on Linux and WSL.** Backing each thread's memory with 2 MiB pages added about 4–6% on the validation machine, and 1 GiB pages about 2% more. The [huge pages guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md) has the commands.
+- **Reserve huge pages on Linux and WSL.** Backing each thread's memory with 2 MiB pages added about 4–6% on the validation machine, and 1 GiB pages about 2% more. The [huge pages guide](/blog/huge-pages-blocknet-mining/) has the commands.
 - **Let big servers spread out.** On Linux, seine places threads across NUMA nodes and cache groups automatically. The [large servers guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md) covers the details.
 - **Use CPU-only mining on Apple Silicon.** It is the fastest choice on M-series Macs, which is what seine does by default.
 

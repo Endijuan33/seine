@@ -11,7 +11,7 @@ faq:
     a: '可以。在 seine 询问收款地址时输入你的 @name，或者用 --address 传入。seine 会检查 blocknet.id 上的签名记录，显示解析得到的完整地址，并在整个运行期间都挖到该地址。短名称需要 seine v0.2.16 或更新版本，bntpool.com 在登录时也接受短名称。'
   - q: '如果我把名称指向新地址，矿池余额会怎样？'
     a: '你现有的余额仍属于赚取它的那个地址，bntpool.com 会照常支付到该地址。矿池按完整地址记录份额、余额和付款，所以更改名称绝不会转移已有余额。下次开始挖矿时，名称会重新解析，新的份额会计入新地址。'
-sourceHash: ccf4868b51fe
+sourceHash: ec25796b2073
 translation: reviewed
 ---
 
@@ -67,7 +67,7 @@ send @rock 100 "hello"
 
 ## 付款链接如何配合名称使用？
 
-付款链接包含收款人、金额和可选的备注。Blocknet 支持两种形式：
+[付款链接](/zh-hans/blog/blocknet-payment-links/)包含收款人、金额和可选的备注。Blocknet 支持两种形式：
 
 ```
 blocknet://<address>?amount=25&memo=invoice-42

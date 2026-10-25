@@ -11,7 +11,7 @@ faq:
     a: 'seine 的 Windows 和 Linux 版本使用 NVIDIA 显卡挖矿，会在处理器之外同时使用检测到的每一张显卡。在 Windows 上已内置 CUDA 运行库，只需安装 NVIDIA 驱动。在 Linux 上需安装驱动和 NVRTC 库。首次启动时会为每张显卡调优并记住结果。'
   - q: '为什么内存带宽对挖 Blocknet 很重要？'
     a: '每次 Blocknet 哈希都要写满一整块 2 GiB 的内存，并从其中各处读回数据，远远超出任何处理器缓存的容量。因此算力取决于内存系统搬运数据的速度。内存带宽更高、内存足够运行更多线程的机器挖得最快。'
-sourceHash: 7b9d1f92727f
+sourceHash: 8868455af4fe
 translation: reviewed
 ---
 
@@ -88,13 +88,13 @@ seine 还会把线程数限制在处理器的逻辑核心数以内，所以实�
 
 - **确定线程数**：根据你的内存和核心数确定，然后用真实的挖矿任务比较不同线程数，保留最佳值。
 - **选择 CPU 计算内核**：例如 AVX2、AVX-512、Zen 5 EPYC 上的流式内核或 Arm 上的 SHA3，只有在两次确认有提升后才会切换。
-- **在大型服务器上分配线程**：在 Linux 上，它会把线程分散到各个 NUMA 节点和 L3 缓存组，在一台租用的 EPYC 8434P 上 24 线程时提升了 16.7%。
+- **在大型服务器上分配线程**：在 Linux 上，它会把线程分散到各个 NUMA 节点和 L3 缓存组，在一台租用的 EPYC 8434P 上 24 线程时提升了 16.7%。详情见[服务器挖矿指南](/zh-hans/blog/mine-blocknet-on-servers/)。
 - **保护你的内存**：它会预留 5% 的内存，内存紧张时暂停部分线程，内存充裕后再恢复。
 - **记住有效的设置**：下次启动时直接从调优后的设置开始。
 
 这些都不会重新连接矿池，因此调优不会浪费挖矿时间。[自动调优指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/autotuning.md)解释了每个步骤。
 
-在 Linux 和 WSL 上，还有一项值得做的可选设置：预留大页。在验证机上，2 MiB 大页带来约 4-6% 的提升，1 GiB 大页再多约 2%。[大页指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md)提供了相关命令，[大型服务器指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md)介绍了 EPYC 和 Xeon 机器的设置。
+在 Linux 和 WSL 上，还有一项值得做的可选设置：预留大页。在验证机上，2 MiB 大页带来约 4-6% 的提升，1 GiB 大页再多约 2%。[大页指南](/zh-hans/blog/huge-pages-blocknet-mining/)提供了相关命令，[大型服务器指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md)介绍了 EPYC 和 Xeon 机器的设置。
 
 ## 如何查看自己的算力？
 

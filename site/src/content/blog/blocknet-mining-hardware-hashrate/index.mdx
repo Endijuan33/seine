@@ -88,13 +88,13 @@ You don't need to configure anything to reach the results above. Run seine, past
 
 - **Sizes the thread count** to your RAM and cores, then compares thread counts on real mining work and keeps the best one.
 - **Picks the CPU kernel**, such as AVX2, AVX-512, the streaming kernel on Zen 5 EPYC or SHA3 on Arm, switching only after two confirmed gains.
-- **Places threads on big servers.** On Linux, it spreads threads across NUMA nodes and L3 cache groups, which added 16.7% on a rented EPYC 8434P at 24 threads.
+- **Places threads on big servers.** On Linux, it spreads threads across NUMA nodes and L3 cache groups, which added 16.7% on a rented EPYC 8434P at 24 threads. The [guide to mining on servers](/blog/mine-blocknet-on-servers/) has the details.
 - **Protects your memory.** It keeps a 5% reserve, parks threads if RAM gets tight and brings them back when it frees up.
 - **Remembers what worked**, so the next start begins from the tuned settings.
 
 None of this reconnects to the pool, so tuning costs you no mining time. The [automatic tuning guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/autotuning.md) explains each step.
 
-One optional extra is worth doing on Linux and WSL: reserving huge pages added about 4-6% with 2 MiB pages and a further 2% with 1 GiB pages on the validation machine. The [huge pages guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md) has the commands, and the [large servers guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md) covers EPYC and Xeon machines.
+One optional extra is worth doing on Linux and WSL: reserving huge pages added about 4-6% with 2 MiB pages and a further 2% with 1 GiB pages on the validation machine. The [huge pages guide](/blog/huge-pages-blocknet-mining/) has the commands, and the [large servers guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md) covers EPYC and Xeon machines.
 
 ## How do you check your own hashrate?
 

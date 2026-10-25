@@ -9,7 +9,7 @@ faq:
     a: 'bntpool.com 採用六小時區間的 PPLNS 方式支付。區塊獎勵要等該區塊獲得 60 個確認（以五分鐘出塊約五小時）後才能支付，餘額達到 0.1 BNT 後發送。第一筆收益預計在第一批份額被接受幾小時後入帳。'
   - q: '可以同時用 CPU 與顯示卡挖 Blocknet 嗎？'
     a: '可以。在 Windows 與 Linux 上，seine 會同時使用電腦上的每個 CPU 核心與每張 NVIDIA 顯示卡挖礦，兩者的算力會相加。它在執行中分別為處理器與每張顯示卡調校，無需修改任何設定，就能讓你的全部硬體發揮出最大算力。'
-sourceHash: b71d426063a8
+sourceHash: fa0a72b01473
 translation: reviewed
 ---
 
@@ -23,7 +23,7 @@ translation: reviewed
 
 ## 開始之前需要準備什麼？
 
-- **一個 Blocknet 地址。** 安裝官方 Blocknet 錢包，即[命令列錢包](https://github.com/blocknetprivacy/blocknet/releases/latest)或[桌面錢包](https://github.com/blocknetprivacy/blocknet-gui/releases/latest)，然後複製你的地址。請把錢包與助記詞保存在你自己的電腦上，不要放在與他人共用的礦機上。
+- **一個 Blocknet 地址。** 安裝官方 Blocknet 錢包，即[命令列錢包](https://github.com/blocknetprivacy/blocknet/releases/latest)或[桌面錢包](https://github.com/blocknetprivacy/blocknet-gui/releases/latest)，然後複製你的地址。[錢包指南](/zh-hant/blog/blocknet-wallet-for-mining/)會一步步帶你完成。請把錢包與助記詞保存在你自己的電腦上，不要放在與他人共用的礦機上。
 - **或者一個短名稱。** 如果你在 [blocknet.id](https://blocknet.id) 註冊了 [Blocknet ID 短名稱](/zh-hant/blog/blocknet-id-pay-by-name/)，就可以直接挖到 `@name`，不必貼上很長的地址。
 - **每個挖礦執行緒約 2 GB 記憶體。** seine 會依你的電腦自動決定執行緒數，並為系統預留餘裕，所以無需事先計算。
 - **Windows、macOS 或 Linux。** 在 Windows 與 Linux 上，只要裝有較新的驅動程式，NVIDIA 顯示卡就會被自動使用。
@@ -52,7 +52,7 @@ translation: reviewed
 
 ## 第 3 步：輸入地址並開始挖礦
 
-seine 會先詢問你的收款地址或 `@shortname`，然後詢問礦池。按 Enter 接受預設礦池 `stratum+tcp://bntpool.com:3333`。片刻之後，儀表板上就會顯示你的算力與第一批份額。
+seine 會先詢問你的收款地址或 `@shortname`，然後詢問礦池。按 Enter 接受預設礦池 `stratum+tcp://bntpool.com:3333`。片刻之後，[儀表板](/zh-hant/blog/seine-dashboard-explained/)上就會顯示你的算力與第一批份額。
 
 此後 seine 會邊挖邊調校。它用真實的挖礦工作比較不同的執行緒數與 CPU 運算核心程式，只有在確認有提升後才會切換；記憶體吃緊時會自動調降，並記住有效的設定供下次啟動使用。整個過程不會重新連線礦池，因此調校不會浪費挖礦時間。
 
@@ -88,7 +88,7 @@ seine 為每個處理器系列提供多個 Argon2id 運算核心程式，並在�
 ## 如何獲得更高的算力？
 
 - **CPU 與顯示卡一起挖。** 在 Windows 與 Linux 上 seine 預設如此，兩者的算力會相加。
-- **在 Linux 與 WSL 上預留大分頁記憶體。** 在驗證用的機器上，用 2 MiB 分頁承載每個執行緒的記憶體可提升約 4–6%，1 GiB 分頁還能再提升約 2%。[大分頁記憶體指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md)中有相關指令。
+- **在 Linux 與 WSL 上預留大分頁記憶體。** 在驗證用的機器上，用 2 MiB 分頁承載每個執行緒的記憶體可提升約 4–6%，1 GiB 分頁還能再提升約 2%。[大分頁記憶體指南](/zh-hant/blog/huge-pages-blocknet-mining/)中有相關指令。
 - **讓大型伺服器分散執行緒。** 在 Linux 上，seine 會自動把執行緒分配到各個 NUMA 節點與快取群組。詳情請見[大型伺服器指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md)。
 - **在 Apple 晶片上只用 CPU 挖礦。** 這是 M 系列 Mac 上最快的選擇，也是 seine 的預設做法。
 

@@ -9,7 +9,7 @@ faq:
     a: 'bntpool.com 按六小时窗口的 PPLNS 方式支付。区块奖励要等该区块获得 60 个确认（按五分钟出块约五小时）后才能支付，余额达到 0.1 BNT 后发送。首笔收益预计在第一批份额被接受几小时后到账。'
   - q: '可以同时用 CPU 和显卡挖 Blocknet 吗？'
     a: '可以。在 Windows 和 Linux 上，seine 会同时使用机器上的每个 CPU 核心和每张 NVIDIA 显卡挖矿，两者的算力会叠加。它在运行中分别为处理器和每张显卡调优，无需修改任何设置，就能让你的全部硬件发挥出最大算力。'
-sourceHash: b71d426063a8
+sourceHash: fa0a72b01473
 translation: reviewed
 ---
 
@@ -23,7 +23,7 @@ translation: reviewed
 
 ## 开始之前需要准备什么？
 
-- **一个 Blocknet 地址。** 安装官方 Blocknet 钱包，即[命令行钱包](https://github.com/blocknetprivacy/blocknet/releases/latest)或[桌面钱包](https://github.com/blocknetprivacy/blocknet-gui/releases/latest)，然后复制你的地址。请把钱包和助记词保存在你自己的电脑上，不要放在与他人共用的矿机上。
+- **一个 Blocknet 地址。** 安装官方 Blocknet 钱包，即[命令行钱包](https://github.com/blocknetprivacy/blocknet/releases/latest)或[桌面钱包](https://github.com/blocknetprivacy/blocknet-gui/releases/latest)，然后复制你的地址。[钱包指南](/zh-hans/blog/blocknet-wallet-for-mining/)会一步步带你完成。请把钱包和助记词保存在你自己的电脑上，不要放在与他人共用的矿机上。
 - **或者一个短名称。** 如果你在 [blocknet.id](https://blocknet.id) 注册了 [Blocknet ID 短名称](/zh-hans/blog/blocknet-id-pay-by-name/)，就可以直接挖到 `@name`，不必粘贴很长的地址。
 - **每个挖矿线程约 2 GB 内存。** seine 会根据你的机器自动确定线程数，并为系统预留余量，所以无需事先计算。
 - **Windows、macOS 或 Linux。** 在 Windows 和 Linux 上，只要装有较新的驱动，NVIDIA 显卡就会被自动使用。
@@ -52,7 +52,7 @@ translation: reviewed
 
 ## 第 3 步：输入地址并开始挖矿
 
-seine 会先询问你的收款地址或 `@shortname`，然后询问矿池。按回车接受默认矿池 `stratum+tcp://bntpool.com:3333`。片刻之后，仪表盘上就会显示你的算力和第一批份额。
+seine 会先询问你的收款地址或 `@shortname`，然后询问矿池。按回车接受默认矿池 `stratum+tcp://bntpool.com:3333`。片刻之后，[仪表盘](/zh-hans/blog/seine-dashboard-explained/)上就会显示你的算力和第一批份额。
 
 此后 seine 会边挖边调优。它用真实的挖矿任务比较不同的线程数和 CPU 计算内核，只有在确认有提升后才会切换；内存紧张时会自动回退，并记住有效的设置供下次启动使用。整个过程不会重新连接矿池，因此调优不会浪费挖矿时间。
 
@@ -88,7 +88,7 @@ seine 为每个处理器系列提供多个 Argon2id 计算内核，并在挖矿�
 ## 如何获得更高的算力？
 
 - **CPU 和显卡一起挖。** 在 Windows 和 Linux 上 seine 默认如此，两者的算力会叠加。
-- **在 Linux 和 WSL 上预留大页内存。** 在用于验证的测试机上，用 2 MiB 页面承载每个线程的内存可提升约 4–6%，1 GiB 页面还能再提升约 2%。[大页内存指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md)中有相关命令。
+- **在 Linux 和 WSL 上预留大页内存。** 在用于验证的测试机上，用 2 MiB 页面承载每个线程的内存可提升约 4–6%，1 GiB 页面还能再提升约 2%。[大页内存指南](/zh-hans/blog/huge-pages-blocknet-mining/)中有相关命令。
 - **让大型服务器分散线程。** 在 Linux 上，seine 会自动把线程分布到各个 NUMA 节点和缓存组。详情见[大型服务器指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/large-servers.md)。
 - **在 Apple 芯片上只用 CPU 挖矿。** 这是 M 系列 Mac 上最快的选择，也是 seine 的默认做法。
 

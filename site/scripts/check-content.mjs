@@ -87,6 +87,11 @@ if (hashIdx >= 0) {
 function checkLinks(p, prefix, errors) {
     for (const href of links(p.body)) {
         if (!href.startsWith('/')) continue;
+        // Images and files under /assets/ just have to exist in public/.
+        if (href.startsWith('/assets/')) {
+            if (!existsSync(new URL(`public${href.split(/[?#]/)[0]}`, ROOT))) errors.push(`missing file ${href} (put it in site/public${href})`);
+            continue;
+        }
         if (prefix && !href.startsWith(`/${prefix}/`)) {
             errors.push(`internal link ${href} isn't localized; use /${prefix}${href}`);
             continue;

@@ -59,7 +59,7 @@ A new transaction first travels along a "stem", passed from one peer to a single
 
 ## Who can read a Blocknet memo?
 
-Every output carries a 128-byte encrypted memo with room for up to 124 bytes of text. It is encrypted with the same secret the sender and receiver share for that output, so only the two of you can read it. Use it for an invoice number, an order reference or a short note to the person you're paying.
+Every output carries a 128-byte encrypted memo with room for up to 124 bytes of text. It is encrypted with the same secret the sender and receiver share for that output, so only the two of you can read it. Use it for an invoice number, an order reference or a short note to the person you're paying. The [guide to encrypted memos](/blog/blocknet-encrypted-memos/) shows how to add one and where to find the memos you receive.
 
 The memo is always the same size, whether you write a full note or nothing at all. When a memo is short or empty, the wallet fills the rest with random padding before encrypting it, so an output with a note looks exactly like one without. Memos never stand out, and nobody else can even tell which payments carry a message.
 

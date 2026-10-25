@@ -71,7 +71,7 @@ Each mining thread holds its own 2 GiB arena, so your RAM sets how many threads 
 
 This is why seine's [performance page](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md) says hashrate "depends as much on memory bandwidth and latency as on core count." The [Blocknet mining hardware guide](/blog/blocknet-mining-hardware-hashrate/) shows the best result for each hardware generation.
 
-Huge pages help for the same reason. A 2 GiB arena spans 524,288 ordinary 4 KiB pages, or 1,024 pages of 2 MiB. Fewer, larger pages mean fewer address-translation misses on those scattered reads, which added about 4–6% on seine's validation machine. The [huge pages guide](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md) has the setup.
+Huge pages help for the same reason. A 2 GiB arena spans 524,288 ordinary 4 KiB pages, or 1,024 pages of 2 MiB. Fewer, larger pages mean fewer address-translation misses on those scattered reads, which added about 4–6% on seine's validation machine. The [huge pages guide](/blog/huge-pages-blocknet-mining/) has the setup.
 
 ## How do seine's CPU kernels make the most of Argon2id?
 

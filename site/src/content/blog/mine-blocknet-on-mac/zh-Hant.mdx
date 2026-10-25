@@ -11,7 +11,7 @@ faq:
     a: '每個挖礦執行緒都要處理一塊 2 GiB 的記憶體，所以每個執行緒大約以 2 GB 計算。16 GB 的 Mac 最多可容納七個執行緒，32 GB 最多 15 個，64 GB 最多 30 個。seine 會計算空閒記憶體，並讓執行緒數與你的核心數相符。'
   - q: '可以在 Intel Mac 上挖 Blocknet 嗎？'
     a: '可以。seine 為 Intel Mac 另外發布了一個壓縮檔 seine-macos-x86_64.tar.gz，步驟與 Apple 晶片相同。下載後在終端機中解壓縮，執行 ./seine，並貼上你的 Blocknet 地址或 @name。seine 會依記憶體決定執行緒數，並預設在 bntpool.com 上開始挖礦。'
-sourceHash: e26c008e1551
+sourceHash: 59ec24375f40
 translation: reviewed
 ---
 
@@ -101,7 +101,7 @@ xattr -d com.apple.quarantine ./seine
 
 ### 第 5 步：輸入地址並開始挖礦
 
-seine 會先詢問你的收款地址或 `@shortname`，然後詢問礦池。按 Return 接受預設礦池 `stratum+tcp://bntpool.com:3333`。隨後儀表板會顯示你的算力與第一批被接受的份額。bntpool.com 礦池會在你的餘額達到 0.1 BNT 時把它發送到你的地址，你可以在 [bntpool.com](https://bntpool.com) 上查詢自己的地址來追蹤餘額。
+seine 會先詢問你的收款地址或 `@shortname`，然後詢問礦池。按 Return 接受預設礦池 `stratum+tcp://bntpool.com:3333`。隨後[儀表板](/zh-hant/blog/seine-dashboard-explained/)會顯示你的算力與第一批被接受的份額。bntpool.com 礦池會在你的餘額達到 0.1 BNT 時把它發送到你的地址，你可以在 [bntpool.com](https://bntpool.com) 上查詢自己的地址來追蹤餘額。
 
 ## 為什麼 seine 在 Mac 上只用 CPU 挖礦？
 

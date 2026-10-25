@@ -11,7 +11,7 @@ faq:
     a: 'Argon2id 让内存成为每次哈希中成本最高的部分。每次 Blocknet 哈希需要 2 GiB 高速内存，并在其中搬运数 GB 数据，因此专为哈希打造的芯片仍需为每个核心配备大量内存。节点程序的代码把这一选择描述为用内存密集型工作量证明来抵御 ASIC，确保公平挖矿。'
   - q: '显卡能挖 Blocknet 的 Argon2id 吗？'
     a: '可以。在 Windows 和 Linux 上，seine 会在 CPU 挖矿的同时使用机器上的每张 NVIDIA 显卡，两者的算力会叠加。计算内核在启动时编译，首次启动时会为每张显卡调优并缓存结果，所以开始之前无需任何配置。'
-sourceHash: efd0f96cbcb7
+sourceHash: 8c90b55fe4e0
 translation: reviewed
 ---
 
@@ -71,7 +71,7 @@ Blocknet 在共识代码中固定了 Argon2id 的每一项设置，因此每个�
 
 这就是 seine 的[性能页面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)说算力“既取决于核心数量，也同样取决于内存带宽和延迟”的原因。[Blocknet 挖矿硬件指南](/zh-hans/blog/blocknet-mining-hardware-hashrate/)列出了各代硬件的最佳结果。
 
-大页内存有帮助也是同样的道理。一块 2 GiB 区域需要 524,288 个普通的 4 KiB 页面，或 1,024 个 2 MiB 页面。页面更少、更大，那些分散的读取就会更少发生地址转换未命中，在 seine 用于验证的测试机上带来了约 4–6% 的提升。设置方法见[大页内存指南](https://github.com/zpalmtree/seine/blob/master/docs/guides/linux-hugepages.md)。
+大页内存有帮助也是同样的道理。一块 2 GiB 区域需要 524,288 个普通的 4 KiB 页面，或 1,024 个 2 MiB 页面。页面更少、更大，那些分散的读取就会更少发生地址转换未命中，在 seine 用于验证的测试机上带来了约 4–6% 的提升。设置方法见[大页内存指南](/zh-hans/blog/huge-pages-blocknet-mining/)。
 
 ## seine 的 CPU 计算内核如何充分利用 Argon2id？
 

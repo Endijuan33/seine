@@ -15,13 +15,10 @@ proof of work changes.
 | 1 | `mine-blocknet-nvidia-gpu` | blocknet gpu mining; mine blocknet rtx 4090 / 5090 | Can my NVIDIA card mine Blocknet, how much does it add, how much VRAM | Per-card H/s; CPU+GPU totals; corrects the "GPUs don't help" claim ranking today |
 | 2 | `argon2id-vs-randomx` | randomx vs argon2; blocknet vs monero mining | How Argon2id differs from RandomX for a Monero miner, and which machines suit which | Same-machine XMRig vs seine runs on 4-6 hosts |
 | 3 | `how-much-ram-to-mine-blocknet` | ram per thread mining; argon2id 2gb per thread | How many threads my RAM allows, and why a 1 GB VPS fails | Thread-scaling on 2-channel vs 12-channel machines |
-| 4 | `huge-pages-argon2id-mining` | huge pages mining; enable 1GB pages; huge pages windows 11 | Whether huge pages help Argon2id and how to enable them | A/B with 2 MiB, 1 GiB and off on several hosts |
-| 5 | `numa-dual-socket-epyc-mining` | numa mining; dual socket epyc mining | Avoid losing hashrate across NUMA nodes on big servers | Before/after for the NUMA/L3 spreading change |
-| 6 | `blocknet-mining-pools` | blocknet pool; blocknet mining pool list | Which pools exist and how fees and payouts compare | Dated table of every pool; disclose that we run bntpool.com |
-| 7 | `blocknet-wallet-address-for-mining` | blocknet wallet; blocknet address | Where to get an address to mine to, keeping keys off the rig | Official wallet walkthrough |
-| 8 | `blocknet-faraday-upgrade-miners` | blocknet faraday; blocknet hard fork 2027 | What miners must change for Faraday, and when | Final public spec and a seine release that supports it; publish around Jan 2027 |
-| 9 | `seine-pool-shows-zero-hashrate` | pool hashrate lower than local; shares rejected | Troubleshoot hashing locally with nothing on the pool | Real error strings from seine and the pool |
-| 10 | `antivirus-flags-crypto-miner` | windows defender crypto miner; is seine safe | Antivirus quarantined the miner: verify it | Checksum walkthrough; warning about third-party repacks |
+| 4 | `blocknet-mining-pools` | blocknet pool; blocknet mining pool list | Which pools exist and how fees and payouts compare | Dated table of every pool; disclose that we run bntpool.com |
+| 5 | `blocknet-faraday-upgrade-miners` | blocknet faraday; blocknet hard fork 2027 | What miners must change for Faraday, and when | Final public spec and a seine release that supports it; publish around Jan 2027 |
+| 6 | `seine-pool-shows-zero-hashrate` | pool hashrate lower than local; shares rejected | Troubleshoot hashing locally with nothing on the pool | Real error strings from seine and the pool |
+| 7 | `antivirus-flags-crypto-miner` | windows defender crypto miner; is seine safe | Antivirus quarantined the miner: verify it | Checksum walkthrough; warning about third-party repacks |
 
 Dropped 2026-10-25 per owner: a BNT-vs-BLOCK explainer (assume readers know Blocknet) and
 "is CPU mining worth it" (invites an unfavorable verdict).
@@ -34,8 +31,6 @@ check search results before drafting.
 
 | Slug | Primary cluster | Search job |
 |---|---|---|
-| `blocknet-encrypted-memos` | blocknet memo; encrypted crypto memo | Use the encrypted 128-byte memo on every payment, such as for invoices |
-| `blocknet-payment-links` | blocknet payment link; bntpay | Request a payment with a link or a `blocknet://` URI |
 | `blocknet-faraday-upgrade` | blocknet faraday; blocknet post-quantum | What the planned upgrade brings, attributed to blocknetcrypto.com |
 
 Low-confidence demand, revisit with Search Console data: HiveOS/mmpOS packaging, AVX-512 on
