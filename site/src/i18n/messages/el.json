@@ -89,5 +89,6 @@
   "closingTitle": "Δωρεάν για Windows, macOS και Linux.",
   "suggestPrompt": "Αυτή η σελίδα είναι διαθέσιμη στα ελληνικά.",
   "suggestAction": "Ανάγνωση στα ελληνικά",
-  "suggestKeepEnglish": "Παραμονή στα αγγλικά"
+  "suggestKeepEnglish": "Παραμονή στα αγγλικά",
+  "poolHelp": "Το hashrate του pool παραμένει μηδενικό;"
 }

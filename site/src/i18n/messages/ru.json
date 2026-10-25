@@ -89,5 +89,6 @@
   "closingTitle": "Бесплатно для Windows, macOS и Linux.",
   "suggestPrompt": "Эта страница доступна на русском языке.",
   "suggestAction": "Читать на русском",
-  "suggestKeepEnglish": "Оставить на английском"
+  "suggestKeepEnglish": "Оставить на английском",
+  "poolHelp": "Хешрейт пула всё ещё нулевой?"
 }

@@ -89,5 +89,6 @@
   "closingTitle": "Kostenlos für Windows, macOS und Linux.",
   "suggestPrompt": "Diese Seite gibt es auch auf Deutsch.",
   "suggestAction": "Auf Deutsch lesen",
-  "suggestKeepEnglish": "Auf Englisch bleiben"
+  "suggestKeepEnglish": "Auf Englisch bleiben",
+  "poolHelp": "Pool-Hashrate noch bei null?"
 }

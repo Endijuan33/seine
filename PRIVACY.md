@@ -103,3 +103,29 @@ describe those services' data handling or website hosting logs.
 
 Questions about Seine's telemetry can be directed to the
 [project maintainers](https://github.com/zpalmtree/seine).
+
+## Website analytics
+
+The blogs on **seineminer.com** and **bntpool.com** count article page loads and
+clicks toward Seine downloads or pool setup. These are aggregate activity counts,
+not unique visitors, completed downloads or confirmed miners.
+
+Each request contains only the article slug, its language, and one action:
+`view`, `download` or `pool_setup`. The collector identifies the source website
+from the browser's Origin header. It does not store individual events, IP
+addresses, wallet addresses, names, cookies, browser identifiers, full page URLs,
+query strings or referrers in these counters. The script uses no browser storage
+and sends requests without credentials or a referrer. Like other web requests,
+the connection is visible to our hosting infrastructure and its normal access logs.
+
+We keep daily aggregate counters for 30 days, with no person-level history or
+cross-site visitor matching. Routine database backups can retain an older snapshot
+for up to seven additional days. Reports require the pool operator's API key.
+Counts are best effort: reloads and bots can increase them, blockers can prevent
+them, and an interrupted server can lose the latest unflushed batch.
+
+The script respects **Do Not Track** and **Global Privacy Control** when enabled
+in your browser. Blocking `/article-metrics.js`, `/blog/article-metrics.js` or
+`https://bntpool.com/api/site-events` also prevents these website counts without
+affecting reading or mining. These website counters are separate from the miner's
+hardware telemetry described above.

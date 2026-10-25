@@ -17,7 +17,6 @@ proof of work changes.
 | 3 | `how-much-ram-to-mine-blocknet` | ram per thread mining; argon2id 2gb per thread | How many threads my RAM allows, and why a 1 GB VPS fails | Thread-scaling on 2-channel vs 12-channel machines |
 | 4 | `blocknet-mining-pools` | blocknet pool; blocknet mining pool list | Which pools exist and how fees and payouts compare | Dated table of every pool; disclose that we run bntpool.com |
 | 5 | `blocknet-faraday-upgrade-miners` | blocknet faraday; blocknet hard fork 2027 | What miners must change for Faraday, and when | Final public spec and a seine release that supports it; publish around Jan 2027 |
-| 6 | `seine-pool-shows-zero-hashrate` | pool hashrate lower than local; shares rejected | Troubleshoot hashing locally with nothing on the pool | Real error strings from seine and the pool |
 | 7 | `antivirus-flags-crypto-miner` | windows defender crypto miner; is seine safe | Antivirus quarantined the miner: verify it | Checksum walkthrough; warning about third-party repacks |
 
 Dropped 2026-10-25 per owner: a BNT-vs-BLOCK explainer (assume readers know Blocknet) and
@@ -44,3 +43,7 @@ Zen 5, laptop mining.
 - Give bntpool.com a crawlable title and description ("Blocknet mining pool").
 - Rewrite the seine and blocknet-pool GitHub descriptions with "Blocknet miner/pool".
 - Offer corrections to the pages ranking for our terms (powhub.top, cassh100k's guide).
+
+Covered 2026-10-25: zero pool hashrate and connection errors now belong to the expanded
+[bntpool tracking guide](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate),
+including all 20 languages. Do not create a competing Seine article.

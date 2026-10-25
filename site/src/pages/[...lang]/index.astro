@@ -98,6 +98,7 @@ const scriptVars = {
       <div class="dl-foot">
         <span id="release-line" set:html={t('dlReleaseLineHtml')} />
         <a href={localizePath('/blog/mine-blocknet-on-windows/', locale)}>{t('dlWindowsGuide')}</a>
+        <a href={`https://bntpool.com/blog/${locale === 'en' ? '' : locale.toLowerCase() + '/'}track-your-miner-on-bntpool/#zero-hashrate`}>{t('poolHelp')}</a>
         <a href={`${REPO}/blob/master/docs/BUILDING.md`}>{t('dlBuild')}</a>
       </div>
     </div>

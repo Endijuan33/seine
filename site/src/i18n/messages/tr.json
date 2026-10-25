@@ -89,5 +89,6 @@
   "closingTitle": "Windows, macOS ve Linux için ücretsiz.",
   "suggestPrompt": "Bu sayfa Türkçe olarak da mevcut.",
   "suggestAction": "Türkçe oku",
-  "suggestKeepEnglish": "İngilizce kalsın"
+  "suggestKeepEnglish": "İngilizce kalsın",
+  "poolHelp": "Havuz hashrate’i hâlâ sıfır mı?"
 }

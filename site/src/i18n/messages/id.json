@@ -89,5 +89,6 @@
   "closingTitle": "Gratis untuk Windows, macOS, dan Linux.",
   "suggestPrompt": "Halaman ini tersedia dalam Bahasa Indonesia.",
   "suggestAction": "Baca dalam Bahasa Indonesia",
-  "suggestKeepEnglish": "Tetap dalam bahasa Inggris"
+  "suggestKeepEnglish": "Tetap dalam bahasa Inggris",
+  "poolHelp": "Hashrate pool masih nol?"
 }

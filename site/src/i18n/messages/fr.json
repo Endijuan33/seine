@@ -89,5 +89,6 @@
   "closingTitle": "Gratuit pour Windows, macOS et Linux.",
   "suggestPrompt": "Cette page est disponible en français.",
   "suggestAction": "Lire en français",
-  "suggestKeepEnglish": "Rester en anglais"
+  "suggestKeepEnglish": "Rester en anglais",
+  "poolHelp": "Le hashrate du pool reste nul ?"
 }

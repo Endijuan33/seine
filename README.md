@@ -31,6 +31,8 @@
 - **Built for rigs and fleets.** NUMA-aware placement, huge pages, a local control
   API with live events, and Prometheus metrics.
 
+[Windows setup guide](https://seineminer.com/blog/mine-blocknet-on-windows/) · [Connect to bntpool.com](https://bntpool.com/blog/mine-blocknet-on-bntpool/) · [Mining locally but pool hashrate is zero?](https://bntpool.com/blog/track-your-miner-on-bntpool/#zero-hashrate)
+
 ## Get started
 
 **1. Download** the archive for your platform from the
