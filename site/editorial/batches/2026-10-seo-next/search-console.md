@@ -10,7 +10,11 @@ Times below are America/New_York (EDT). Account details are intentionally exclud
 - `robots.txt` allows crawling and advertises the sitemap.
 - URL inspection of `/blog/blocknet-mining-hardware-hashrate/`: **URL is on Google; Page is indexed**.
 - Live inspection at **4:50 PM EDT**: **URL is available to Google; Page can be indexed**; one valid breadcrumb item. This directly verifies Google's access; a separate nonbrowser request's HTTP 403 was not treated as evidence of Googlebot blocking.
-- Publish follow-up: resubmit the expanded sitemap and request indexing of the new Windows guide and revised benchmark page after production deployment.
+- Production deployment: `7d8bff4`, Cloudflare Pages action `40233157289`, succeeded **4:59 PM EDT**. The final CI build and IndexNow notification passed.
+- After deployment: all 40 changed article URLs returned HTTP 200 with current content, correct canonical and 21 language alternates; the screenshot loaded. Live sitemap contains **521 URLs**.
+- Resubmitted the expanded sitemap at **5:00 PM EDT**: **Success, 521 discovered pages** (the earlier nine-page snapshot is resolved).
+- New Windows guide was initially unknown to Google; requested indexing once at **5:01 PM EDT**, and Google confirmed it entered the priority crawl queue.
+- Requested recrawl of the revised benchmark page once; Google accepted it into the priority crawl queue at **5:02 PM EDT**.
 
 ## bntpool.com
 
