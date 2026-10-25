@@ -129,6 +129,7 @@ pub struct TuiStateInner {
     pub backends_desc: String,
     pub accounting: String,
     pub version: String,
+    pub update_available: Option<String>,
 
     // Timing
     pub started_at: Instant,
@@ -180,6 +181,7 @@ impl TuiStateInner {
             backends_desc: String::new(),
             accounting: String::new(),
             version: String::new(),
+            update_available: None,
 
             started_at: Instant::now(),
 
@@ -234,6 +236,7 @@ impl TuiStateInner {
             return false;
         }
         let request = ThreadChangeRequest {
+            max_threads: control.max_threads.max(control.current_threads),
             run_id: control.run_id,
             threads,
             quit_requested: Arc::clone(&control.quit_requested),
@@ -336,6 +339,10 @@ const VALUE_STYLE: Style = Style::new()
     .fg(Color::Rgb(220, 220, 220))
     .add_modifier(Modifier::BOLD);
 const DIM_STYLE: Style = Style::new().fg(Color::Rgb(90, 90, 90));
+const UPDATE_STYLE: Style = Style::new()
+    .fg(Color::Rgb(230, 200, 120))
+    .bg(Color::Rgb(100, 80, 20))
+    .add_modifier(Modifier::BOLD);
 // Keep block marker glyph single-cell across terminals.
 const BLOCK_MARKER_GLYPH: &str = "♦";
 
@@ -430,6 +437,12 @@ fn draw_compact_dashboard(frame: &mut ratatui::Frame, area: Rect, state: &TuiSta
     if let Some(notice) = &state.thread_notice {
         lines.insert(1, Line::from(notice.clone()));
     }
+    if let Some(latest) = &state.update_available {
+        lines.push(Line::from(Span::styled(
+            format!("Update {latest} available"),
+            UPDATE_STYLE,
+        )));
+    }
     let summary_height = (lines.len() as u16).min(area.height);
     frame.render_widget(
         Paragraph::new(lines).style(VALUE_STYLE),
@@ -456,7 +469,16 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
     let uptime = state.uptime();
     let tick = state.started_at.elapsed().as_secs();
 
-    let title = format!(" seine {} ", state.version);
+    let mut title = vec![Span::styled(
+        format!(" seine {} ", state.version),
+        TITLE_STYLE,
+    )];
+    if let Some(latest) = &state.update_available {
+        title.push(Span::styled(
+            format!(" update {latest} available "),
+            UPDATE_STYLE,
+        ));
+    }
     let uptime_text = format!(" uptime {uptime} ");
 
     let inner_width = area.width.saturating_sub(2) as usize;
@@ -472,7 +494,7 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, state: &TuiStateInner) {
     }
 
     let block = Block::default()
-        .title(Span::styled(title, TITLE_STYLE))
+        .title(Line::from(title))
         .borders(Borders::ALL)
         .border_style(BORDER_STYLE);
 
@@ -1257,6 +1279,25 @@ mod tests {
         render_text(&state, 0, 0);
     }
 
+    #[test]
+    fn update_notice_shows_in_full_and_compact_layouts_without_displacing_stats() {
+        let mut state = TuiStateInner::new();
+        state.version = "v0.2.22".into();
+        state.threads = 7;
+        state.state = "working".into();
+        assert!(!render_text(&state, 160, 50).contains("available"));
+
+        state.update_available = Some("v0.2.23".into());
+        let full = render_text(&state, 160, 50);
+        assert!(
+            full.contains(" seine v0.2.22  update v0.2.23 available "),
+            "{full}"
+        );
+        let compact = render_text(&state, 60, 12);
+        assert!(compact.contains("Update v0.2.23 available"), "{compact}");
+        assert!(render_text(&state, 24, 1).contains("Threads: 7"));
+    }
+
     fn controlled_state() -> (
         TuiStateInner,
         crossbeam_channel::Receiver<ThreadChangeRequest>,
@@ -1288,6 +1329,7 @@ mod tests {
             press(&mut state, KeyCode::Char(key));
             let request = receiver.try_recv().unwrap();
             assert_eq!((request.run_id, request.threads), (42, expected));
+            assert_eq!(request.max_threads, 4);
             assert_eq!(state.threads, 2);
             assert!(state.thread_change_pending);
             for (width, height) in [(80, 12), (120, 34)] {
@@ -1315,7 +1357,12 @@ mod tests {
         let (mut state, receiver) = controlled_state();
         state.thread_control.as_mut().unwrap().current_threads = 6;
         press(&mut state, KeyCode::Char('-'));
-        assert_eq!(receiver.try_recv().unwrap().threads, 5);
+        let request = receiver.try_recv().unwrap();
+        assert_eq!(request.threads, 5);
+        assert_eq!(
+            request.max_threads, 6,
+            "allow reducing an explicit above-auto count"
+        );
         let (mut state, receiver) = controlled_state();
         for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
             state.handle_key(KeyEvent::new_with_kind(

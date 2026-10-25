@@ -105,6 +105,11 @@ startup overrides.
 Short terminal windows use a compact dashboard that keeps the CPU thread count,
 mining state, and hashrate visible. Press `q` or `Ctrl+C` to quit.
 
+Seine checks GitHub for a newer release at startup and every 12 hours. When one
+exists, the dashboard header shows `update vX.Y.Z available` and the log gets
+one line with the download link (plain and API modes log the same line). The
+check never interrupts mining; pass `--disable-update-check` to turn it off.
+
 On Windows, a fatal error after double-clicking `seine.exe` with no arguments
 leaves its console open until you press Enter. Launches from an existing shell,
 invocations with arguments, and redirected input/output do not pause.
@@ -163,7 +168,10 @@ selected between probes. New peak measurements can extend exploration without
 repeatedly committing higher counts that are already known to be unnecessary.
 
 On CPUs supporting both AVX2 and AVX-512, automatic mining tuning also compares
-those paths at the current worker count. Two baseline/candidate/baseline cycles
+those paths at the current worker count. On AArch64 with runtime SHA3 support,
+it compares baseline NEON with `neon-sha3`, which combines XOR/rotate instructions
+and 64-byte prefetch coverage. Startup keeps the existing portable NEON path.
+Two baseline/candidate/baseline cycles
 must confirm a gain above 2% plus the hash-count uncertainty before changing the
 path. Kernel and thread-count trials run in turn; memory-pressure handling remains
 active throughout. Kernel windows last 30–60 seconds and require 32 hashes, with
@@ -185,8 +193,8 @@ Confirmed kernel choices are cached alongside the thread cache in
 `seine.cpu-autotune.json.kernels.json`, keyed by worker counts, observed page
 backing, CPU/build identity, eligible kernels, placement and tuning settings. Known contexts reuse
 that choice; stable contexts are reconsidered after 30 minutes. Experimental
-`avx512-256` remains benchmark-only. AVX2-only CPUs and ARM/NEON keep their existing
-paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables
+`avx512-256` remains benchmark-only. AVX2-only CPUs and ARM hosts without SHA3
+keep their existing paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables
 both automatic count and kernel tuning, and explicit fixed thread counts retain
 the default ISA unless autotuning is explicitly enabled.
 
@@ -199,7 +207,15 @@ low-memory notifications reduce the operating count when arena headroom is also
 tight; brief reclaim spikes do not force a reduction.
 The CPU backend can pause at zero workers when no complete arena fits, then retry
 after 30 seconds of sustained headroom. Released Linux HugeTLB arenas return to the
-reserved hugepage pool; the miner does not resize that OS pool. Returning capacity
+reserved hugepage pool; the miner does not resize that OS pool. Parked worker slots
+follow the CPU and configured worker ceiling, with a startup cap for Linux
+cgroup-v2 task limits that leaves room for control and networking threads. If
+automatic worker creation still runs out of resources, startup cleans up and
+retries with fewer slots; explicit fixed counts report failure instead. The nonce
+stride remains fixed. Raising a RAM limit can activate more provisioned workers;
+raising a task limit requires restarting to provision additional slots. A task
+budget too small for the CPU and supporting threads reports a startup error.
+Only active arenas count against the refreshed memory allowance. Returning capacity
 and sustained throughput changes prompt new probes. Stable settings are revisited
 periodically; failed allocation attempts back off for five minutes.
 
@@ -207,7 +223,7 @@ Tuning does not reconnect to the pool or restart GPU backends. Surviving CPU
 workers keep their arenas; parked lanes retain their nonce positions and resume
 within the same disjoint nonce allocation. Manual thread changes disable automatic
 adjustment for that run. The tuner preserves a previously learned higher count when
-a later run is temporarily limited by RAM. Cache schema 10 records remain usable
+a later run is temporarily limited by RAM or worker slots. Cache schema 10 records remain usable
 as starting points; schema 11 also stores measurements and the resource-limit flag.
 Hardware, build, affinity/topology, and page-mode mismatches discard the seed.
 
