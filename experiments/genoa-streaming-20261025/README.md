@@ -74,3 +74,9 @@ control. Interrupted/noisy runs are retained as such. If this gate fails or
 the time/cost limit is reached, preserve the candidate on its branch and do
 not enable Genoa trials on master. Do not report the prior fixed-kernel 27%
 gain as a new automatic-mining gain.
+
+The assessor and graph exporter accept `--include-rejected` to preserve complete,
+integrity-checked observations when tuning confirmation or cache restoration
+fails. Such records carry a rejected landing status and list the failed gates
+in the analysis. This option does not relax correctness, resource, provenance
+or completeness checks, and does not authorize enabling the candidate.

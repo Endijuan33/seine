@@ -22,7 +22,26 @@ def confirmed_streaming(winner):
     return True
 
 
-def assess(root):
+def tuning_failures(name, run, confirmed):
+    """Report adoption failures separately from corrupted/incomplete evidence."""
+    failures = []
+    warm = run['cache_mode'] == 'warm'
+    if warm and not run['count_cache_restored']:
+        failures.append(name + ': count cache was not restored')
+    if 'candidate' in name:
+        if not confirmed:
+            failures.append(name + ': no repeated streaming confirmation')
+        if warm:
+            if not any('avx512-256-stream' in line
+                       for line in run['kernel_cache_restore_messages']):
+                failures.append(name + ': streaming cache was not restored')
+        elif not any('confirmed faster avx512-256-stream' in line
+                     for line in run['trajectory']):
+            failures.append(name + ': no cold streaming confirmation message')
+    return failures
+
+
+def assess(root, *, include_rejected=False):
     source = Path(__file__).resolve().parents[1] / 'cpu-followups-20261025/analyze.py'
     spec = importlib.util.spec_from_file_location('native_analysis', source)
     module = importlib.util.module_from_spec(spec)
@@ -38,7 +57,7 @@ def assess(root):
     assert all(json.loads((out / 'vm-checks.json').read_text())[key] == 0
                for key in ('pswpin', 'pswpout', 'oom_kill'))
     expected = json.loads((root / 'expected-binaries.json').read_text())
-    findings = {}
+    findings, failures = {}, []
     for name, run in result['productive'].items():
         binary = 'candidate' if 'candidate' in name else 'control'
         assert run['identity']['binary_sha256'] == expected[binary], name
@@ -48,28 +67,21 @@ def assess(root):
         assert all(observation['vm_delta'][key] == 0 for key in ('pswpin', 'pswpout', 'oom_kill'))
         winners = run['caches'].get('tuning.json.kernels.json', {}).get('winners', [])
         confirmed = [w for w in winners if confirmed_streaming(w)]
-        warm = run['cache_mode'] == 'warm'
         findings[name] = {
             'completed_hps_lower_bound': run['window']['completed_hps_lower_bound'],
             'starting_threads': run['starting_threads'],
             'selected_threads': run['caches'].get('tuning.json', {}).get('selected_threads'),
             'confirmed_streaming_contexts': [w['context'] for w in confirmed],
         }
-        if warm:
-            assert run['count_cache_restored'], name
-        if binary == 'candidate':
-            assert confirmed, name + ': no repeated streaming confirmation'
-            if warm:
-                assert any('avx512-256-stream' in line
-                           for line in run['kernel_cache_restore_messages']), name
-            else:
-                assert any('confirmed faster avx512-256-stream' in line
-                           for line in run['trajectory']), name
+        failures.extend(tuning_failures(name, run, confirmed))
+    assert include_rejected or not failures, '; '.join(failures)
     result['protocol_checks'] = {
         'parity_transitions': len(passes),
         'resource_lifecycle_passed': True,
-        'candidate_streaming_confirmed_and_restored': True,
-        'landing_status': 'Await review of paired productive rates and fixed-kernel build controls',
+        'candidate_streaming_confirmed_and_restored': not failures,
+        'tuning_gate_failures': failures,
+        'landing_status': ('Rejected: tuning confirmation/cache gate failed' if failures else
+            'Await review of paired productive rates and fixed-kernel build controls'),
         'runs': findings,
     }
     return result
@@ -79,7 +91,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('collected', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--include-rejected', action='store_true',
+                        help='Preserve valid measurements with failed tuning gates; never authorize landing')
     args = parser.parse_args()
-    report = assess(args.collected)
+    report = assess(args.collected, include_rejected=args.include_rejected)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps({key: report[key] for key in ('cold', 'warm', 'protocol_checks')}, indent=2))

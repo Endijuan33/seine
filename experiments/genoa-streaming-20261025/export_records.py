@@ -82,8 +82,11 @@ if __name__ == '__main__':
     parser.add_argument('collected', type=Path)
     parser.add_argument('provenance', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--include-rejected', action='store_true',
+                        help='Export rejected tuning outcomes with explicit rejection labels')
     args = parser.parse_args()
-    result = records(assess(args.collected), json.loads(args.provenance.read_text()),
+    result = records(assess(args.collected, include_rejected=args.include_rejected),
+                     json.loads(args.provenance.read_text()),
                      json.loads((args.collected / 'result-manifest.json').read_text()))
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'benchmark-records.json').write_text(json.dumps(result, indent=2) + '\n')
