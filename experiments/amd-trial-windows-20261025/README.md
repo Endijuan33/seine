@@ -84,7 +84,8 @@ Use outer unit `seine-amd-short-windows.service` with a 14,460-second maximum,
 SIGINT shutdown and bounded control-group cleanup. The wrapper requires
 `prior-evidence-collected.json` with verified archives and restored settings for
 both prior native experiments, and `run-authorization.json` with the exact
-ledger-recorded rental reservation and controller/deletion deadlines. It rejects
+ledger-recorded rental reservation, funded-credit horizon and controller/deletion
+deadlines. Provider deletion must precede both the funded horizon and goal deadline. It rejects
 other active campaign units before running the controller's own preflight.
 
 ## Time and rental constraints

@@ -27,7 +27,8 @@ def validate_authorization(record, deadline, now):
     assert record['ledger_extension_recorded'] is True
     assert record['controller_deadline_epoch'] == deadline
     assert now + 14400 + 120 < deadline
-    assert deadline + 10 * 60 <= record['provider_delete_before_epoch'] <= GOAL_DEADLINE
+    assert deadline + 10 * 60 <= record['provider_delete_before_epoch'] <= min(
+        GOAL_DEADLINE, record['funded_until_epoch'])
     assert 0 < record['cherry_total_reserved_usd'] <= 13.20
     assert record['aws_reserved_usd'] == 3.25
     assert record['total_reserved_usd'] == record['cherry_total_reserved_usd'] + record['aws_reserved_usd']

@@ -31,10 +31,12 @@ class AdmissionTests(unittest.TestCase):
         now = deadline - 15000
         record = {'server_id': 1043469, 'ledger_extension_recorded': True,
             'controller_deadline_epoch': deadline, 'provider_delete_before_epoch': GOAL_DEADLINE,
+            'funded_until_epoch': GOAL_DEADLINE,
             'cherry_total_reserved_usd': 13.20, 'aws_reserved_usd': 3.25,
             'total_reserved_usd': 16.45}
         validate_authorization(record, deadline, now)
         for change in ({'provider_delete_before_epoch': GOAL_DEADLINE + 1},
+                       {'funded_until_epoch': deadline},
                        {'provider_delete_before_epoch': deadline + 599},
                        {'ledger_extension_recorded': False},
                        {'total_reserved_usd': 26}, {'cherry_total_reserved_usd': 14.4}):
