@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Index audited campaign datasets without merging incompatible measurements."""
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -24,6 +25,17 @@ def build():
         document = json.loads(source.read_text())
         assert document['schema'] == 'seine-hardware-benchmark-records/v1'
         records = document['records']
+        csv_source = folder / 'benchmark-records.csv'
+        with csv_source.open(newline='') as handle:
+            reader = csv.DictReader(handle)
+            columns = reader.fieldnames
+            csv_records = list(reader)
+        assert columns and len(columns) == len(set(columns)) and 'id' in columns
+        assert len(csv_records) == len(records), campaign
+        for row, csv_row in zip(records, csv_records):
+            assert all(key in row for key in columns), (campaign, row['id'])
+            expected = {key: '' if row[key] is None else str(row[key]) for key in columns}
+            assert csv_row == expected, (campaign, row['id'], 'CSV differs from JSON')
         for row in records:
             assert row['id'] not in identifiers
             identifiers.add(row['id'])
@@ -45,8 +57,9 @@ def build():
             'campaign': campaign, 'status': status, 'default_policy_changed': policy_changed,
             'results': str((folder / 'RESULTS.md').relative_to(ROOT)),
             'records_json': str(source.relative_to(ROOT)),
-            'records_csv': str((folder / 'benchmark-records.csv').relative_to(ROOT)),
+            'records_csv': str(csv_source.relative_to(ROOT)),
             'records_json_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+            'records_csv_sha256': hashlib.sha256(csv_source.read_bytes()).hexdigest(),
             'record_count': len(records), 'record_ids': [row['id'] for row in records],
             'metric_scopes': sorted({row['metric_scope'] for row in records}),
             'power_scopes': sorted({row['power_scope'] for row in records}),

@@ -34,7 +34,8 @@ the same model. Neither the manual power nor page comparison changed defaults.
 
 The [machine-readable index](benchmark-index.json) links all JSON/CSV datasets,
 record IDs, file hashes, metric scopes and adoption status. The index contains no
-synthetic combined result or cross-hardware ranking. Revalidate it with:
+synthetic combined result or cross-hardware ranking. Its check compares every CSV
+field against the JSON record and binds both formats by checksum. Revalidate it with:
 
 ```sh
 /usr/bin/python3 experiments/amd-campaign-20261025/build_index.py --check

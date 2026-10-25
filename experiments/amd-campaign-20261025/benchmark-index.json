@@ -11,6 +11,7 @@
       "records_json": "experiments/cherry-epyc-energy-20261025/benchmark-records.json",
       "records_csv": "experiments/cherry-epyc-energy-20261025/benchmark-records.csv",
       "records_json_sha256": "816638a7f42f9b4ccca0bd1dd6cc37a526ad254359e1607a2ed05f69ebc38147",
+      "records_csv_sha256": "1bb2ff69343834a2b6e5f93d31bebb930d2187430271374b6b8bb4c3497bc48d",
       "record_count": 9,
       "record_ids": [
         "cherry-9355p-results-8",
@@ -44,6 +45,7 @@
       "records_json": "experiments/genoa-streaming-20261025/benchmark-records.json",
       "records_csv": "experiments/genoa-streaming-20261025/benchmark-records.csv",
       "records_json_sha256": "badeefd247a38da578c606adbbfae7a11f9d317a72a47391c4645abab133a444",
+      "records_csv_sha256": "19fc69dc3a6ff9d64876e32e027c495fad314dc1b67549f959ae9bf309ba6e46",
       "record_count": 4,
       "record_ids": [
         "genoa-c7a8xlarge-cold_discovery-control",
@@ -72,6 +74,7 @@
       "records_json": "experiments/amd-overnight-20261025/benchmark-records.json",
       "records_csv": "experiments/amd-overnight-20261025/benchmark-records.csv",
       "records_json_sha256": "989183297719ed5de01232a3ecfd6f0abbfcaca5d37564d840e4a3efd2cb26af",
+      "records_csv_sha256": "4c8de17c76273d3af9ad508e38cc6b158da0379a17cbf84614a7c7175d824542",
       "record_count": 4,
       "record_ids": [
         "turin-order-cold_discovery-control",
@@ -100,6 +103,7 @@
       "records_json": "experiments/amd-ring-locality-20261025/benchmark-records.json",
       "records_csv": "experiments/amd-ring-locality-20261025/benchmark-records.csv",
       "records_json_sha256": "c0ba5c10a18fc87536b24997046d6501e36d7c778183cac76596707df9e2cdc5",
+      "records_csv_sha256": "6eff1eec47ba7339caf4be5a4d64b2eee4314d1817061537d6c17cadc9e69216",
       "record_count": 10,
       "record_ids": [
         "screen-32-ring-32-baseline",
@@ -134,6 +138,7 @@
       "records_json": "experiments/amd-page-size-20261025/benchmark-records.json",
       "records_csv": "experiments/amd-page-size-20261025/benchmark-records.csv",
       "records_json_sha256": "e4b661750b75ad30ebe1e23b267033353dc3222ee11f7ba12b61f6c12a511400",
+      "records_csv_sha256": "7855eecbc372644418ea9a5a8e501bf6039ca9f85826178d59e28c0d83e28ceb",
       "record_count": 2,
       "record_ids": [
         "turin-page-size-baseline",
