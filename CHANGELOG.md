@@ -6,7 +6,7 @@ appends the auto-generated compare link). Write for miners deciding whether to
 upgrade: lead with what they gain, keep it brief, skip internal refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
-## Unreleased
+## v0.2.23
 
 **The control API now requires a token.** If you run Seine with `--service`
 or `--api-server`, every endpoint except `/v1/health` needs
