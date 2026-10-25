@@ -7,6 +7,8 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+from alert_fixtures import messages
 
 ROOT = Path(__file__).resolve().parent
 PARSER = argparse.ArgumentParser(description=__doc__)
@@ -27,7 +29,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path == '/fixture.json':
+        parsed = urlsplit(self.path)
+        if parsed.path == '/alerts.json':
+            fixtures = messages()
+            state = parse_qs(parsed.query).get('state', ['legacy'])[0]
+            if state not in fixtures:
+                self.respond(404, b'Unknown fixture state', 'text/plain')
+                return
+            revision = subprocess.check_output(['git', 'describe', '--always', '--dirty'], cwd=ROOT).decode().strip()
+            body = {'source_revision': revision, 'fixture_only': True,
+                    'note': 'Real sender payload; native Discord appearance requires an authorized test message.',
+                    'states': list(fixtures), 'state': state, 'webhook_payload': fixtures[state]}
+            self.respond(200, json.dumps(body, indent=2).encode(), 'application/json')
+        elif self.path == '/fixture.json':
             self.respond(200, (ROOT.parent / 'diagnostics-fixture.json').read_bytes(), 'application/json')
         elif self.path == '/revision':
             revision = subprocess.check_output(['git', 'describe', '--always', '--dirty'], cwd=ROOT).decode().strip()

@@ -120,7 +120,7 @@ class AlertsTests(unittest.TestCase):
         cohort['median_ratio'] = .81
         self.assertEqual(alerts.evaluate(results)[0], [])
 
-    def test_transport_disables_mentions_and_bounds_content(self):
+    def test_transport_sends_embed_without_mentions(self):
         class Response:
             status = 200
             def read(self, size): return b'{"id":"test-message"}'
@@ -133,11 +133,63 @@ class AlertsTests(unittest.TestCase):
             self.assertTrue(request.full_url.endswith('?wait=true'))
             body = json.loads(request.data)
             self.assertEqual(body['allowed_mentions'], {'parse': []})
-            self.assertLessEqual(len(body['content']), 1900)
+            self.assertNotIn('content', body)
+            self.assertEqual(body, alerts.format_message('FIRING', self.item, 1000))
         self.assertNotIn('@', alerts.label('@everyone **https://private/**'))
         for url in ('http://discord.com/api/webhooks/a/b', 'https://attacker.test/api/webhooks/a/b', 'https://discord.com/other'):
             with self.assertRaises(ValueError): alerts.validate_webhook(url)
         alerts.validate_webhook('https://discord.com/api/webhooks/a/b')
+
+    def test_known_legacy_quality_explains_upgrade_without_hiding_incident(self):
+        for version in ('v0.2.24', '0.2.24', 'v0.2.25', '0.2.25', 'v0.2.26', 'v0.2.27', 'custom'):
+            with self.subTest(version=version):
+                active, _ = alerts.evaluate({'quality': {'versions': [
+                    {'version': version, 'sustained_inventory_only_installations': 99}]}})
+                self.assertEqual(len(active), 1)
+                record = active[0]
+                legacy = version.lstrip('v') in ('0.2.24', '0.2.25')
+                self.assertEqual(record['severity'], 'info' if legacy else 'warning')
+                self.assertEqual('Upgrade to v0.2.26' in record['action'], legacy)
+                embed = alerts.format_message('FIRING', record, 1792965060)['embeds'][0]
+                fields = {field['name']: field['value'] for field in embed['fields']}
+                self.assertEqual(fields['Version'], version)
+                self.assertEqual(fields['Affected installations'], '99')
+                self.assertIn('do not establish that mining stopped', embed['description'])
+                self.assertEqual(embed['color'], 0x3498DB if legacy else 0xF39C12)
+
+    def test_existing_state_refreshes_presentation_without_resending(self):
+        self.tick(1000)
+        self.tick(1300)
+        self.item.update(version='v0.2.26', affected=7, action='Inspect samples', severity='info')
+        self.tick(1600)
+        record = self.state['incidents'][self.item['key']]
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(record['affected'], 7)
+        self.assertEqual(record['last_sent'], 1300)
+        self.assertEqual(record['first_seen'], 1000)
+
+    def test_embed_states_bounds_and_legacy_state(self):
+        # Existing state has only category/key/summary; clearing still renders.
+        for transition in ('FIRING', 'REMINDER', 'CLEARED', 'SETUP TEST'):
+            record = alerts.issue('setup' if transition == 'SETUP TEST' else 'infrastructure',
+                                  'fixture', 'x' * 10000, action='a' * 10000)
+            embed = alerts.format_message(transition, record, 1792965060)['embeds'][0]
+            self.assertLessEqual(len(embed['title']), 256)
+            self.assertLessEqual(len(embed['description']), 4096)
+            self.assertTrue(all(len(f['value']) <= 1024 for f in embed['fields']))
+            self.assertLess(len(json.dumps(embed)), 6000)
+            self.assertIn('EDT', embed['footer']['text'])
+            self.assertIn(record['key'], embed['footer']['text'])
+            if transition == 'CLEARED':
+                self.assertEqual(embed['color'], 0x2ECC71)
+                self.assertIn('does not prove every miner recovered', json.dumps(embed))
+                self.assertNotIn('Next step', json.dumps(embed))
+            elif transition == 'SETUP TEST':
+                self.assertEqual(embed['color'], 0x3498DB)
+            else:
+                self.assertEqual(embed['color'], 0xE74C3C)
+        cleared = alerts.format_message('CLEARED', self.item, 1000)['embeds'][0]
+        self.assertIn('EST', cleared['footer']['text'])
 
 
 if __name__ == '__main__':

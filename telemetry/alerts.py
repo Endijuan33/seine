@@ -29,8 +29,9 @@ def label(value):
     return ''.join(c if c.isalnum() or c in ' ._()-' else '_' for c in str(value))[:100]
 
 
-def issue(category, key, summary):
-    return {'category': category, 'key': category + ':' + identity(key), 'summary': summary}
+def issue(category, key, summary, **presentation):
+    return {'category': category, 'key': category + ':' + identity(key), 'summary': summary,
+            **presentation}
 
 
 def evaluate(results):
@@ -48,7 +49,16 @@ def evaluate(results):
         for row in quality['versions']:
             count = row['sustained_inventory_only_installations']
             if count >= 5:
-                active.append(issue('quality', row['version'], f'{label(row["version"])}: {count} installations repeatedly report inventory without hashrate samples. Check adoption and the sampling path.'))
+                # These shipped versions predate the pool sampling fix in v0.2.26.
+                legacy = row['version'] in ('0.2.24', 'v0.2.24', '0.2.25', 'v0.2.25')
+                action = ('Known pool-reporting bug in this release. Upgrade to v0.2.26 or later.'
+                          if legacy else 'Inspect miner activity and the performance sampling path.')
+                active.append(issue(
+                    'quality', row['version'],
+                    'Installations repeatedly send hardware inventory without hashrate samples. '
+                    'Missing samples do not establish that mining stopped.',
+                    version=label(row['version']), affected=count, action=action,
+                    severity='info' if legacy else 'warning'))
     diagnostics = results.get('diagnostics')
     if diagnostics is not None:
         for field, title in [('recent_error_versions', 'miner errors/quarantines'), ('recent_unclean_versions', 'unclean previous runs (not proof of crashes)')]:
@@ -114,7 +124,7 @@ def advance(state, active, known, now, send, persist):
     state['last_check'] = now
     for key, item in current.items():
         record = incidents.setdefault(key, {**item, 'first_seen': now, 'last_sent': None})
-        record['summary'] = item['summary']
+        record.update(item)
         record.pop('clear_since', None)
         record['last_seen'] = now
     sends = 0
@@ -167,16 +177,57 @@ def validate_webhook(url):
         raise ValueError('Expected an HTTPS Discord webhook URL')
 
 
+def format_message(transition, record, now):
+    """Build a bounded Discord embed using the pool relay's status colors."""
+    titles = {
+        'quality': 'Hashrate samples missing',
+        'infrastructure': 'Telemetry infrastructure check failed',
+        'ingestion': 'Telemetry reports overdue',
+        'diagnostics': 'Miner reliability needs attention',
+        'performance': 'Possible hashrate regression',
+        'monitor': 'Telemetry check unavailable',
+        'setup': 'Telemetry alerts enabled',
+    }
+    category = record['category']
+    severity = record.get('severity', 'critical' if category == 'infrastructure' else 'warning')
+    if category == 'setup':
+        severity = 'info'
+    colors = {'critical': 0xE74C3C, 'warning': 0xF39C12, 'info': 0x3498DB}
+    cleared = transition == 'CLEARED'
+    status = {'FIRING': 'Active', 'REMINDER': 'Reminder', 'CLEARED': 'Cleared',
+              'SETUP TEST': 'Delivery test'}.get(transition, label(transition))
+    fields = [
+        {'name': 'Status', 'value': status, 'inline': True},
+        {'name': 'Severity', 'value': severity.title(), 'inline': True},
+    ]
+    if 'version' in record:
+        fields.append({'name': 'Version', 'value': label(record['version']) or 'Unknown', 'inline': True})
+    if 'affected' in record:
+        fields.append({'name': 'Previously affected installations' if cleared else 'Affected installations',
+                       'value': label(record['affected']) or 'Unknown', 'inline': True})
+    if cleared:
+        fields.append({'name': 'What cleared means', 'value':
+                       'Threshold cleared or observations aged out; this does not prove every miner recovered.'})
+    elif record.get('action'):
+        fields.append({'name': 'Next step', 'value': str(record['action'])[:1024]})
+    stamp = datetime.fromtimestamp(now, ZoneInfo('America/New_York')).strftime('%Y-%m-%d %H:%M %Z')
+    embed = {
+        'author': {'name': 'Seine telemetry'},
+        'title': f'[{status}] {titles.get(category, label(category))}'[:256],
+        'description': (('Last observed: ' if cleared else '') + str(record['summary']))[:3000],
+        'color': 0x2ECC71 if cleared else colors.get(severity, 0x3498DB),
+        'fields': fields,
+        'footer': {'text': f'{stamp} · Incident {str(record["key"])[:100]}'},
+    }
+    return {'allowed_mentions': {'parse': []}, 'embeds': [embed]}
+
+
 def deliver(url, transition, record, now):
     validate_webhook(url)
     parsed = urlsplit(url)
     query = [(key, value) for key, value in parse_qsl(parsed.query) if key != 'wait']
     url = urlunsplit(parsed._replace(query=urlencode(query + [('wait', 'true')])))
-    stamp = datetime.fromtimestamp(now, ZoneInfo('America/New_York')).strftime('%Y-%m-%d %H:%M %Z')
-    suffix = ('\nThreshold cleared or observations aged out; this does not prove every miner recovered.'
-              if transition == 'CLEARED' else '')
-    content = f'Seine telemetry — {transition} — {record["category"]}\n{record["summary"]}{suffix}\n{stamp} · incident {record["key"]}'
-    body = json.dumps({'content': content[:1900], 'allowed_mentions': {'parse': []}}).encode()
+    body = json.dumps(format_message(transition, record, now)).encode()
     request = urllib.request.Request(url, body, {'Content-Type': 'application/json', 'User-Agent': 'seine-telemetry-alerts/1'})
     with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:
         if response.status != 200:

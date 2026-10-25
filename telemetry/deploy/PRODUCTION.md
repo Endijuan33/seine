@@ -111,6 +111,27 @@ repeat a notice. At most ten messages are sent per run, oldest unsent first.
 Messages contain aggregate counts and bounded hardware/version labels, never
 installation IDs, raw logs or credentials. Mentions and redirects are disabled.
 
+Notifications use Discord embed cards with the pool relay's blue informational,
+orange warning, red critical and green cleared colors. The incident key and
+Eastern timestamp appear in the footer. Known v0.2.24/v0.2.25 pool sampling gaps
+are informational and recommend v0.2.26 or later; other versions remain warnings.
+This changes presentation only: thresholds, confirmation, reminders and incident
+identities are preserved. Missing samples do not establish lost mining or earnings.
+
+Preview the real formatter's synthetic payloads locally (no Discord sends):
+
+```sh
+python3 telemetry/showcase/serve.py --port 9081
+# http://localhost:9081/alerts.json
+# Select ?state=legacy|warning|reminder|cleared|critical|setup|old-state
+```
+
+The preview labels the current source revision. It shows actual webhook JSON,
+not a reproduction of Discord's rendering. Loading/empty/disabled states are not
+outgoing messages; HTTP failures remain pending for retry. A native Discord visual
+check requires an explicitly authorized test message. Updating only `alerts.py`
+needs no collector rebuild or service restart; the next timer tick loads it.
+
 To inspect without writing state or sending messages:
 
 ```sh
