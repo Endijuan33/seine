@@ -11,6 +11,9 @@ const MAX_DRIFT: f64 = 0.05;
 
 const CACHE_SCHEMA: u32 = 2;
 
+// ARM starts on the portable NEON path; SHA3 is eligible only after runtime
+// feature detection and must win two productive-work comparisons before it
+// becomes the cached choice.
 fn candidates() -> Vec<CpuKernel> {
     candidates_for(
         &crate::runtime_identity::cpu_identity(),
@@ -25,10 +28,15 @@ fn candidates_for(
     identity: &crate::runtime_identity::CpuIdentity,
     supported: &[CpuKernel],
 ) -> Vec<CpuKernel> {
-    let mut paths: Vec<_> = [CpuKernel::Avx512, CpuKernel::Avx2, CpuKernel::Neon]
-        .into_iter()
-        .filter(|k| supported.contains(k))
-        .collect();
+    let mut paths: Vec<_> = [
+        CpuKernel::Avx512,
+        CpuKernel::Avx2,
+        CpuKernel::Neon,
+        CpuKernel::NeonSha3,
+    ]
+    .into_iter()
+    .filter(|k| supported.contains(k))
+    .collect();
     // Repeated native wins on Turin and Ryzen 9950X3D (family 1Ah, models 02h/44h).
     // Identity limits automatic experiments; the independent ISA/OS support
     // check remains mandatory. A measured win is still required per worker
@@ -296,6 +304,10 @@ impl Tuner {
         }
     }
 
+    pub(super) fn is_comparing(&self) -> bool {
+        self.trial.is_some() || self.settling.is_some()
+    }
+
     pub(super) fn abort(&mut self, now: u64) -> Action {
         let base = self.trial.take().map(|trial| trial.base);
         self.settling = None;
@@ -561,6 +573,18 @@ mod tests {
         t.cache.winners.clear();
         t.candidates.retain(|k| *k != CpuKernel::Avx512256Stream);
         t
+    }
+
+    #[test]
+    fn candidates_are_supported_and_experimental_x86_path_stays_manual() {
+        let paths = candidates();
+        assert!(paths.len() <= 2);
+        assert!(paths.iter().all(|path| path.is_supported()));
+        assert!(!paths.contains(&CpuKernel::Avx512256));
+        assert_eq!(
+            paths.contains(&CpuKernel::NeonSha3),
+            CpuKernel::NeonSha3.is_supported()
+        );
     }
 
     #[test]
