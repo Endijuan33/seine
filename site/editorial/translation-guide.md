@@ -3,7 +3,7 @@
 Every published post exists in English and 19 translations, the same set as the Sol Incinerator
 site: id, es, de, fr, pt-BR, ru, it, pl, tr, vi, ar, nl, uk, el, ja, ko, th, zh-Hans, zh-Hant.
 A translation sits beside its source as `src/content/blog/<slug>/<locale>.mdx` (for example
-`pt-BR.mdx`), and the build fails if one is missing, stale or unreviewed. The bntpool.com blog uses
+`pt-BR.mdx`), and the build fails if one is missing or stale. The bntpool.com blog uses
 the same rules with `.md` files.
 
 ## How to translate
@@ -29,9 +29,11 @@ the same rules with `.md` files.
    its `title` and `text`, keep `target`; avoid ASCII double quotes inside them), same tables, same
    images (translate alt text). Internal links get the locale prefix (`/es/blog/<slug>/`,
    `/pt-br/#download`); external links stay identical.
-6. A separate review pass (a different agent where possible) checks meaning, omissions, additions,
-   terminology and protected values before `translation: reviewed`. Never claim an independent
-   review that didn't happen.
+6. A separate review is optional, not a publishing gate (owner decision, 2026-10-25). Keep
+   `translation: draft` when there has been no separate review; automated checks still require
+   complete, current translations with matching structure and protected code/links. If a separate
+   review checks meaning, omissions, additions, terminology and protected values, record
+   `translation: reviewed`. Never claim an independent review that did not happen.
 
 ## Glossary
 

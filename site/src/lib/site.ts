@@ -17,7 +17,7 @@ export const jsonLd = (data: unknown) => JSON.stringify(data).replace(/</g, '\\u
 export const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 export const formatDate = (d: Date, htmlLang: string) =>
-    new Intl.DateTimeFormat(htmlLang, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(d);
+    new Intl.DateTimeFormat(htmlLang, { calendar: 'gregory', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(d);
 
 export function breadcrumbList(items: [string, string][]) {
     return {

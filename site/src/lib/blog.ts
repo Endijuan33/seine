@@ -26,12 +26,15 @@ const CJK = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g; // Han, k
 /** Social cards can't shape Arabic or Thai, so those locales reuse the English card. */
 export const cardLocale = (locale: Locale): Locale => (locale === 'ar' || locale === 'th' ? 'en' : locale);
 
-/** Reading time: ~230 English words or ~400 CJK characters a minute. */
+const THAI = /[\u0e00-\u0e7f]/g;
+
+/** Reading time: ~230 words, ~400 CJK characters or ~1,000 Thai characters a minute. */
 export function readingMinutes(body: string): number {
     const text = body.replace(/```[\s\S]*?```/g, ' ').replace(/<[^>]+>/g, ' ');
     const cjk = (text.match(CJK) ?? []).length;
-    const words = (text.replace(CJK, ' ').match(/[A-Za-z0-9][\w'’.-]*/g) ?? []).length;
-    return Math.max(1, Math.round(words / 230 + cjk / 400));
+    const thai = (text.match(THAI) ?? []).length;
+    const words = (text.replace(CJK, ' ').replace(THAI, ' ').match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’.-]*/gu) ?? []).length;
+    return Math.max(1, Math.round(words / 230 + cjk / 400 + thai / 1000));
 }
 
 /**

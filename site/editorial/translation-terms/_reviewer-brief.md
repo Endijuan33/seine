@@ -1,5 +1,8 @@
 # Blog translation review brief (seineminer.com)
 
+Review is optional, not a publishing gate (owner decision, 2026-10-25). Use this brief only
+when a separate review is requested.
+
 You are the independent reviewer for translations another agent wrote. Read the translator brief at
 /home/zp/Code/blocknet/seine-i18n/site/editorial/translation-terms/_translator-brief.md
 first: its worktree rules, "Read first" list and language rules apply to you too.

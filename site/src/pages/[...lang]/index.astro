@@ -3,7 +3,7 @@ import { Picture } from 'astro:assets';
 import dashboard from '../../assets/dashboard.webp';
 import heroSquare from '../../assets/hero-square.webp';
 import benchmarks from '../../data/benchmarks.json';
-import { localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
+import { LOCALES, localeDef, localeFromParam, localeStaticPaths } from '../../i18n/locales';
 import { useTranslations, type UiKey } from '../../i18n/ui';
 import Base from '../../layouts/Base.astro';
 import { DEFAULT_IMAGE, ORGANIZATION, REPO, SITE_URL } from '../../lib/site';
@@ -39,7 +39,7 @@ const schema = [{
     '@graph': [
         ORGANIZATION,
         { '@type': 'WebSite', '@id': `${SITE_URL}/#site`, name: 'seine', url: `${SITE_URL}/`,
-          inLanguage: ['en', 'zh-Hans', 'zh-Hant'], publisher: { '@id': `${SITE_URL}/#org` } },
+          inLanguage: LOCALES.map((l) => l.htmlLang), publisher: { '@id': `${SITE_URL}/#org` } },
         { '@type': 'SoftwareApplication', name: 'seine', applicationCategory: 'UtilitiesApplication',
           operatingSystem: 'Windows, macOS, Linux', description: t('homeDescription'),
           url: SITE_URL + Astro.url.pathname, downloadUrl: `${REPO}/releases/latest`, image: DEFAULT_IMAGE,
@@ -179,7 +179,7 @@ const scriptVars = {
     if (row) { var s = sizes[row.querySelector(".size").dataset.asset]; if (s) tag += " · " + mb(s); }
     document.getElementById("primary-meta").textContent = metaJs.replace("{tag}", tag);
     var link = document.createElement("a"); link.href = rel.html_url; link.textContent = rel.tag_name;
-    var date = new Date(rel.published_at).toLocaleDateString(htmlLang, { year: "numeric", month: "short", day: "numeric" });
+    var date = new Date(rel.published_at).toLocaleDateString(htmlLang, { calendar: "gregory", year: "numeric", month: "short", day: "numeric" });
     var parts = releaseJs.replace("{date}", date).split("{tag}");
     var line = document.getElementById("release-line");
     line.textContent = parts[0]; line.appendChild(link); line.appendChild(document.createTextNode(parts[1] || ""));

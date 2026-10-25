@@ -4,6 +4,13 @@ Delete this file when the rollout is merged. Owner wants the same 20 locales as 
 **User rule: don't spam subagents.** The last session ran ~20 agents at once and burned the
 weekly limit. Run one or two agents at a time (or work inline), and say how many before starting.
 
+## Owner update (2026-10-25)
+
+Separate translation reviews are no longer required. Ship drafted translations after automated
+checks and visual verification; keep review status truthful. Finish Greek, then Thai, merge
+seineminer.com, then translate and deploy the pool blog with `--api-only`. The review queue
+below is historical and no longer blocks rollout.
+
 ## Where things are
 
 - seine worktree `/home/zp/Code/blocknet/seine-i18n`, branch `claude/i18n-20`, pushed nowhere
@@ -12,8 +19,8 @@ weekly limit. Run one or two agents at a time (or work inline), and say how many
   RTL for Arabic, language-suggest banner (`src/components/LanguageSuggestion.astro`),
   locale number formats on the landing page, OG cards (ar/th fall back to English cards).
   A stub smoke build produced 301 pages.
-- The build and `npm run check` fail until **every published post has all 19 translations
-  reviewed**. That's by design; don't weaken it to ship.
+- The build and `npm run check` require every published post to have all 19 complete, current
+  translations. Separate review is optional per the owner update above.
 - Check one locale: `node scripts/check-content.mjs <slug> --locale fr --strict`
   (or omit the slug for all posts). Hash: `node scripts/check-content.mjs --hash <slug>`.
 

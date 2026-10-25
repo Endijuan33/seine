@@ -29,8 +29,8 @@ Then, by task:
   sheet. Publishing needs the user's go-ahead.
 - **Translating:** every published post needs all 19 translations; follow
   `site/editorial/translation-guide.md` (protected values, link prefixes, glossary), set
-  `sourceHash` from `npm run check -- --hash <slug>`, and get a separate review pass (a fresh agent
-  is best) before `translation: reviewed`.
+  `sourceHash` from `npm run check -- --hash <slug>`, and keep `translation: draft`. A separate
+  review is optional; use `translation: reviewed` only after one actually happens.
 - **Updating a post:** keep the slug; bump `updated` only for material changes; update the
   changed passages in every translation and their `sourceHash`; keep the keyword-map row in
   sync with any retargeting.
@@ -41,5 +41,5 @@ Then, by task:
   `path:line` and the date. The fact sheet is in a public repo: no unannounced Faraday details.
 
 `npm run build` fails on forbidden claims, broken internal links, a missing keyword-map row and
-missing, stale or unreviewed translations. Pushing to `master` deploys (see `site/README.md`);
+missing, stale or structurally invalid translations. Pushing to `master` deploys (see `site/README.md`);
 deploying by hand needs the user's request.

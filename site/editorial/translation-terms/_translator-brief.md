@@ -29,14 +29,13 @@ checkout or reset), and don't touch index.mdx, zh-Hans.mdx or zh-Hant.mdx files.
    - Quote title/description in YAML single quotes if they contain `:` or start with a special
      character; FAQ q and a always in single quotes, one line each, `''` for an apostrophe.
    - `sourceHash`: output of `node scripts/check-content.mjs --hash <slug>`.
-   - `translation: draft` (the reviewer changes it to `reviewed`).
+   - `translation: draft` (a separate review is optional; only an actual reviewer changes it to `reviewed`).
    - Body: same headings (count and order), same `<Answer>`, `<Note>`, `<Warning>` and one `<CTA>`
      (translate its title and text attributes, keep `target`, no ASCII `"` inside), same tables,
      same images (translate alt text), code blocks byte-identical. Internal links take the locale
      prefix: `/blog/x/` -> `/<path>/blog/x/`, `/#download` -> `/<path>/#download`. External links
      identical.
-3. Run `node scripts/check-content.mjs <slug> --locale <code>`. The only acceptable error is
-   "translation must be 'reviewed'". Fix everything else.
+3. Run `node scripts/check-content.mjs <slug> --locale <code>`. All checks must pass. A separate review is no longer required for publishing.
 
 ## Language
 Numbers in prose take the locale's separators (see translation-guide.md rule 3); code and commands don't.

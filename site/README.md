@@ -1,7 +1,8 @@
 # seineminer.com
 
-Static Astro site for seineminer.com, in English, Simplified Chinese (`/zh-hans/`) and
-Traditional Chinese (`/zh-hant/`), hosted on Cloudflare Pages (project `seineminer`).
+Static Astro site for seineminer.com, in 20 languages (English at `/`, translations at
+`/<locale>/`), hosted on Cloudflare Pages (project `seineminer`). The locale list lives in
+`src/i18n/locales.ts`.
 
 ```sh
 cd site
@@ -13,9 +14,9 @@ npm run check      # editorial and translation checks only
 
 - `src/pages/[...lang]/`: every page, once per locale (`index.astro` is the landing page,
   `blog/` the blog and RSS).
-- `src/i18n/`: locales and interface strings. The Chinese catalogs are typed against English.
+- `src/i18n/`: locales and interface strings. All catalogs are checked against English.
 - `src/content/blog/<slug>/`: a post's English source (`index.mdx`) and its translations
-  (`zh-Hans.mdx`, `zh-Hant.mdx`). How to write, translate and publish posts is in
+  (`<locale>.mdx`, including `zh-Hans.mdx` and `pt-BR.mdx`). How to write, translate and publish posts is in
   [`editorial/README.md`](editorial/README.md).
 - `src/pages/blog/og/`: generated 1200x630 social cards per post and locale.
 - `src/styles/site.css`: design tokens and landing styles; `blog.css`: blog pages.

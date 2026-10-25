@@ -39,7 +39,7 @@ thin keyword-permutation pages, which Google's scaled-content policy penalizes.
 6. **Translate** (step 3 of the translation section below) once the English is approved.
 7. **Publish.** Remove `draft: true`, add the post's row to `keyword-map.md`, remove it from
    `backlog.md`, and commit everything together. The build refuses a published post without a
-   keyword-map row or without reviewed, current translations. Pushing to `master` deploys.
+   keyword-map row or without complete, current translations. Pushing to `master` deploys.
 8. **After publishing.** Google reads `sitemap.xml` (the domain property is verified in Search
    Console) and IndexNow notifies Bing on each deploy; request indexing for a new post with URL
    inspection in Search Console if you want it sooner. There is no Baidu Ziyuan account (it
@@ -98,8 +98,8 @@ Body rules (`npm run check` enforces most of them):
 Every published post exists in English and 19 translations, the same set as Sol Incinerator: id,
 es, de, fr, pt-BR, ru, it, pl, tr, vi, ar, nl, uk, el, ja, ko, th, zh-Hans and zh-Hant. A
 translation sits beside its source as `<slug>/<locale>.mdx` and carries only translated fields
-plus `sourceHash` (`npm run check -- --hash <slug>`) and `translation: reviewed` after a separate
-review pass. Follow [`translation-guide.md`](translation-guide.md) (protected values, link
+plus `sourceHash` (`npm run check -- --hash <slug>`) and `translation: draft` (or `reviewed` after an optional separate
+review pass). Follow [`translation-guide.md`](translation-guide.md) (protected values, link
 prefixes, glossary). Any later edit to `index.mdx` changes its hash, and the build fails until
 every translation's changed passages are updated and its `sourceHash` matches again; the draft
 flag isn't part of the hash.
