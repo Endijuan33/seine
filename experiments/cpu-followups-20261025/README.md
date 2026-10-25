@@ -76,6 +76,6 @@ main controller or starting without enough time remaining.
 
 ## Completion gate
 
-Native work is still in progress; see `status.json`. Final results must include
+Native work is complete; see `status.json` and `joint-native-results.json`. Final results include
 all host outcomes, actual cache behavior, negative findings, verified resource
 cleanup and spending. Draft status is intentional until those records exist.

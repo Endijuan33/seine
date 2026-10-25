@@ -24,8 +24,47 @@ three integration), five existing resource tests ignored. Includes interruption
 between pending challengers and corrected cache-fixture schema restoration with
 an explicit positive compatibility assertion. Scoped Rust 1.93.0 formatting
 passes. Native binaries remain frozen at `7477914`; the later Rust edit changes
-only test fixtures. Native measurements are still in progress. Campaign protocol
-and identities: `experiments/cpu-followups-20261025/README.md`.
+only test fixtures. Campaign protocol and identities:
+`experiments/cpu-followups-20261025/README.md`.
+
+**Native results (2026-10-25).** Both builds (v0.2.22 control and frozen
+`7477914` candidate) ran against a loopback pool on 2 MiB HugeTLB. Cold windows
+ran 900 s in A/B/B/A order. Cached restarts ran 180 s in reverse order, each from
+its own cold leg's cache. Rates are completed-hash lower bounds including
+startup and shutdown. Per-run counts, kernel winners and archive checksums are
+in `experiments/cpu-followups-20261025/joint-native-results.json`.
+
+| Host | Cold pairs | Cold | Cached pairs | Cached |
+|---|---|---|---|---|
+| c5.4xlarge, Xeon 8275CL (12 workers max) | +1.94, +2.08% | +2.01% | +5.37, +5.43% | **+5.40%** |
+| c6i.4xlarge, Xeon 8375C (12 max) | −1.67, −0.56% | −1.12% | −0.16% (one pair) | −0.16% |
+| c8a.8xlarge, EPYC 9R45 Turin (24 max) | +8.68, −1.37% | +3.53% | +20.52, +19.36% | **+19.94%** |
+
+- **C5.** The candidate finds 12 workers with AVX2 in both cold runs, a
+  fixed-kernel gain of +11.84% at 12 workers over AVX-512. The control stays at
+  8 workers on AVX-512, where AVX2 is 8.93% slower. The candidate build is only
+  +0.19% at fixed AVX2, so the gain comes from the policy, not the build.
+- **Ice Lake.** AVX-512 stays best at every count, so there is no crossover to
+  find. The extra kernel trials cost about 1% in cold windows and nothing
+  measurable once cached. The fixed-kernel build delta is ±0.8%. The second
+  cached pair is missing: the takeover stopped the controller during
+  `joint-warm-control-a` to run the PR49 alignment test before the lease expired.
+- **Turin.** The control confirms streaming only at 18 workers, then settles on
+  24 workers without testing streaming there, so it stays on AVX-512 at about
+  33.8 H/s. The candidate compares kernels at each count and caches streaming at
+  24 (run A) or 18 (run B). Cached restarts restore it about 2 s after startup
+  and run 40.3–40.8 H/s.
+
+Every cached restart restored its cold leg's worker count. The candidate's warm
+runs also restored the confirmed streaming kernel on Turin and AVX2 on C5. The
+cold cost of searching more contexts is visible: +3.5% cold versus +19.9% cached
+on Turin, and −1.1% cold on Ice Lake.
+
+Separate C5 RAM/load/restart lifecycle on the candidate: pressure, CPU-load,
+parking and constrained-restart phases passed. Recovery above the temporary
+one-arena cap failed, staying at 1 thread for 210 s. That is the v0.2.22 bug
+fixed by PR43, which this branch deliberately excludes. Lifecycle validation of
+the combined policy is therefore still needed after PR43 merges.
 
 ## Conventions
 

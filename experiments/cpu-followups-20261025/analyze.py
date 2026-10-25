@@ -43,7 +43,8 @@ def analyze(root):
         ratios = [r['candidate'] / r['baseline'] for r in rows]
         result['fixed'][folder.name] = {'protocol': protocol, 'raw_recomputed_hps': rows,
             'paired_deltas_pct': [100*(r-1) for r in ratios], 'geometric_delta_pct': delta(ratios)}
-    memory = read(out / 'memory-results.json')
+    # The takeover EPYC controller (run_joint_epyc.py) has no memory phase.
+    memory = read(out / 'memory-results.json') if (out / 'memory-results.json').exists() else []
     grouped = {}
     for entry in memory:
         wide = 'workers' in entry
