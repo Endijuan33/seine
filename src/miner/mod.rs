@@ -70,7 +70,9 @@ const CPU_AUTOTUNE_MAX_SAMPLE_SECS_PER_CANDIDATE: u64 = 30;
 const CPU_AUTOTUNE_RAMP_EARLY_STOP_MIN_SAMPLES: usize = 5;
 const CPU_AUTOTUNE_RAMP_EARLY_STOP_STREAK: usize = 2;
 const CPU_AUTOTUNE_RAMP_EARLY_STOP_FLOOR_FRAC: f64 = 0.985;
-const CPU_AUTOTUNE_BALANCED_PEAK_FLOOR_FRAC: f64 = 0.99;
+// Default mining targets the measured peak. Only the explicit efficiency
+// profile may trade measured hashrate for fewer workers.
+const CPU_AUTOTUNE_BALANCED_PEAK_FLOOR_FRAC: f64 = 1.0;
 const CPU_AUTOTUNE_EFFICIENCY_PEAK_FLOOR_FRAC: f64 = 0.75;
 const CPU_AUTOTUNE_FINAL_CONFIRM_CLOSE_FRAC: f64 = 0.97;
 const CPU_AUTOTUNE_FINAL_CONFIRM_MIN_SECS: u64 = 6;
@@ -4049,8 +4051,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn autotune_selection_balanced_biases_lower_when_near_peak() {
-        // 99% of peak (3.3) is 3.267, so 4 threads (3.28) is the first candidate that qualifies.
+    fn autotune_selection_balanced_keeps_peak_even_when_lower_count_is_close() {
         let selection = select_cpu_autotune_candidate(
             CpuPerformanceProfile::Balanced,
             &autotune_measurements(&[(3, 3.0), (4, 3.28), (22, 3.3)]),
@@ -4058,8 +4059,20 @@ pub(crate) mod tests {
         .expect("selection should exist");
 
         assert_eq!(selection.peak_threads, 22);
-        assert_eq!(selection.selected_threads, 4);
+        assert_eq!(selection.selected_threads, 22);
         assert!((selection.peak_floor_frac - CPU_AUTOTUNE_BALANCED_PEAK_FLOOR_FRAC).abs() < 1e-9);
+    }
+
+    #[test]
+    fn autotune_selection_balanced_uses_fewer_workers_only_for_equal_peak() {
+        let selection = select_cpu_autotune_candidate(
+            CpuPerformanceProfile::Balanced,
+            &autotune_measurements(&[(3, 3.0), (4, 3.0), (5, 2.9)]),
+        )
+        .expect("selection should exist");
+
+        assert_eq!(selection.selected_threads, 3);
+        assert_eq!(selection.selected_hps, 3.0);
     }
 
     #[test]

@@ -1539,6 +1539,37 @@ mod tests {
     }
 
     #[test]
+    fn default_keeps_faster_workers_while_efficiency_tradeoff_is_opt_in() {
+        for profile in [
+            CpuPerformanceProfile::Balanced,
+            CpuPerformanceProfile::Throughput,
+            CpuPerformanceProfile::Efficiency,
+        ] {
+            let mut p = policy(8);
+            p.profile = profile;
+            p.phase = Phase::Confirm {
+                base: 8,
+                before: sample(100.0),
+                candidate: 4,
+                candidate_sample: sample(99.5),
+            };
+            p.tick(0, 0, true, 16, false, 8);
+            let decision = p.tick(30, 3000, true, 16, false, 8).unwrap();
+            let expected = if profile == CpuPerformanceProfile::Efficiency {
+                4
+            } else {
+                8
+            };
+            assert_eq!(decision.threads, expected, "profile {profile:?}");
+            // The throughput objective never bypasses a real memory limit.
+            assert_eq!(
+                p.tick(31, 3000, true, 2, false, expected).unwrap().threads,
+                2
+            );
+        }
+    }
+
+    #[test]
     fn network_gap_and_new_memory_cap_invalidate_comparisons() {
         for memory_drop in [false, true] {
             let mut p = policy(4);

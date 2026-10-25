@@ -2,6 +2,24 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 default CPU tuning objective — requested policy correction
+
+The default balanced profile allowed a smaller worker count at 99% of the
+measured peak. The explicitly requested default is highest hashrate, with efficiency
+tradeoffs opt-in. Its floor is therefore 100%; explicit efficiency retains its
+75% floor. Polling/batching presets, significant-gain requirements, confirmation,
+memory pressure and allocation safeguards are unchanged. Source fingerprints
+already invalidate caches across this policy change.
+
+Regression coverage checks a close offline peak, equal-rate tie breaking and a
+productive A/B/A comparison of eight workers at 100 H/s against four at 99.5 H/s.
+Balanced and throughput keep eight; efficiency may keep four. A subsequent RAM
+limit still reduces every profile to two. Canonical CPU-only workspace validation
+passed 583 tests with eight existing ignored tests. This lands the explicitly
+requested selection objective; hardware-specific startup hints remain separate
+experiments. Native speedup attribution is pending, so this change carries no
+measured performance claim.
+
 ## 2026-10-25 Turin high-count sample windows — accepted
 
 On the same EPYC 9355P with 32 cores/64 threads and twelve DDR5-4800 channels,
