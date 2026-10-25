@@ -3,8 +3,13 @@
 Seine is built to fill big machines. On Linux, the default `--cpu-affinity auto`
 spreads workers across usable NUMA nodes and across L3 cache groups within each
 node, using one thread per physical core before SMT siblings. This also spreads
-workers on single-node servers with multiple L3 groups. On a rented EPYC 8434P,
-L3 spreading improved a 24-worker benchmark by **16.7%**.
+workers on single-node servers with multiple L3 groups.
+
+Measured gains from automatic placement:
+
+- Two-node EPYC 7R13 VM, 8 threads: **+73%** with ordinary pages and **+108%** with
+  2 MiB huge pages (the 16-thread all-core control was unchanged).
+- Rented EPYC 8434P, 24 threads: **+16.7%** from L3 spreading.
 
 ## How placement works
 
@@ -29,13 +34,10 @@ local placement. See [Linux HugePages](linux-hugepages.md).
 
 ## Memory headroom
 
-Automatic thread sizing and autotuning subtract 5% of effective total RAM from the
-available budget, in addition to any GPU/Metal reservation. Adjust this with
-`--cpu-memory-reserve-percent <0..99>`; `0` restores the previous budget.
-
-Explicit `--threads` / `--cpu-threads-per-instance` counts bypass this reserve
-(unless thread autotuning is explicitly requested) but keep the existing memory
-checks. The minimum of one worker per CPU instance still applies.
+Automatic thread sizing and autotuning reserve 5% of effective total RAM, in addition
+to any GPU/Metal reservation. Adjust this with `--cpu-memory-reserve-percent <0..99>`;
+`0` disables that reserve. Explicit thread counts keep their existing memory checks
+and disable tuning unless `--cpu-autotune-threads` is requested.
 
 Automatic CPU workers also release memory when headroom falls and return once
 conditions stabilise, including pausing every CPU worker if no complete arena
@@ -51,5 +53,5 @@ needed. Results for each EPYC generation are on the [performance page](../PERFOR
 Autotune caches are invalidated when the allowed CPU set or detected NUMA/L3 layout
 changes, including changes that leave the CPU count unchanged.
 
-Multi-socket NUMA hosts have not been benchmarked yet. Method and limitations are
-in the [CPU optimization log](../../CPU_OPTIMIZATION_LOG.md).
+How thread counts, kernels and memory recovery are tuned: [automatic tuning](autotuning.md).
+Method and limitations of the measurements above: [CPU optimization log](../../CPU_OPTIMIZATION_LOG.md).

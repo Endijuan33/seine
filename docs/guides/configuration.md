@@ -50,8 +50,30 @@ All flags are documented in the [flag reference](../MINER_FLAGS.md).
 ./seine --ui plain
 ```
 
-On the dashboard, press `+` or `-` beside the thread count to add or remove a thread
-per CPU backend. Manual changes disable autotuning for the current run.
+## Dashboard controls
+
+Press `+` or `-` directly in the mining dashboard to add or remove one thread
+per CPU backend. The hint appears beside the thread count; `=` also increases
+the count without requiring Shift. Each change applies immediately. All mining
+backends restart and pool mining reconnects, while session statistics, uptime,
+average hashrate, and dashboard history are preserved. The
+current hashrate refreshes for the new workers. Further changes are ignored
+until the restart finishes. The selected count disables CPU autotuning for that
+run and is not saved as a new default.
+Increases are limited to the automatic CPU/RAM cap; use `--threads` for explicit
+startup overrides.
+
+Short terminal windows use a compact dashboard that keeps the CPU thread count,
+mining state, and hashrate visible. Press `q` or `Ctrl+C` to quit.
+
+Seine checks GitHub for a newer release at startup and every 12 hours. When one
+exists, the dashboard header shows `update vX.Y.Z available` and the log gets
+one line with the download link (plain and API modes log the same line). The
+check never interrupts mining; pass `--disable-update-check` to turn it off.
+
+On Windows, a fatal error after double-clicking `seine.exe` with no arguments
+leaves its console open until you press Enter. Launches from an existing shell,
+invocations with arguments, and redirected input/output do not pause.
 
 ## Blocknet ID shortnames
 
