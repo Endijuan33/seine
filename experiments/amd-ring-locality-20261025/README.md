@@ -70,6 +70,17 @@ uninterpretable, and the L2 counters do not measure DRAM bandwidth. This host ha
 core/IBS PMUs but no exposed Data Fabric PMU. Profiling and hash throughput runs
 are separate; profiling overhead is not part of the throughput comparison.
 
+`confirm.py` runs four fresh throughput pairs for the recorded shortlist. A
+failed +1% lower-bound gate completes as a rejected experiment without spending
+time on energy pairs. A passed gate triggers the four fresh package-energy
+pairs. `compare_energy.py` recomputes every numerator and denominator from the
+raw samples and checksummed benchmark reports. It requires each role's frozen
+binary identity, unchanged host/runtime/compiler settings, verified page backing,
+no swap/OOM activity, and the same 280 W HSMP cap before and after every run.
+This experimental comparator leaves the production power/worker comparator's
+same-binary restriction intact. `test_compare_energy.py` checks successful
+cross-build comparison and rejection of corrupted or incompatible evidence.
+
 Collect all evidence and restore cap/pages/swap before the rental cleanup point.
 The existing six-hour Cherry reservation is USD 7.20. If a ready experiment needs
 more time, record a bounded extension before starting it; at most two additional
