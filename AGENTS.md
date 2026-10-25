@@ -104,14 +104,28 @@ set so stale caches from a different path get re-tuned, not reused.
 
 ## Release notes (`CHANGELOG.md`)
 
-- Word every entry for miners, by its benefit to them. Lead with the hashrate
-  gain (H/s and/or %) and the hardware it was measured on, then say what
-  changed. Order entries biggest hashrate win first; non-performance items
-  come after.
+- Write for miners deciding whether to upgrade: what improves, who benefits,
+  and any action they need to take. Lead with the biggest user benefit; put
+  measured hashrate gains and the affected hardware first when available.
+- Use short, plain-language bullets, usually one sentence each. Aim for 3–5
+  bullets; small releases may need only one. Combine related fixes. A useful
+  example is "About 33% higher CPU hashrate on Ryzen 9 9950X3D at 8 threads."
+- Omit internal test data and implementation details: no run counts, sampling
+  windows, confidence intervals, cache schemas, kernel internals, code symbols,
+  or validation narratives. Keep those in engineering docs. Users need the
+  benefit, not an explanation of how we implemented or tested it.
 - Never show losses, regressions or no-gain results in release notes. Those
   belong in `CPU_OPTIMIZATION_LOG.md` / `NVIDIA_OPTIMIZATION_LOG.md`.
 - Quote only measured gains on named hardware, and don't extrapolate to
-  untested models. Keep entries brief and skip internal refactors.
+  untested models. Round sensibly, retain a short qualifier when needed for
+  accuracy, and distinguish faster startup from higher sustained hashrate.
+  Use a qualitative benefit when a number needs a lengthy explanation.
+- Keep required upgrade steps and compatibility changes, including API auth
+  and changed flags, in a brief note for affected users. Link to instructions
+  when needed. Never hide a required action to make the notes shorter.
+- Keep `CHANGELOG.md` and published GitHub release notes in sync. Publish the
+  edited notes plus a full-changelog link, without generated commit/PR lists.
+  When editing existing releases, preserve tags, binaries and release status.
 
 ## References
 

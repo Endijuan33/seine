@@ -138,6 +138,8 @@ jobs:
         run: sha256sum seine-*.tar.gz seine-*.zip > SHA256SUMS.txt
 
       - name: Extract changelog section for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           awk -v tag="$GITHUB_REF_NAME" '
             $0 ~ "^## " tag "([[:space:]]|$)" { found = 1; next }
@@ -147,8 +149,14 @@ jobs:
           if [ -s RELEASE_NOTES.md ]; then
             echo "Using CHANGELOG.md section for $GITHUB_REF_NAME"
           else
-            echo "::warning::No CHANGELOG.md section for $GITHUB_REF_NAME; release body will only have generated notes"
+            echo "::warning::No CHANGELOG.md section for $GITHUB_REF_NAME; release body will only have the full-changelog link"
           fi
+
+          # Keep the comparison link without publishing the generated commit list.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq '.body' > GENERATED_NOTES.md
+          printf '\n' >> RELEASE_NOTES.md
+          sed -n '/^\*\*Full Changelog\*\*:/p' GENERATED_NOTES.md >> RELEASE_NOTES.md
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -158,4 +166,4 @@ jobs:
             SHA256SUMS.txt
             seine-*.tar.gz
             seine-*.zip
-          generate_release_notes: true
+          generate_release_notes: false

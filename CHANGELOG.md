@@ -1,281 +1,237 @@
 # Changelog
 
-User-focused release notes. Each `## vX.Y.Z` section below becomes the body of
-the corresponding GitHub release (the release workflow extracts it by tag and
-appends the auto-generated compare link). Write for miners deciding whether to
-upgrade: lead with hashrate gains (measured, on named hardware), biggest win
-first; never list losses or no-gain results; keep it brief, skip internal
-refactors.
-`scripts/release_tag.sh` refuses to tag a version that has no section here.
+Short release notes for miners deciding whether to upgrade. Lead with the biggest
+user benefit, name the hardware for measured gains, and include required upgrade
+steps. Keep test results and implementation details in the engineering docs.
+Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## v0.2.25
 
-**Faster automatic tuning on the tested AMD EPYC 9355P.** Building on the
-earlier streaming-first policy, shorter high-count samples improved completed
-work by 7.32% over four paired 20-minute cold starts and 15.32% over four paired
-three-minute own-cache restarts. These runs used automatic worker/kernel
-selection, the balanced profile and 2 MiB huge pages. Two confirming comparisons
-and resource safeguards remain required; other CPU identities keep their policy.
-
-**About 8% faster cached CPU mining on the tested AMD EPYC 9R14.** Automatic
-tuning can now try the streaming kernel on validated Genoa processors and keep
-it after two confirmed gains. In a 32-vCPU AWS VM with a 24-worker ceiling and
-2 MiB huge pages, paired productive runs improved 2.85% during cold discovery
-and 7.99% on cached restarts. No kernel override is required.
-
-**Earlier tuning gains on the tested AMD EPYC 9355P.** Trying the streaming
-kernel earlier confirmed it about 90 seconds sooner and increased completed
-work by 0.68% over four paired 20-minute cold starts, with automatic worker and
-kernel selection on 2 MiB huge pages. Both confirmation cycles remain required.
-
-**AMD GPU builds no longer require NVIDIA support.** Building from source with
-`--no-default-features --features amd` now includes the shared hash-finalization
-helpers required by the HIP backend. Native Radeon validation remains pending.
-
-**Fewer lost shares when the pool is busy.** Shares the pool turns away with
-"server busy, retry" or "rate limited, retry" are now resubmitted a few times
-instead of being dropped, block candidates most persistently. They no longer
-count as rejected unless every retry fails; the dashboard shows how many were
-retried.
-
-**No more duplicate-share rejects after a dev-fee round.** If the pool changed
-your difficulty during a dev-fee round, Seine used to restart that job from its
-first nonce and resubmit shares it had already sent. It now carries on where it
-stopped.
-
-**Safer manual CPU thread changes.** The dashboard explains blocked `+`/`-`
-inputs and checks current RAM headroom before increasing threads and again
-before starting replacement workers. Rejected increases keep mining and let
-you retry.
+- **Faster startup and restarts on AMD EPYC 9355P.**
+- **About 8% faster mining after a restart on AMD EPYC 9R14** with saved tuning settings.
+- **Fewer lost shares when the pool is busy:** Seine retries temporary rejections automatically.
+- **Fewer duplicate-share rejections** when returning from a dev-fee round.
+- **Safer thread controls:** the dashboard checks available RAM before adding CPU threads and explains when an increase is blocked.
+- AMD-only source builds now work without NVIDIA support.
 
 ## v0.2.24
 
-**About 33% faster CPU mining on the Ryzen 9 9950X3D.** At 8 workers it now
-mines about 10.3 H/s, up from 7.8 H/s on AVX-512. Ryzen 9000 (Zen 5) desktop
-processors running 8 or more automatic CPU workers start on the streaming-store
-kernel. Seine keeps comparing the other kernels while mining. No configuration
-is required.
-
-**Quieter pool logs.** Accepted shares and job switches no longer print
-`timing |` lines that wrapped in the dashboard. Rejected and stale shares keep
-their timing details.
-
-**Clearer tuning logs.** Kernel comparison messages now show the measured
-rates, and say so when a comparison is retried because conditions changed.
+- **About 33% higher CPU hashrate on Ryzen 9 9950X3D at 8 threads**, automatically.
+- **Cleaner dashboard logs**, with less routine share and job-switch noise.
+- **Clearer tuning updates** show which settings are faster.
 
 ## v0.2.23
 
-**Up to 57% faster CPU mining on ARM Linux servers.** In AWS tests,
-Graviton4 mined 54–57% faster, Graviton3 32–49% faster and Graviton2 about 4%
-faster. On ARM processors with SHA3 instructions, Seine now tries an
-SHA3-accelerated kernel while mining and keeps it after two confirmed gains.
+- **Up to 57% higher CPU hashrate on AWS Graviton4**, 49% on Graviton3 and about 4% on Graviton2.
+- **Up to 20% higher hashrate on AMD EPYC 9R45 after tuning**, and about 5% on Intel Xeon 8275CL.
+- **CPU mining recovers automatically when RAM becomes available.** Seine also starts more reliably on Linux systems with tight thread limits.
+- **Protected miner controls:** websites you visit can no longer change your mining settings through an unauthenticated local control API.
+- **Update notices** tell you when a newer release is available. Use `--disable-update-check` to turn them off.
 
-**Up to 20% faster on AMD EPYC Turin once tuned.** A tested EPYC 9R45
-restarted at 40.5 H/s, up from 33.8 H/s, and a Xeon 8275CL gained 5%.
-Automatic tuning now tests each candidate worker count with the best kernel for
-that count, so it finds faster worker/kernel combinations it used to miss.
-
-**Workers come back after a memory squeeze.** If Seine started or restarted
-while RAM was temporarily limited, it now adds CPU workers back once memory
-returns, instead of keeping the reduced count for the rest of the session. On
-Linux hosts with tight thread (PID) limits, it starts with a smaller worker
-pool instead of failing.
-
-**The control API now requires a token.** If you run Seine with `--service`
-or `--api-server`, every endpoint except `/v1/health` needs
-`Authorization: Bearer <token>`. Seine writes a fresh token to
-`<data-dir>/control-api.cookie` each start, or you can set one with
-`--api-token`. CORS is now off by default (`--api-cors <origin>` re-enables it
-for a browser frontend), and loopback binds reject non-loopback `Host`
-headers. This stops websites you visit from changing your miner's payout
-address or settings. Plain CLI and TUI mining are unaffected.
-
-**Update notices.** The dashboard and logs tell you when a newer Seine release
-is available. `--disable-update-check` turns this off.
+**For control API users:** send `Authorization: Bearer <token>` on requests other
+than `/v1/health`. Read the token from `<data-dir>/control-api.cookie` after each
+start, or set a fixed token with `--api-token`. Browser integrations also need
+`--api-cors <origin>`. Plain CLI and dashboard mining need no changes.
 
 ## v0.2.22
 
-**Faster CPU mining on validated AMD EPYC Turin processors.** Automatic tuning
-can now compare a streaming-store kernel with the existing CPU kernels while
-mining, selecting it only after two confirmed gains. On a tested EPYC 9R45 at
-24 workers with 48 GiB of explicit 2 MiB pages, it delivered 44.7 H/s versus
-34.5 H/s for AVX2. Results depend on the processor, worker count and memory
-backing; automatic eligibility currently covers the validated Turin CPU identity.
-No configuration is required.
-
-**More reliable kernel comparisons.** Tuning retains the best confirmed kernel
-while checking other candidates and retries inconclusive comparisons without
-caching a partial sweep. Cached choices include the eligible kernel set.
-
-**Windows tuning follows CPU affinity changes.** Cached worker counts and kernel
-choices are refreshed when the permitted CPU mask or physical-core grouping
-changes, including equal-sized masks that select a different CCD or SMT layout.
-
-**Native Linux ARM downloads.** Releases now include a CPU-only Linux ARM64
-archive, built and checked on an ARM runner with full-size reference parity.
+- **About 30% higher CPU hashrate on AMD EPYC 9R45 at 24 threads** with huge pages. Seine selects the faster settings automatically.
+- **More reliable automatic tuning**, including when you change which CPU cores Seine can use on Windows.
+- **Ready-to-run Linux ARM64 downloads**, with no source build needed.
 
 ## v0.2.21
 
-**Start mining sooner and adapt as conditions change.** Automatic CPU tuning
-starts from a compatible cached worker count or an estimate capped by available
-RAM, then compares settings while mining. Temporary CPU load no longer determines
-the worker count for the whole session. Tuning does not reconnect to the pool or
-restart GPU backends.
-
-**Recover from changing RAM availability.** Automatic CPU workers release memory
-when headroom falls and return after conditions stabilize, including pausing all
-CPU workers if no complete arena fits. Temporary RAM limits preserve the remembered
-higher worker count for later use. Allocation failures back off before retrying.
-
-**Automatic CPU kernel selection.** Mining can compare AVX2 and AVX-512 while
-continuing useful work, alongside adaptive worker-count tuning. It changes paths
-only after two confirmed gains, remembers choices for the measured worker count
-and memory backing, and keeps memory-pressure recovery active during comparisons.
-No configuration is required; the existing CPU autotuning opt-out disables it.
-Experimental kernels remain outside automatic selection.
-
-**Steadier efficiency mode.** Once a lower worker count meets the profile's
-hashrate target, it stays selected between probes instead of repeatedly climbing
-to known higher counts. New CPU capacity, RAM availability, and kernel choices
-can still trigger useful exploration. Explicit worker counts remain fixed unless
-autotuning is requested.
+- **Start mining sooner.** CPU tuning now runs while you mine.
+- **Keep mining as conditions change.** Seine adjusts CPU threads to available RAM and restores them when memory returns.
+- **Automatic CPU speed tuning** finds faster settings for your hardware without manual configuration.
+- **Steadier efficiency mode** keeps a lower thread count when it delivers close to peak hashrate.
 
 ## v0.2.20
 
-**More reliable CPU thread tuning.** Fresh autotuning now warms each worker's
-memory before measuring hashing speed and excludes setup and teardown from its
-score. This reduces bias against larger worker counts. Failed or panicking
-sample workers release their peers instead of leaving tuning stuck. Fresh
-tuning can take longer because of the warmup; cached choices are refreshed.
+- **More reliable CPU tuning** finds suitable thread counts and avoids getting stuck during startup.
+- **Compare CPU mining options on your own hardware** with expanded benchmark controls.
 
-**Compare CPU kernels on your own hardware.** Offline benchmarks can explicitly
-select `scalar`, `avx2`, `avx512`, `avx512-256`, or `neon` with
-`--bench-cpu-kernel`, subject to CPU support. This requires CPU-only benchmarks,
-fixed threads and disabled autotuning. The experimental `avx512-256` path uses
-256-bit AVX-512 operations and is never chosen automatically for mining.
-
-**More trustworthy benchmark comparisons.** Reports now identify the selected
-kernel and CPU vendor/family/model/stepping. Baseline comparisons reject
-mismatched or missing CPU kernel identities, including with
-`--bench-baseline-policy ignore-environment`; capture a new baseline for older
-CPU reports. The paired A/B harness supports deliberate cross-kernel tests.
-
-The release includes reproducible results across AMD Zen 1–5 EPYC and five
-Intel server generations. Kernel winners vary with worker count, page backing
-and placement, so the automatic mining ISA preference remains unchanged.
+**For benchmark users:** capture a new CPU baseline before comparing results
+with this release. See the [benchmark guide](https://github.com/zpalmtree/seine/blob/v0.2.20/docs/benchmarks.md) for options.
 
 ## v0.2.19
 
-**Adjust CPU threads from the dashboard.** Press `+` or `-` beside the thread
-count to add or remove one thread per CPU backend; `=` also increases the count.
-Workers restart and pool mining reconnects briefly, while session totals,
-uptime, average hashrate, logs and block markers are preserved. The current
-hashrate refreshes for the new workers. Manual changes disable CPU autotuning
-for the current run and are not saved as a new default.
-
-**Keep the essentials visible in small terminals.** A compact dashboard keeps
-the thread count, adjustment keys, mining state and hashrate visible when the
-full layout no longer fits.
-
-**Read startup errors before the Windows window closes.** When double-clicking
-`seine.exe` opens its own console and startup fails, the error stays visible
-until you press Enter. Existing terminal and scripted launches keep their usual
-exit behavior.
+- **Adjust CPU threads from the dashboard** with `+` and `-`, while keeping your session totals. Mining reconnects briefly; changes last for the current run and turn off automatic thread tuning.
+- **Use Seine in smaller terminals** with a compact dashboard that keeps key controls and hashrate visible.
+- **Read Windows startup errors** before the window closes when launching `seine.exe` by double-clicking.
 
 ## v0.2.18
 
-**Faster CPU mining on AVX2 processors.** The Argon2 kernel does more work in
-parallel and uses fewer column loads and stores. Gains depend on the CPU,
-worker count and memory backing. Existing AVX-512 and ARM kernels keep their
-current instruction paths.
-
-**Smarter CPU placement on Linux.** Automatic worker placement spreads work
-across NUMA nodes and L3 cache groups, using physical cores before SMT siblings.
-This helps machines where OS-order placement crowds workers into only part of
-the available memory and cache resources. Cached tuning choices are refreshed
-for the new placement policy. Use `--cpu-affinity os` to restore OS-order pinning.
-
-**More RAM headroom with automatic CPU thread counts.** Sizing and autotuning
-now reserve 5% of effective RAM from their budget on all platforms. Use
-`--cpu-memory-reserve-percent 0` to remove that reserve. Explicit thread counts
-retain their existing behavior unless thread autotuning is forced.
+- **Faster CPU mining on AMD Zen 3 and other AVX2 processors.**
+- **Better use of CPU cores on Linux**, especially on large servers.
+- **More RAM left for other apps:** automatic CPU sizing reserves 5% of system RAM. Use `--cpu-memory-reserve-percent 0` to remove the reserve.
 
 ## v0.2.17
 
-**Less pool polling and better recovery when the pool is busy.** Seine reuses
-network hashrate readings for 30 seconds and staggers telemetry refreshes to
-reduce request bursts from rigs sharing an internet connection. It respects
-the pool's retry delay for both rate limits and temporary overload, and avoids
-requesting full miner details when a balance request fails temporarily.
-
-Recommended for pool miners, especially operators running several rigs behind
-one public IP. Mining and share submission are unchanged.
+- **More reliable pool statistics when the pool is busy**, especially for several rigs sharing one internet connection.
+- **Less network traffic** from routine dashboard updates.
 
 ## v0.2.16
 
-**Mine with your Blocknet ID shortname.** Use `--address '@name'` or
-`--address '$name'` in pool or solo mode, or enter a shortname during first-run
-setup. The control API accepts shortnames too. Seine verifies the signed
-mapping, shows the full payout address, and keeps it fixed for the mining run,
-including reconnects. Quote shortnames in shell commands so `$` is passed
-literally. Full wallet addresses continue to work without a lookup.
+- **Mine with your Blocknet ID**, using `--address '@name'` or `--address '$name'` instead of a full wallet address. Keep the quotes in shell commands.
+- **Use every NVIDIA GPU automatically.** AMD builds also use all supported GPUs when started with `--backend amd`.
+- **Faster repeat starts on multi-GPU rigs:** each GPU's tuning settings are saved reliably.
+- **See available GPUs through the control API** for easier dashboard and script setup.
 
-**Multi-GPU rigs now mine on every GPU out of the box.** Seine detects all
-NVIDIA GPUs at startup and runs one backend instance per device — no more
-`--nvidia-devices 0,1,...` needed (that flag still works to pin or subset
-devices, e.g. `--nvidia-devices 0` for single-GPU behavior). AMD builds get
-the same treatment: a bare `--backend amd` uses every supported (wave32) AMD
-GPU. Benchmarks (`--bench`) exercise the same multi-GPU topology.
-
-**GPU tuning results are safe under parallel startup.** With several GPUs
-initializing at once, the NVIDIA autotune cache is now written under a file
-lock with atomic replacement, so one device's tuning results can no longer
-overwrite another's (which previously forced a wasted re-tune on the next
-start).
-
-**The control API now lists your GPUs.** `GET /v1/backends` includes an
-`available_devices` array (vendor, index, name, VRAM) so dashboards and
-scripts can build explicit per-device backend specs without guessing indices.
-
-Compatibility notes for scripted setups:
-- `--backend-*-per-instance` lists must match the new instance count on
-  multi-GPU rigs (the error message now says how many instances came from
-  auto-detection and how to pin the count).
-- Control API: a `backend_specs` entry without `device_index` now expands to
-  all detected GPUs instead of device 0 only; pass `device_index` explicitly
-  to keep one device. `GET /v1/backends` reports concrete per-GPU
-  `device_index` values.
+**For multi-GPU scripts:** use `--nvidia-devices` or `--amd-devices` to select
+specific GPUs. Match `--backend-*-per-instance` lists to the number of selected
+GPUs. In control API `backend_specs`, set `device_index` to select one GPU;
+omitting it now selects all detected GPUs.
 
 ## v0.2.15
 
-**Windows GPU mining now works out of the box.** The Windows package bundles
-the NVIDIA NVRTC libraries seine needs — no CUDA toolkit installation, no PATH
-setup. Unzip and mine.
-
-**Much faster GPU startup.** First launch on an RTX 5090 tunes in about half
-the time it used to; results are cached so later launches start in seconds.
-
-**Faster CPU mining on Linux/WSL (opt-in).** New `--cpu-page-mode large` and
-`large-1g` use reserved hugepages for roughly 6% and 8% more CPU throughput
-respectively — see the README's "HugeTLB provisioning" section for the
-one-time host setup.
-
-**You'll know when something breaks.** If a GPU or CPU backend fails and
-mining continues degraded, seine now warns you repeatedly instead of silently
-mining at reduced speed.
-
-**Solo miners: no more lost blocks after a daemon restart.** If the daemon has
-forgotten your block template, seine automatically resubmits the full block.
-
-Also: smarter thread autotuning on Apple Silicon (no more caching a
-slightly-worse lane count), physical-core-first CPU affinity on Windows, and
-expanded benchmarking tools.
+- **Start NVIDIA mining on Windows without installing the CUDA toolkit.** Unzip and mine.
+- **About half the first-start tuning time on RTX 5090**, with settings saved for later launches.
+- **More CPU performance options on Linux and WSL** through huge-page support. See the [setup guide](https://github.com/zpalmtree/seine/blob/v0.2.15/README.md#wsl-linux-hugetlb-provisioning) before using `--cpu-page-mode large` or `large-1g`.
+- **Clear warnings if a CPU or GPU stops mining**, so reduced performance is easier to spot.
+- **More reliable solo block submission after a daemon restart.**
+- Improved automatic CPU tuning on Apple Silicon and CPU core selection on Windows.
 
 ## v0.2.14
 
-**GPU pool miners: stop losing blocks.** When a batched GPU round found both a
-pool share and an actual block solution, the block could be discarded in favor
-of the share. Blocks are now always preserved and submitted.
+- **Keep the blocks your GPU finds.** Fixes a case where a block solution could be lost when found alongside a pool share.
+- Pools can now identify your Seine version and mining hardware type to help with support and updates.
 
-**Version reporting.** seine now tells the pool its version and backend, so
-pools can let you know when an update is worth it.
+## v0.2.13
+
+- **Catch invalid payout addresses before mining starts**, with a clear error instead of repeated pool connection failures.
+
+## v0.2.12
+
+- **More reliable pool statistics** when the pool limits requests.
+- Improved CPU hashing performance on processors with AVX-512 support.
+
+## v0.2.11
+
+- **Keep NVIDIA GPUs mining when the pool adjusts share difficulty**, reducing interruptions and wasted work.
+
+## v0.2.10
+
+- **More reliable share handling** when pool difficulty changes or share confirmations arrive late.
+
+## v0.2.9
+
+- **Keep mining after finding a share.** Fixes CPU and GPU mining getting stuck after a submission.
+- Clearer hardware names in mining logs.
+
+## v0.2.8
+
+- **More reliable NVIDIA pool mining** when new jobs arrive.
+- Better recovery from pool connection problems and steadier dashboard hashrate readings.
+
+## v0.2.7
+
+- **Steadier NVIDIA hashrate readings** make the dashboard easier to follow.
+
+## v0.2.6
+
+- **Automatic AVX-512 support** lets compatible CPUs use the faster hashing option without a custom build.
+- **More reliable pool statistics** through automatic pool API discovery.
+
+## v0.2.5
+
+- **Faster NVIDIA mining**, with improved automatic tuning for Blackwell GPUs.
+- **See your pool and local wallet balances together** while pool mining.
+- **Easier solo setup:** Seine finds wrapper-managed Blocknet daemons and waits for the wallet to become ready.
+
+## v0.2.4
+
+- **Keep pool mining moving after a share submission**, with more reliable continuation of the current job.
+- See pool block notifications while mining.
+
+## v0.2.3
+
+- **Resume mining immediately after finding a share**, without repeating work already done.
+- **Keep your own pool account details on screen** during dev-fee rounds.
+
+## v0.2.2
+
+- **Mine on more ARM devices**, including Raspberry Pi 4.
+- **More reliable pool submissions and reconnects.**
+- **A lower 1% dev fee on bntpool.com.**
+- A better-fitting dashboard in narrow terminals.
+
+Thanks to @donuts-are-good for the ARM compatibility fix.
+
+## v0.2.0
+
+- **Pool mining is here.** Connect to bntpool.com without running a local daemon.
+- **Guided first-run setup** saves your pool and payout settings for next time.
+- **Follow pool mining from the dashboard**, including network hashrate and accepted shares.
+- Keep solo mining available when you want to use your own daemon.
+
+## v0.1.12
+
+- **More accurate hashrate readings** during startup and pauses while the daemon is unavailable.
+- **Better automatic CPU thread sizing** when huge pages are reserved.
+- Clearer handling of incorrect wallet passwords.
+
+## v0.1.11
+
+- **Network hashrate matches the explorer**, with clearer dashboard number formatting.
+
+## v0.1.10
+
+- **Choose your payout address** with `--address`, with validation before mining starts.
+- **Spend less time on CPU tuning** at startup.
+- **Clearer mining status**, including network hashrate, startup progress and version information.
+- **Simpler source builds** with a Makefile that places the finished binary in the project root.
+
+Thanks to @donuts-are-good for the build improvements.
+
+## v0.1.9
+
+- **Support for more older NVIDIA GPUs** through a more compatible startup path.
+- A quieter dashboard shows dev-fee status without extra log messages.
+
+## v0.1.8
+
+- **Easier-to-read CPU memory setup warnings** in the dashboard.
+
+## v0.1.7
+
+- **Verify your full payout address at startup** in the logs.
+
+## v0.1.6
+
+- **See wallet balances and stale-share statistics** in the dashboard.
+- **Read complete log messages** with wrapping instead of truncation.
+- **Control Seine from other apps and scripts** through the new control API.
+- Improved automatic CPU tuning on macOS.
+
+## v0.1.5
+
+- **Clearer huge-page setup guidance** helps you configure CPU mining memory.
+- **Easier source builds** with stable Rust support.
+
+## v0.1.4
+
+- **Smoother CPU and NVIDIA mining** with reduced overhead.
+- **More useful GPU hashrate readings** between batches of work.
+- **Clearer daemon connection and sync status**, with a dashboard that fits your terminal width.
+
+## v0.1.3
+
+- **Automatic CPU tuning stays closer to peak hashrate.**
+- **Clearer stale-block reporting** when the chain advances before submission.
+
+## v0.1.2
+
+- **Faster CPU mining on Apple Silicon and x86-64**, with improved automatic hardware selection.
+- **Start CPU mining while NVIDIA GPUs initialize**, and reuse saved GPU setup on later launches.
+- **Easier daemon connection setup** through automatic discovery and clearer guidance.
+- **Stop startup or tuning with one Ctrl+C.**
+- **More accurate average hashrate and stale-block reporting.**
+
+**For existing configurations:** use `--daemon-dir` for the daemon's cookie
+location. `--data-dir` now stores Seine's own settings.
+
+## v0.1.1
+
+- **Stop automatic tuning cleanly with Ctrl+C.**
+- **Read long log messages more easily** in the terminal.
