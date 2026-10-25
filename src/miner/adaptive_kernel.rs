@@ -29,12 +29,13 @@ fn candidates_for(
         .into_iter()
         .filter(|k| supported.contains(k))
         .collect();
-    // The repeated high-count win is on Turin (family 1Ah, model 02h).
+    // Repeated native wins on Turin and Ryzen 9950X3D (family 1Ah, models 02h/44h).
     // Identity limits automatic experiments; the independent ISA/OS support
-    // check remains mandatory. Intel and desktop Zen 5 keep their current set.
+    // check remains mandatory. A measured win is still required per worker
+    // count/backing; this does not make streaming the unconditional startup ISA.
     if identity.vendor.as_deref() == Some("AuthenticAMD")
         && identity.family == Some(0x1a)
-        && identity.model == Some(0x02)
+        && matches!(identity.model, Some(0x02 | 0x44))
         && supported.contains(&CpuKernel::Avx512256Stream)
     {
         paths.push(CpuKernel::Avx512256Stream);
@@ -801,6 +802,12 @@ mod tests {
         };
         assert_eq!(candidates_for(&turin, &supported), supported);
         assert_eq!(candidates_for(&turin, &supported[..2]), supported[..2]);
+        let ryzen = CpuIdentity {
+            model: Some(0x44),
+            ..turin.clone()
+        };
+        assert_eq!(candidates_for(&ryzen, &supported), supported);
+        assert_eq!(candidates_for(&ryzen, &supported[..2]), supported[..2]);
         for identity in [
             CpuIdentity {
                 vendor: Some("GenuineIntel".into()),
@@ -812,7 +819,7 @@ mod tests {
                 ..turin.clone()
             },
             CpuIdentity {
-                model: Some(68),
+                model: Some(0x70),
                 ..turin.clone()
             },
             CpuIdentity::default(),
