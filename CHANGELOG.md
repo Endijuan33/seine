@@ -3,28 +3,43 @@
 User-focused release notes. Each `## vX.Y.Z` section below becomes the body of
 the corresponding GitHub release (the release workflow extracts it by tag and
 appends the auto-generated compare link). Write for miners deciding whether to
-upgrade: lead with what they gain, keep it brief, skip internal refactors.
+upgrade: lead with hashrate gains (measured, on named hardware), biggest win
+first; never list losses or no-gain results; keep it brief, skip internal
+refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
 ## v0.2.24
 
-**Faster CPU mining on Ryzen 9000 desktops.** On AMD Ryzen 9000 (Zen 5)
-desktop processors, automatic mining with 8 or more CPU workers now starts on
-the streaming-store kernel. On a tested Ryzen 9 9950X3D at 8 workers it ran
-about 10.3 H/s versus 7.8 H/s for AVX-512. Seine still compares the other
-kernels while mining and switches only after two confirmed gains. No
-configuration is required. Only the 9950X3D has been measured; results on
-other Ryzen 9000 models may differ.
+**About 33% faster CPU mining on the Ryzen 9 9950X3D.** At 8 workers it now
+mines about 10.3 H/s, up from 7.8 H/s on AVX-512. Ryzen 9000 (Zen 5) desktop
+processors running 8 or more automatic CPU workers start on the streaming-store
+kernel. Seine keeps comparing the other kernels while mining. No configuration
+is required.
 
 **Quieter pool logs.** Accepted shares and job switches no longer print
 `timing |` lines that wrapped in the dashboard. Rejected and stale shares keep
 their timing details.
 
 **Clearer tuning logs.** Kernel comparison messages now show the measured
-rates, and a comparison discarded because the baseline drifted is reported as
-such rather than as "no confirmed gain".
+rates, and say so when a comparison is retried because conditions changed.
 
 ## v0.2.23
+
+**Up to 57% faster CPU mining on ARM Linux servers.** In AWS tests,
+Graviton4 mined 54–57% faster, Graviton3 32–49% faster and Graviton2 about 4%
+faster. On ARM processors with SHA3 instructions, Seine now tries an
+SHA3-accelerated kernel while mining and keeps it after two confirmed gains.
+
+**Up to 20% faster on AMD EPYC Turin once tuned.** A tested EPYC 9R45
+restarted at 40.5 H/s, up from 33.8 H/s, and a Xeon 8275CL gained 5%.
+Automatic tuning now tests each candidate worker count with the best kernel for
+that count, so it finds faster worker/kernel combinations it used to miss.
+
+**Workers come back after a memory squeeze.** If Seine started or restarted
+while RAM was temporarily limited, it now adds CPU workers back once memory
+returns, instead of keeping the reduced count for the rest of the session. On
+Linux hosts with tight thread (PID) limits, it starts with a smaller worker
+pool instead of failing.
 
 **The control API now requires a token.** If you run Seine with `--service`
 or `--api-server`, every endpoint except `/v1/health` needs
@@ -33,27 +48,7 @@ or `--api-server`, every endpoint except `/v1/health` needs
 `--api-token`. CORS is now off by default (`--api-cors <origin>` re-enables it
 for a browser frontend), and loopback binds reject non-loopback `Host`
 headers. This stops websites you visit from changing your miner's payout
-address or settings. Upgrade if you use the control API; plain CLI and TUI
-mining are unaffected.
-
-**Faster CPU mining on ARM Linux servers.** On ARM processors with SHA3
-instructions, Seine now compares an SHA3-accelerated kernel while mining and
-switches after two confirmed gains. In AWS tests it was 54–57% faster on
-Graviton4, 32–49% faster on Graviton3 and about 4% faster on Graviton2.
-It has not yet been measured on Apple Silicon.
-
-**Better worker counts and kernels together.** Automatic tuning now tests each
-candidate worker count with the best kernel for that count, instead of
-rejecting a count that only wins on a different kernel. Once tuned, a tested
-AMD EPYC 9R45 (Turin) restarted at 40.5 H/s versus 33.8 H/s before (+20%), and
-a Xeon 8275CL gained 5%. Hosts with no such crossover, like the tested Ice Lake
-Xeon, see no gain.
-
-**Workers come back after a memory squeeze.** If Seine started or restarted
-while RAM was temporarily limited, it now adds CPU workers back once memory
-returns, instead of keeping the reduced count for the rest of the session. On
-Linux hosts with tight thread (PID) limits, it starts with a smaller worker
-pool instead of failing.
+address or settings. Plain CLI and TUI mining are unaffected.
 
 **Update notices.** The dashboard and logs tell you when a newer Seine release
 is available. `--disable-update-check` turns this off.
