@@ -10,6 +10,8 @@ actual elapsed time, including the end-of-round fence, from repeated runs. Evide
 for each row is linked, and chart data lives in
 [`assets/charts/benchmarks.json`](assets/charts/benchmarks.json).
 
+- [AMD EPYC 9355P bare metal](#amd-epyc-9355p-bare-metal)
+- [Automatic AMD tuning](#automatic-amd-tuning)
 - [Cloud servers](#cloud-servers)
 - [Desktops and laptops](#desktops-and-laptops)
 - [Kernel comparisons](#kernel-comparisons)
@@ -19,6 +21,53 @@ for each row is linked, and chart data lives in
 
 A thread here is one hashing thread with its own 2 GiB arena, the same number you set
 with `--threads` or see as "Threads" on the dashboard.
+
+## AMD EPYC 9355P bare metal
+
+<img src="assets/charts/bare-metal.svg" alt="AMD EPYC 9355P: 68.3 H/s with 64 threads and 1 GiB huge pages" width="900">
+
+A complete 32-core/64-thread Turin socket with 192 GiB of memory across twelve
+DDR5-4800 channels, running native Linux. These are **fixed manual configurations**,
+measured over four fresh 120-second invocations each, including startup and
+shutdown. Each comparison has its own paired control.
+
+| Configuration | H/s | Measured CPU-package W | CPU-package J/hash | Evidence |
+|---|---:|---:|---:|---|
+| 64 threads, 1 GiB pages, 280 W cap | 68.26 | 251.62 | 3.686 | [Page comparison](../experiments/amd-page-size-20261025/RESULTS.md) |
+| 64 threads, 2 MiB pages, 240 W cap | 66.56 | 213.03 | 3.200 | [Power-cap comparison](../experiments/cherry-epyc-energy-20261025/RESULTS.md) |
+
+The 1 GiB page comparison improved hashrate **0.91%** over its 2 MiB control.
+The separate 240 W cap comparison reduced package energy per hash **13.41%**
+while retaining **98.42%** of its 280 W control's hashrate. Package energy covers
+the CPU package; RAM and wall power were not measured. A cap is a configured
+limit, distinct from measured watts. The combined 1 GiB/240 W configuration has
+not been measured, so these gains are not combined.
+
+**Power capping is opt-in.** Seine's default tuning optimizes hashrate and does
+not apply the measured 240 W cap. The efficiency configuration is a manual
+choice for operators who prefer lower package power over peak throughput.
+
+## Automatic AMD tuning
+
+The following improvements are merged on `master` after v0.2.24 and await the
+next release. These runs use automatic thread and kernel selection with the
+balanced profile and prepared 2 MiB huge pages. Rates include discovery/startup
+and shutdown; cached restarts use each build's own previously learned settings.
+
+| Machine and phase | Before H/s | After H/s | Paired gain | Repetitions |
+|---|---:|---:|---:|---|
+| EPYC 9355P, cold start | 61.43 | 65.92 | +7.32% | Four 20-minute pairs |
+| EPYC 9355P, cached restart | 56.73 | 65.44 | +15.32% | Four 3-minute pairs |
+| EPYC 9R14, c7a.8xlarge, cold start | 26.90 | 27.67 | +2.85% | Two 15-minute pairs |
+| EPYC 9R14, c7a.8xlarge, cached restart | 28.06 | 30.30 | +7.99% | Two 3-minute pairs |
+
+The Turin comparison measures shorter high-count kernel samples against the
+already accepted challenger ordering. Genoa measures streaming eligibility with
+a 24-thread ceiling in a 32-vCPU VM. These are productive-work comparisons, not
+fixed-kernel speedups or measurements of fully converged throughput.
+[Turin evidence](../experiments/amd-trial-windows-20261025/RESULTS.md) ·
+[Genoa evidence](../experiments/genoa-streaming-20261025/RESULTS.md) ·
+[All 33 campaign records](../experiments/amd-campaign-20261025/benchmark-index.json).
 
 ## Cloud servers
 

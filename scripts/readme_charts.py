@@ -122,6 +122,7 @@ class Card:
 
     def save(self, path):
         self.fig.savefig(path, format="svg", transparent=True, metadata={"Date": None})
+        path.write_text("\n".join(line.rstrip() for line in path.read_text().splitlines()) + "\n")
         plt.close(self.fig)
 
 
@@ -208,10 +209,15 @@ def main():
                    "Best measured hashrate per CPU generation on AWS, seine v0.2.22+",
                    "AWS guests, 2 MiB huge pages, best kernel and thread count. Method: docs/PERFORMANCE.md",
                    args.out / "servers.svg", fonts)
+    if data.get("bare_metal"):
+        hbar_chart(data["bare_metal"], "AMD EPYC bare metal",
+                   "Whole-invocation hashrate, fixed manual configuration",
+                   "9355P: 192 GiB DDR5-4800, 12 channels, 280 W cap. Four runs. Method: docs/PERFORMANCE.md",
+                   args.out / "bare-metal.svg", fonts, groups=False)
     if data.get("best"):
         hbar_chart(data["best"], "Best by generation",
-                   "Peak measured hashrate, seine v0.2.22+",
-                   "Best measured configuration per CPU generation. Every CPU tested: docs/PERFORMANCE.md",
+                   "Peak measured hashrate in the stated configurations",
+                   "Fixed configurations; bare-metal 9355P and AWS guests. Full settings: docs/PERFORMANCE.md",
                    args.out / "best.svg", fonts, groups=False, big=True)
     hbar_chart(data["desktop"], "Desktops and laptops",
                "Whole-machine CPU hashrate, seine v0.2.22+",

@@ -8,7 +8,7 @@ first; never list losses or no-gain results; keep it brief, skip internal
 refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
-## Unreleased
+## v0.2.25
 
 **Faster automatic tuning on the tested AMD EPYC 9355P.** Building on the
 earlier streaming-first policy, shorter high-count samples improved completed
@@ -31,8 +31,6 @@ kernel selection on 2 MiB huge pages. Both confirmation cycles remain required.
 **AMD GPU builds no longer require NVIDIA support.** Building from source with
 `--no-default-features --features amd` now includes the shared hash-finalization
 helpers required by the HIP backend. Native Radeon validation remains pending.
-
-## v0.2.25
 
 **Fewer lost shares when the pool is busy.** Shares the pool turns away with
 "server busy, retry" or "rate limited, retry" are now resubmitted a few times
