@@ -19,7 +19,7 @@ def fixture():
                     'binary': role, 'warm': warm, 'pair': pair,
                     'wall_seconds': seconds, 'completed_hashes_lower_bound': hashes,
                     'completed_hps_lower_bound': hashes / seconds,
-                    'starting_threads': 32, 'selected_threads': 48,
+                    'starting_threads': 32, 'selected_threads': 48, 'cpu_profile': 'balanced',
                     'kernel_cache': {'host': {'os': 'linux', 'kernel_version': 'fixture'}},
                     'first_streaming_confirmation_observed_seconds': 190,
                     'log_sha256': 'log', 'window_sha256': 'window'}
@@ -36,6 +36,7 @@ class RecordTests(unittest.TestCase):
             self.assertEqual(record['hps'], 30)  # Arithmetic mean would be 25.
             self.assertTrue(record['hps_is_lower_bound'])
             self.assertEqual(record['selection'], 'automatic_cpu_count_and_kernel')
+            self.assertEqual(record['cpu_profile'], 'balanced')
             self.assertEqual(record['power_scope'], 'unmeasured')
             self.assertIsNone(record['package_watts'])
             self.assertIsNone(record['hashes_per_package_joule'])

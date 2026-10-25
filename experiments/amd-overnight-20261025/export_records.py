@@ -20,6 +20,7 @@ def records(analysis):
             runs = sorted((run for run in analysis['runs'].values()
                            if run['binary'] == role and run['warm'] == warm), key=lambda run: run['pair'])
             assert [run['pair'] for run in runs] == [1, 2, 3, 4]
+            assert len({run['cpu_profile'] for run in runs}) == 1
             hashes = sum(run['completed_hashes_lower_bound'] for run in runs)
             seconds = sum(run['wall_seconds'] for run in runs)
             rates = [run['completed_hps_lower_bound'] for run in runs]
@@ -39,6 +40,7 @@ def records(analysis):
                 'memory_channels_populated': 12, 'memory_type': 'DDR5', 'memory_speed_mts': 4800,
                 'memory_configuration_source': 'experiments/cherry-epyc-energy-20261025/benchmark-records.json',
                 'phase': phase, 'role': role, 'kernel': 'auto', 'workers': None,
+                'cpu_profile': runs[0]['cpu_profile'],
                 'available_hardware_threads': 64, 'affinity': 'auto', 'page_mode': 'large',
                 'hugepage_size_kib': 2048, 'page_setup': 'Explicitly reserved by experiment controller',
                 'selection': 'automatic_cpu_count_and_kernel',
@@ -72,7 +74,7 @@ if __name__ == '__main__':
     result = records(analyze(args.collected))
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'benchmark-records.json').write_text(json.dumps(result, indent=2) + '\n')
-    columns = ('id', 'hardware', 'phase', 'role', 'selection', 'page_mode', 'metric_scope',
+    columns = ('id', 'hardware', 'phase', 'role', 'selection', 'cpu_profile', 'page_mode', 'metric_scope',
         'source_revision', 'binary_sha256', 'repetitions', 'requested_seconds',
         'completed_hashes_lower_bound', 'invocation_seconds', 'hps', 'hps_is_lower_bound',
         'hps_sample_cv', 'power_scope', 'power_cap_w', 'package_watts', 'candidate_status')

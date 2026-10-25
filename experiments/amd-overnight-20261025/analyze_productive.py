@@ -76,6 +76,7 @@ def analyze(root):
                 'wall_seconds': window['elapsed_start_request_through_stopped_seconds'],
                 'starting_threads': int(start[1]), 'starting_reason': start[2],
                 'selected_threads': caches.get('tuning.json', {}).get('selected_threads'),
+                'cpu_profile': caches['tuning.json']['profile'],
                 'kernel_cache': caches.get('tuning.json.kernels.json'),
                 'first_streaming_confirmation_observed_seconds': min(confirmations) if confirmations else None,
                 'confirmation_observation_resolution_seconds': 10,
