@@ -39,7 +39,11 @@ def save(name, value):
 
 
 def cloud(action, *args):
-    return run([sys.executable, str(CLOUD), action, '--root', str(LEASE), *args], timeout=180)
+    try:
+        return run([sys.executable, str(CLOUD), action, '--root', str(LEASE), *args], timeout=180)
+    except subprocess.CalledProcessError as error:
+        (DATA / ('cloud-' + action + '-error.log')).write_text(error.stderr or '')
+        raise
 
 
 def ssh(command, timeout=30, check=True):
@@ -73,7 +77,11 @@ def main():
                 '--quota-code', 'L-1216C47A')['Quota']['Value']
     wait_until = time.monotonic() + 40 * 60
     while True:
-        active = aws('ec2', 'describe-instances', '--filters', 'Name=instance-state-name,Values=pending,running')
+        # A terminating instance may still hold quota during shutdown. Count
+        # it conservatively until AWS reports termination, not just until its
+        # state stops being "running".
+        active = aws('ec2', 'describe-instances', '--filters',
+                     'Name=instance-state-name,Values=pending,running,stopping,shutting-down')
         instances = [i for r in active['Reservations'] for i in r['Instances']
                      if i['InstanceType'][0] in 'acdhimrtz' and i.get('InstanceLifecycle') != 'spot']
         types = sorted({i['InstanceType'] for i in instances})
