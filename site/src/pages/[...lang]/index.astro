@@ -13,12 +13,12 @@ const locale = localeFromParam(Astro.params.lang);
 const t = useTranslations(locale);
 const RELEASE = `${REPO}/releases/latest/download/`;
 
-const downloads: { os: string; name: UiKey; note: UiKey; asset: string; detect: UiKey }[] = [
-    { os: 'windows', name: 'dlWindows', note: 'dlWindowsNote', asset: 'seine-windows-x86_64.zip', detect: 'detectWindows' },
-    { os: 'mac-arm', name: 'dlMacArm', note: 'dlMacArmNote', asset: 'seine-macos-aarch64.tar.gz', detect: 'detectMacArm' },
-    { os: 'linux', name: 'dlLinux', note: 'dlLinuxNote', asset: 'seine-linux-x86_64.tar.gz', detect: 'detectLinux' },
-    { os: 'linux-arm', name: 'dlLinuxArm', note: 'dlLinuxArmNote', asset: 'seine-linux-aarch64.tar.gz', detect: 'detectLinuxArm' },
-    { os: 'mac-intel', name: 'dlMacIntel', note: 'dlMacIntelNote', asset: 'seine-macos-x86_64.tar.gz', detect: 'detectMacIntel' },
+const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
+    { os: 'windows', name: 'dlWindows', asset: 'seine-windows-x86_64.zip', detect: 'detectWindows' },
+    { os: 'mac-arm', name: 'dlMacArm', asset: 'seine-macos-aarch64.tar.gz', detect: 'detectMacArm' },
+    { os: 'linux', name: 'dlLinux', asset: 'seine-linux-x86_64.tar.gz', detect: 'detectLinux' },
+    { os: 'linux-arm', name: 'dlLinuxArm', asset: 'seine-linux-aarch64.tar.gz', detect: 'detectLinuxArm' },
+    { os: 'mac-intel', name: 'dlMacIntel', asset: 'seine-macos-x86_64.tar.gz', detect: 'detectMacIntel' },
 ];
 
 // Best measured hashrate per generation (seine docs/PERFORMANCE.md; Zen 5 from the 32-thread run).
@@ -88,12 +88,11 @@ const scriptVars = {
 
   <section id="download">
     <div class="wrap">
-      <div class="sec-head"><h2>{t('dlTitle')}</h2><p>{t('dlSub')}</p></div>
+      <div class="sec-head"><h2>{t('dlTitle')}</h2></div>
       <table class="downloads">
         {downloads.map((d) => (
           <tr data-os={d.os}>
             <td class="os" data-match={t('dlMatch')}>{t(d.name)}</td>
-            <td class="note">{t(d.note)}</td>
             <td class="size" data-asset={d.asset}>{d.asset.endsWith('.zip') ? '.zip' : '.tar.gz'}</td>
             <td class="get"><a href={RELEASE + d.asset}>{t('dlGet')}</a></td>
           </tr>
@@ -101,7 +100,6 @@ const scriptVars = {
       </table>
       <div class="dl-foot">
         <span id="release-line" set:html={t('dlReleaseLineHtml')} />
-        <a href={`${RELEASE}SHA256SUMS.txt`}>{t('dlChecksums')}</a>
         <a href={`${REPO}/blob/master/docs/BUILDING.md`}>{t('dlBuild')}</a>
       </div>
     </div>
