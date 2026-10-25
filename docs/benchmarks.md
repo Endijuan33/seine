@@ -11,6 +11,10 @@ records arena setup and teardown. `kernel-effective` retains lifecycle timing.
 Older CPU builds charged arena lifecycle time to both modes, so compare only
 matching measurement semantics; a change in the reported rate is not itself
 a mining speedup.
+Schema 15 identifies the corrected CPU kernel timing. The built-in baseline
+check and CPU A/B script reject older CPU kernel reports, including with
+`--bench-baseline-policy ignore-environment`. Use updated builds for both
+variants, or `kernel-effective` to compare lifecycle costs with older builds.
 
 ## Capture the host before testing
 

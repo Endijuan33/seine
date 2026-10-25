@@ -3649,3 +3649,12 @@ Validation: 580 CPU-only workspace tests passed on the landing branch, eight har
 The dedicated real 2 GiB regression test was then explicitly run and passed:
 positive completed hashes, at least the requested hashing duration, and a
 strictly longer lifecycle timer. Cancellation before a round avoids allocation.
+
+The corrected timing is identified by report schema 15. CPU kernel baseline
+comparisons reject earlier schemas even when environment checks are disabled;
+the CPU A/B shell workflow also refuses to summarize legacy or mixed kernel
+reports. Backend, end-to-end, kernel-effective and GPU timing compatibility
+remain unchanged. Tests exercise each case and run the shell workflow with
+fixture executables, including both directions of a mixed-version pair. The
+CPU-only landing workspace passed 581 tests with eight hardware tests ignored; the
+three shell-workflow tests passed without allocating mining arenas.

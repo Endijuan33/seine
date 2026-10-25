@@ -299,7 +299,9 @@ type BackendEventAction = RuntimeBackendEventAction;
 // amd_max_lanes); schema-12 baselines remain comparable because the new
 // fields default to empty/None on load and are only cross-checked when both
 // reports are schema >= 13.
-const BENCH_REPORT_SCHEMA_VERSION: u32 = 14;
+// Schema 15 preserves the CPU kernel hashing timer separately from arena
+// lifecycle time. Older CPU kernel rates are not directly comparable.
+const BENCH_REPORT_SCHEMA_VERSION: u32 = 15;
 const BENCH_REPORT_COMPAT_MIN_SCHEMA_VERSION: u32 = 12;
 const BENCH_SHORT_WINDOW_WARN_SECS: u64 = 10;
 const BENCH_FENCE_JITTER_WARN_SECS: f64 = 0.250;
@@ -1395,6 +1397,14 @@ fn baseline_compatibility_issues(
         .iter()
         .chain(&baseline.backends)
         .any(|backend| backend.split('#').next() == Some("cpu"));
+    if includes_cpu
+        && (current.bench_kind == "kernel" || baseline.bench_kind == "kernel")
+        && (current.schema_version < 15 || baseline.schema_version < 15)
+    {
+        issues.push(
+            "CPU kernel timing changed: capture a schema-15 baseline that excludes arena setup and cleanup".to_string(),
+        );
+    }
     if includes_cpu {
         match (
             &baseline.config_fingerprint.cpu_kernel,
@@ -2710,6 +2720,49 @@ mod tests {
         let issues =
             baseline_compatibility_issues(&current, &baseline, BenchBaselinePolicy::Strict);
         assert!(issues.iter().any(|issue| issue.contains("schema mismatch")));
+    }
+
+    #[test]
+    fn cpu_kernel_timing_change_cannot_be_ignored_as_environment_drift() {
+        let mut current = sample_report();
+        current.bench_kind = "kernel".into();
+        let mut baseline = current.clone();
+        baseline.schema_version = 14;
+        for policy in [
+            BenchBaselinePolicy::Strict,
+            BenchBaselinePolicy::IgnoreEnvironment,
+        ] {
+            assert!(baseline_compatibility_issues(&current, &baseline, policy)
+                .iter()
+                .any(|issue| issue.contains("CPU kernel timing changed")));
+        }
+        baseline.schema_version = 15;
+        assert!(
+            baseline_compatibility_issues(&current, &baseline, BenchBaselinePolicy::Strict)
+                .is_empty()
+        );
+
+        // The timing correction changed neither CPU lifecycle measurements
+        // nor GPU kernel samples; compatible older reports still work there.
+        for kind in ["backend", "end_to_end", "kernel_effective"] {
+            current.bench_kind = kind.into();
+            baseline = current.clone();
+            baseline.schema_version = 14;
+            assert!(baseline_compatibility_issues(
+                &current,
+                &baseline,
+                BenchBaselinePolicy::Strict
+            )
+            .is_empty());
+        }
+        current.bench_kind = "kernel".into();
+        current.backends = vec!["nvidia".into()];
+        baseline = current.clone();
+        baseline.schema_version = 14;
+        assert!(
+            baseline_compatibility_issues(&current, &baseline, BenchBaselinePolicy::Strict)
+                .is_empty()
+        );
     }
 
     #[test]

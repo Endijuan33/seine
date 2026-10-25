@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## Unreleased
 
-- **More accurate CPU kernel benchmarks:** hashing speed is measured separately from memory setup and cleanup.
+- **More accurate CPU kernel benchmarks:** hashing speed is measured separately from memory setup and cleanup. Regenerate saved CPU kernel benchmark baselines before comparing runs.
 
 ## v0.2.26
 
