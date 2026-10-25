@@ -1,0 +1,21 @@
+{
+  "status": "UNMEASURED_NOT_SHIPPED",
+  "source_revision": "367dc212133045b8f480f463badcb6a3116d8b56",
+  "runtime_source_base": "d92abe5872bf215a2f001af4e3891c4afa1a3fcc",
+  "candidate_runtime_patch": "candidate-runtime.patch",
+  "patch_sha256": "28338cb26c35117bae602976ad20f78dd22927a9746e1ea67ed6057f7e05a4ce",
+  "reason": "Prior native measurements retain priority. The full four-hour validation plus collection/deletion margin cannot fit after the ring/page sequence within current funded access. Do not shorten the frozen protocol.",
+  "runtime_enabled_on_master": false,
+  "native_binaries_frozen": false,
+  "local_validation": {
+    "cpu_workspace_tests_passed": 565,
+    "ignored": 6,
+    "evidence_admission_tests_passed": 8
+  },
+  "future_requirements": [
+    "Rebase the isolated policy onto then-current master, including accepted ordering and Genoa eligibility.",
+    "Freeze shared raw-decision instrumentation in both builds and repeat all correctness gates.",
+    "Use the corrected actual-reclaim resource fixture, preserving the original failed fixture lesson.",
+    "Provide at least four hours of exclusive native runtime plus collection and provider-deletion margin."
+  ]
+}
