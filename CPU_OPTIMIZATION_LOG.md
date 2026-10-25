@@ -19,11 +19,13 @@ windows, a retry cooldown and switch slack. A synthetic three-path regression
 requires more than the former 900-second limit and confirms the streaming winner
 only after the second outer comparison.
 
-Validation before native runs: 507 CPU workspace tests passed (499 miner, five
-kernel, three integration), five existing resource tests ignored. Focused adaptive
-tests: 54 passed, two ignored, including interruption between pending kernel
-challengers. No native performance gain is claimed yet. Campaign protocol and
-identities: `experiments/cpu-followups-20261025/README.md`.
+Final CPU-only workspace validation: 508 tests passed (500 miner, five kernel,
+three integration), five existing resource tests ignored. Includes interruption
+between pending challengers and corrected cache-fixture schema restoration with
+an explicit positive compatibility assertion. Scoped Rust 1.93.0 formatting
+passes. Native binaries remain frozen at `7477914`; the later Rust edit changes
+only test fixtures. Native measurements are still in progress. Campaign protocol
+and identities: `experiments/cpu-followups-20261025/README.md`.
 
 ## Conventions
 

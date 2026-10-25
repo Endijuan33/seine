@@ -52,7 +52,7 @@ This file preserves the full engineering reference for AI agents doing optimizat
   requires AVX2 + AVX-512F/VL; automatic trials additionally require validated
   AMD family 26/model 2. The existing fallback remains unchanged. Mining tuning
   visits every eligible challenger and caches only complete comparisons for the
-  current worker counts/backing; schema 2 also fingerprints the candidate set.
+  current worker counts/backing; the cache also fingerprints the candidate set.
   Full-size parity and dirty arena/kernel-switch checks are available through
   `pow-kernel/examples/verify_streaming_dispatch.rs` and the optimized ignored
   `adaptive_kernel_real_arena_smoke` test. Keep these with future ring changes.

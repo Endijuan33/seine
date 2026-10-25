@@ -816,6 +816,7 @@ mod tests {
         cache.schema = 1;
         assert!(!cache.compatible(&host, "test"));
         cache.schema = CACHE_SCHEMA;
+        assert!(cache.compatible(&host, "test"));
         let mut other = host.clone();
         other.build_fingerprint = "changed".into();
         assert!(!cache.compatible(&other, "test"));
@@ -1267,7 +1268,8 @@ mod tests {
         assert!(cache.compatible(&host, "test"));
         cache.schema = 1;
         assert!(!cache.compatible(&host, "test"));
-        cache.schema = 2;
+        cache.schema = CACHE_SCHEMA;
+        assert!(cache.compatible(&host, "test"));
         let mut other = host.clone();
         other.build_fingerprint = "changed".into();
         assert!(!cache.compatible(&other, "test"));
