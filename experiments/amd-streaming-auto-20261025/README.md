@@ -112,6 +112,27 @@ run). Do not promote Ryzen eligibility on this evidence. Next step: log each
 trial's three samples and the comparison outcome, fix the message for
 `Inconclusive`, then rerun this probe.
 
+### Identity startup path (`aecc267`): passed
+
+Following the user's direction to allow per-architecture behaviour, uncached
+contexts with 8 or more workers on this identity now start on streaming. The
+other paths are then compared against it, and every decision logs its A/B/A
+rates. Native MSVC build of `aecc267` (`fdab54f9…`): build, 528 native tests
+(7 ignored) and verifier builds passed. `daemon_probe_startup.py`, the same
+probe with the startup assertion replacing "confirmed faster", passed:
+
+- Streaming started 3.2 s into a fresh cold run.
+- streaming 10.40 / avx512 7.77 / streaming 10.13 H/s gave "no confirmed gain"
+  for avx512. streaming 10.43 / avx2 7.57 / streaming 9.97 H/s gave the same for
+  avx2. Streaming was cached after the complete sweep at 197.5 s.
+- An exact-context restart restored streaming in 2.1 s.
+- The cold run averaged 9.71 H/s over 362 s, against 7.21 H/s over 1,020 s for
+  the earlier probe that started on AVX-512. The runs are unpaired, so treat the
+  gap as indicative; the A/B/A rates within this run show streaming about 33%
+  ahead of AVX-512.
+
+Evidence: ignored `data/amd-streaming-auto-20261025/startup-probe-results/`.
+
 ## Integration and handoff
 
 The research session owns PR50 joint tuning in `seine-cpu-followups`; do not alter
