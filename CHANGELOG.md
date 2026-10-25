@@ -8,13 +8,6 @@ first; never list losses or no-gain results; keep it brief, skip internal
 refactors.
 `scripts/release_tag.sh` refuses to tag a version that has no section here.
 
-## Unreleased
-
-**Safer manual CPU thread changes.** The dashboard explains blocked `+`/`-`
-inputs and checks current RAM headroom before increasing threads and again
-before starting replacement workers. Rejected increases keep mining and let
-you retry.
-
 ## v0.2.25
 
 **Faster automatic tuning on the tested AMD EPYC 9355P.** Building on the
@@ -49,6 +42,11 @@ retried.
 your difficulty during a dev-fee round, Seine used to restart that job from its
 first nonce and resubmit shares it had already sent. It now carries on where it
 stopped.
+
+**Safer manual CPU thread changes.** The dashboard explains blocked `+`/`-`
+inputs and checks current RAM headroom before increasing threads and again
+before starting replacement workers. Rejected increases keep mining and let
+you retry.
 
 ## v0.2.24
 
