@@ -1,0 +1,61 @@
+# Streaming-ring locality on SMT Turin
+
+Prepared before measuring these variants, during the separate productive-tuner
+campaign on 2026-10-25. No shipping kernel change is authorized by this protocol.
+
+## Hypothesis and controls
+
+The qualified EPYC 9355P exposes 48 KiB L1 data cache per physical core and two
+hardware threads per core. The shipping streaming kernel keeps a 64 KiB recent
+block ring per worker. Smaller rings could improve locality under SMT, but
+require more frequent MFENCE operations. The prior VM work did not establish
+this tradeoff on a complete socket with SMT. No gain is assumed.
+
+Generate **16- and 32-block rings**, against the unchanged 64-block control.
+Change the ring size, recent-reference distance and data-dependent prefetch mask
+consistently. Keep the strict less-than distance rule (equal distance aliases
+the destination), full cache-line streaming stores, MFENCE before older arena
+loads, final fence, SIMD schedule, prefetch distance and all other kernels intact.
+
+`prepare.py` builds portable CPU-only variants in this owned experimental
+worktree, saves each exact patch/source/binary identity, runs boundary/dirty-arena
+tests and the full-size reference verifier, and restores the original production
+source files after every build. Variant labels are experiment identities: all
+three binaries still report the same explicit streaming CLI kernel name.
+Do not publish a generated variant as a replacement for the normal binary.
+
+## Native sequence
+
+Run only after the current cold/cached tuner and lifecycle controller is finished
+and its evidence has been collected. Never overlap these workloads.
+
+1. Recheck host identity, stock 280 W cap, restored page pool/swap and available
+   PMU interfaces. Capture available events and a short diagnostic profile of
+   the control at 32 and 64 workers. Only interpret counters whose definitions
+   and complete scheduling are verified; do not infer DRAM bandwidth from a
+   generic cache-miss counter.
+2. Repeat full-size reference parity on the native host for every frozen build.
+   Reserve explicit 2 MiB HugeTLB arenas and verify backing. Keep affinity auto.
+3. Screen each challenger at 32 and 64 workers in two opposite-order pairs:
+   one 15-second warmup plus two measured 15-second rounds per invocation.
+   Keep every completed observation, including slower variants.
+4. A screen is only a shortlist. If a challenger is promising, confirm it against
+   ring 64 at that worker count with four fresh alternating pairs, one 30-second
+   warmup and two measured 30-second rounds. Require a lower descriptive 95%
+   paired throughput bound above +1%, correct hashes and no resource failures.
+5. If confirmed, make a separate four-pair package-energy comparison using
+   120-second whole-invocation windows, same count/cap/pages/affinity. Both binary
+   identities must be explicit; the existing worker/power comparator intentionally
+   disallows comparing different binaries. Validate raw measurements and common
+   context before computing a cross-build paired result.
+6. Only an accepted native result may motivate a hardware-gated production path.
+   Preserve the current implementation for unmeasured identities. Validate its
+   actual automatic path, fallback/ISA gate and caches before landing it.
+
+Collect all evidence and restore cap/pages/swap before the rental cleanup point.
+The existing six-hour Cherry reservation is USD 7.20. If a ready experiment needs
+more time, record a bounded extension before starting it; at most two additional
+hours would make Cherry USD 9.60 and, with the USD 3.25 Genoa reservation, USD
+12.85 total. This remains inside the user-approved USD 25 campaign limit. The
+overall goal cleanup deadline is 14:42:52 EDT; unused time or budget is not a
+reason to keep an idle rental.

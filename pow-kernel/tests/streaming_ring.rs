@@ -7,7 +7,9 @@ fn streaming_boundaries_dirty_reuse_and_guards_match_reference() {
     if !CpuKernel::Avx512256Stream.is_supported() {
         return;
     }
-    for kib in [8, 60, 64, 65, 68, 124, 128, 132, 252, 256, 260, 4096] {
+    for kib in [
+        8, 12, 16, 17, 20, 28, 32, 33, 36, 60, 64, 65, 68, 124, 128, 132, 252, 256, 260, 4096,
+    ] {
         let hasher = FixedArgon2id::with_kernel(kib, CpuKernel::Avx512256Stream).unwrap();
         let mut actual = [0u8; 32];
         let nonces = [0u64, 17, u64::MAX];
