@@ -26,7 +26,7 @@ def fixture():
                     'window': {'completed_hashes_lower_bound': hashes,
                         'elapsed_start_request_through_stopped_seconds': seconds,
                         'completed_hps_lower_bound': hashes / seconds},
-                    'caches': {'tuning.json': {'selected_threads': 24},
+                    'caches': {'tuning.json': {'selected_threads': 24, 'profile': 'balanced'},
                         'tuning.json.kernels.json': {'host': {'os': 'linux', 'kernel_version': 'fixture'}}}}
                 for name in ('miner.log', 'productive-window.json'):
                     manifest['results/' + label + '/' + name] = 'digest'
@@ -59,6 +59,7 @@ class RecordTests(unittest.TestCase):
             self.assertEqual(record['repetitions'], 2)
             self.assertEqual(record['guest_vcpus'], 32)
             self.assertEqual(record['autotune_worker_maximum'], 24)
+            self.assertEqual(record['cpu_profile'], 'balanced')
             self.assertEqual(record['virtualization'], 'KVM')
             for key in ('physical_cores', 'installed_memory_gib', 'memory_channels_populated',
                         'memory_speed_mts', 'power_cap_w', 'package_watts', 'hashes_per_package_joule'):

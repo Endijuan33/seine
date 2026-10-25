@@ -31,7 +31,7 @@ def records(analysis, provenance, manifest):
     for warm in (False, True):
         phase, prefix = ('cached_restart', 'joint-warm-') if warm else ('cold_discovery', 'joint-')
         for role in ('control', 'candidate'):
-            observations, hosts, memories = [], [], []
+            observations, hosts, memories, profiles = [], [], [], []
             for suffix in ('a', 'b'):
                 label = prefix + role + '-' + suffix
                 run = analysis['productive'][label]
@@ -48,7 +48,9 @@ def records(analysis, provenance, manifest):
                     'window_sha256': manifest['results/' + label + '/productive-window.json']})
                 hosts.append(run['caches']['tuning.json.kernels.json']['host'])
                 memories.append(run['identity']['meminfo_before']['MemTotal'] * 1024)
+                profiles.append(run['caches']['tuning.json']['profile'])
             assert len(set(memories)) == 1
+            assert len(set(profiles)) == 1
             assert all(host['os'] == hosts[0]['os'] and
                        host['kernel_version'] == hosts[0]['kernel_version'] for host in hosts)
             hashes = sum(run['completed_hashes_lower_bound'] for run in observations)
@@ -67,6 +69,7 @@ def records(analysis, provenance, manifest):
                 'installed_memory_gib': None, 'memory_channels_populated': None,
                 'memory_type': None, 'memory_speed_mts': None,
                 'phase': phase, 'role': role, 'kernel': 'auto', 'workers': None,
+                'cpu_profile': profiles[0],
                 'autotune_worker_maximum': 24, 'affinity': 'auto', 'page_mode': 'large',
                 'hugepage_size_kib': 2048, 'page_setup': 'Explicitly reserved by experiment controller',
                 'selection': 'automatic_cpu_count_and_kernel_with_24_worker_ceiling',
@@ -107,7 +110,7 @@ if __name__ == '__main__':
     result = records(analysis, provenance, json.loads(manifest_bytes))
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'benchmark-records.json').write_text(json.dumps(result, indent=2) + '\n')
-    columns = ('id', 'hardware', 'instance_type', 'hardware_scope', 'phase', 'role', 'selection',
+    columns = ('id', 'hardware', 'instance_type', 'hardware_scope', 'phase', 'role', 'selection', 'cpu_profile',
         'page_mode', 'metric_scope', 'source_revision', 'binary_sha256', 'repetitions',
         'requested_seconds', 'completed_hashes_lower_bound', 'invocation_seconds', 'hps',
         'hps_is_lower_bound', 'hps_sample_cv', 'power_scope', 'package_watts', 'candidate_status')

@@ -8,7 +8,8 @@ Tested 2026-10-25, 06:07–07:44 EDT: AWS c7a.8xlarge, AMD EPYC 9R14,
 32 guest vCPUs, one guest thread/core, 64 GiB allocated RAM, Linux/KVM.
 This is a VM allocation, not a complete EPYC socket. Physical channel population
 and DIMM speed were not visible. Both sides used explicit 2 MiB HugeTLB,
-automatic affinity and an automatic worker ceiling of 24.
+automatic affinity, the default balanced CPU profile and an automatic worker
+ceiling of 24.
 
 | Productive phase | Control H/s | Candidate H/s | Paired gains | Geometric gain |
 |---|---:|---:|---|---:|
