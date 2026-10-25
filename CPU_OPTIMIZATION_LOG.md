@@ -30,6 +30,8 @@ memory channels, package power and wall power were unmeasured.
 
 [Protocol, frozen source patch, decision and graph records](experiments/genoa-streaming-20261025/README.md).
 All 156 evidence files verified before immediate rental termination at 07:44 EDT.
+Integration passed 562 CPU-only workspace tests (six ignored), nine evidence/export
+tests and scoped Rust 1.93 formatting.
 
 ## 2026-10-25 bare-metal EPYC 9355P SMT and package-power efficiency
 

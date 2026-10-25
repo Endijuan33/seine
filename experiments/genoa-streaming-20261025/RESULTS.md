@@ -59,3 +59,7 @@ group were deleted immediately after collection, at 07:44 EDT. The conservative
 duration-based cost estimate is **$2.765**, including IPv4, storage and a transfer
 allowance; this is not an AWS invoice. Raw archive and manifest hashes are
 recorded in `results.json`; raw operational data remains private.
+
+Integration onto current master passed **562 CPU-only workspace tests** (six
+existing hardware/resource tests ignored), nine evidence/export tests and scoped
+Rust 1.93 formatting. The measured binary identities above remain unchanged.

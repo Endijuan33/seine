@@ -33,19 +33,17 @@ invocation; its worker sweep now includes explicit streaming-kernel selection.
 
 ## Throughput work independent of energy-counter access
 
-The next narrow eligibility investigation is **Genoa EPYC 9R14**, family
-25/model 17. [Existing native evidence](../experiments/high-end-streaming-20261025/RESULTS.md)
-measured streaming at 35.698 H/s versus AVX2 at 28.067 H/s at 24 workers
-(+27.19% across four alternating pairs), but automatic streaming trials still
-exclude this identity. The eight-worker screen was effectively flat. These
-results support investigating an additional candidate, not forcing streaming
-or assuming a worker count.
-
-Before enabling it, validate the candidate-set change through productive
-cold/cached runs, restart and resource-pressure recovery on Genoa. Keep the
-runtime ISA check and repeated-gain gate, and verify that old candidate-set
-caches are rejected. A throughput-only Linux host can answer this question;
-power counters are needed for the separate efficiency campaign below.
+**Genoa EPYC 9R14 automatic streaming trials are now validated.** On the tested
+32-vCPU c7a.8xlarge VM, family 25/model 17, two paired productive windows gained
+**2.85% during cold discovery and 7.99% on cached restarts** with automatic worker
+and kernel selection, a 24-worker ceiling and explicit 2 MiB HugeTLB. The runtime
+ISA check, two-confirmation gate and safe starting kernel remain intact.
+[The complete report](../experiments/genoa-streaming-20261025/RESULTS.md) includes
+reference parity, restart/resource behavior, measured source identities and
+[graph-ready records](../experiments/genoa-streaming-20261025/benchmark-records.json).
+This is VM throughput evidence; physical memory-channel population and power
+were unmeasured. The earlier +27.19% fixed-kernel result is a separate comparison
+and must not be presented as the automatic-mining gain.
 
 The native tuner constructor now uses real CPU identity even in a test binary.
 Synthetic fixtures explicitly request a neutral identity. Previously,
