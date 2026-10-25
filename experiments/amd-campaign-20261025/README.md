@@ -92,6 +92,18 @@ real resource recovery, allocation cooldowns, cache-context checks and kernel
 acknowledgements intact; test both native restart behavior and constrained
 recovery before adoption.
 
+The [snapshot review](cached-startup-review.json) strengthens this hypothesis
+across all eight earlier cached runs. At the first observed 47–48-worker
+allocation, about 10 seconds after launch, even host headroom with no reserve
+would cover only 42–43 workers if owned arenas were omitted. Using the recorded
+child-cgroup limit and no reclaimable-cache credit gives an estimated 27–28
+workers without those arenas, versus 75 with them; the later count-probe logs
+also report 75 available, capped at 64. These calculations are not captured
+startup-controller values: exact startup tracing is still needed. Reproduce the
+review with `review_cached_startup.py COLLECTED OUTPUT.json`; it verifies the
+original archive and preserves individual log/snapshot hashes. This diagnostic
+does not add a hashrate record or change the original failed-fixture status.
+
 ## Next hardware investigations
 
 1. **Ryzen 7950X and 9950X under native Linux.** Current aggregate inventory makes
