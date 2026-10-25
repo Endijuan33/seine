@@ -5,8 +5,8 @@ compares fixed-worker CPU benchmark invocations. It reads counters and current
 power/frequency settings. It never resets counters, reserves pages, changes a
 governor or power limit, or queries a GPU.
 
-Hardware measurement was deferred by the user on 2026-10-24. The current WSL
-host exposes no package counters. An empty probe is an availability result,
+The WSL development host exposes no package counters (rechecked 2026-10-25).
+An empty probe is an availability result,
 not zero power consumption. The tool refuses to launch a benchmark without
 usable counters.
 
@@ -88,3 +88,57 @@ efficiency. Pair order and host exclusivity remain the runner's responsibility.
 The same host/boot, binary, kernel, page mode, affinity and allowed CPU mask must
 hold across every pair. Differences in worker count and recorded power settings
 are allowed; kernel/page/affinity changes require separate experiments.
+
+## Automate a worker-count sweep
+
+The `sweep` command runs each challenger next to its own baseline, alternating
+A/B and B/A order across pairs and rotating challengers. It settles before every
+invocation, including the first. It keeps the same binary, kernel, page mode,
+CPU mask and power policies throughout, and stops if those conditions change.
+Every sample uses the same whole-invocation measurement contract described above.
+
+Example for a qualified 32-core EPYC host, after establishing kernel correctness
+and reserving enough explicit pages for 32 workers:
+
+```bash
+python3 -B scripts/bench_cpu_energy.py sweep \
+  --binary target/release/seine --kernel avx512-256-stream \
+  --threads 8 16 24 32 --baseline-threads 24 \
+  --page-mode large --seconds 60 --rounds 1 --pairs 4 \
+  --settle-secs 10 --max-seconds 2400 --retain-throughput .95 \
+  --label epyc-stock-power --output-dir data/energy/epyc-workers
+```
+
+This schedules 24 invocations: 24 minutes of configured work plus four minutes
+of settling, allocation, probes, fences and teardown. The 40-minute campaign
+budget bounds measurement execution; it does not terminate a rental or cap
+provider billing. `--timeout` bounds each invocation separately. Interruption
+stops the owned child, preserves completed and partial samples, and marks the
+campaign failed. Use a new output directory for a retry; evidence is never
+overwritten. No summary is produced for incomplete campaigns.
+
+`sweep.json` records the schedule and completed legs. Each leg contains the
+usual raw samples, benchmark report and logs. `summary.json` rechecks those
+observations and includes paired bootstrap comparisons against the baseline,
+pooled completed H/s, package watts, joules/hash, hashes/joule and variability.
+The observed frontier contains points where no other tested count achieves both
+at least as much throughput and at most as many joules/hash, with one strict
+improvement. The shortlist minimizes joules/hash among counts retaining the
+requested fraction of observed peak throughput. The baseline has more samples
+because it is repeated beside every challenger.
+
+This is an exploratory shortlist, **not a confirmed efficiency winner**. Repeat
+the shortlist versus peak-throughput count with fresh alternating pairs and
+longer windows before making a recommendation. Power-limit experiments remain
+separate: change only one supported setting outside the harness, preserve the
+original setting, and use `compare` to analyze the resulting paired samples.
+The harness does not change mining defaults or tune package power itself.
+
+For AMD research, `--kernel avx512-256-stream` explicitly selects the streaming
+variant; the miner still checks ISA support. Run separate sweeps for different
+kernels. `auto` uses the benchmark's selected kernel and does not reproduce the
+productive mining tuner's joint count/kernel search. Check that zero-config
+mining chooses well as a separate experiment after measuring the hardware.
+
+The current hardware qualification and rental sequence is in
+[AMD CPU efficiency campaign](AMD_CPU_EFFICIENCY.md).

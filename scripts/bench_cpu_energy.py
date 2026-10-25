@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path
 import signal
+import statistics
 import subprocess
 import sys
 import time
@@ -389,17 +390,148 @@ def compare(baseline: list[Path], candidate: list[Path]) -> dict:
             "interpretation": "Lower joules/hash is better. Package energy includes other processes; excludes unmeasured DRAM and wall-plug losses. Pair order must be controlled by the experiment runner."}
 
 
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--counter-root", type=Path, default=Path("/sys/class/powercap"))
-    commands = result.add_subparsers(dest="action", required=True)
-    commands.add_parser("probe", help="list available domains without starting a workload")
-    measure = commands.add_parser("run")
+def sweep_plan(threads: list[int], baseline: int, pairs: int) -> list[dict]:
+    if len(threads) < 2 or len(set(threads)) != len(threads) or any(n < 1 for n in threads):
+        raise EnergyError("sweep requires at least two distinct positive worker counts")
+    if baseline not in threads or pairs < 3:
+        raise EnergyError("baseline must be in --threads and at least three pairs are required")
+    candidates = [n for n in threads if n != baseline]
+    plan = []
+    for pair in range(1, pairs + 1):
+        # Rotate challengers and alternate A/B order instead of warming up in
+        # ascending worker order. Every challenger gets its own adjacent control.
+        offset = (pair - 1) % len(candidates)
+        order = candidates[offset:] + candidates[:offset]
+        for candidate in order:
+            legs = [("baseline", baseline), ("candidate", candidate)]
+            if pair % 2 == 0:
+                legs.reverse()
+            for role, workers in legs:
+                plan.append({"pair": pair, "candidate_threads": candidate, "role": role,
+                             "threads": workers,
+                             "directory": f"pair-{pair:02d}-threads-{candidate}-{role}"})
+    return plan
+
+
+def sweep_context(record: dict, report: dict) -> dict:
+    # Unlike a manual power A/B, a worker sweep changes ONLY worker count.
+    context = {key: record["context_before"][key]
+               for key in ("frequency_policies", "power_constraints", "boot_id", "allowed_cpus")}
+    context.update({"binary": record["binary_sha256"], "domains": record["domains"],
+                    "power_bound": record["max_domain_watts_assumption"],
+                    "pow": report["pow_fingerprint"], "cpu": report["environment"]["cpu_identity"],
+                    "kernel": report["config_fingerprint"]["cpu_kernel"],
+                    "page_mode": report["config_fingerprint"]["cpu_page_mode"],
+                    "affinity": report["config_fingerprint"]["cpu_affinity"],
+                    "seconds": report["bench_secs"], "rounds": report["rounds"]})
+    return context
+
+
+def summarize_sweep(root: Path, plan: list[dict], retain: float) -> dict:
+    """Revalidate every pair; rank measured means only, never promise a winner."""
+    comparisons = {}
+    measurements: dict[int, list[tuple[dict, dict]]] = {}
+    fixed = None
+    for leg in plan:
+        record, report = load_measurement(root / leg["directory"])
+        if report["cpu_threads"] != leg["threads"]:
+            raise EnergyError("sweep worker count differs from its plan")
+        context = sweep_context(record, report)
+        if fixed is None:
+            fixed = context
+        if context != fixed:
+            raise EnergyError("host, build, kernel, page or power settings changed across the sweep")
+        measurements.setdefault(leg["threads"], []).append((record, report))
+    for candidate in sorted({leg["candidate_threads"] for leg in plan}):
+        paths = {role: [root / leg["directory"] for leg in plan
+                        if leg["candidate_threads"] == candidate and leg["role"] == role]
+                 for role in ("baseline", "candidate")}
+        comparisons[str(candidate)] = compare(paths["baseline"], paths["candidate"])
+    points = []
+    for workers, records in sorted(measurements.items()):
+        hashes = sum(record["completed_hashes"] for record, _ in records)
+        seconds = sum(record["invocation_secs"] for record, _ in records)
+        joules = sum(record["total_package_joules"] for record, _ in records)
+        rates = [record["invocation_completed_hashes_per_second"] for record, _ in records]
+        points.append({"threads": workers, "samples": len(records),
+                       "completed_hps": hashes / seconds, "package_watts": joules / seconds,
+                       "joules_per_hash": joules / hashes, "hashes_per_joule": hashes / joules,
+                       "hps_sample_cv": statistics.stdev(rates) / statistics.mean(rates)})
+    peak = max(points, key=lambda point: point["completed_hps"])
+    for point in points:
+        point["throughput_fraction_of_peak"] = point["completed_hps"] / peak["completed_hps"]
+        point["on_observed_frontier"] = not any(
+            other["completed_hps"] >= point["completed_hps"]
+            and other["joules_per_hash"] <= point["joules_per_hash"]
+            and (other["completed_hps"] > point["completed_hps"]
+                 or other["joules_per_hash"] < point["joules_per_hash"])
+            for other in points)
+    efficient = min((point for point in points if point["throughput_fraction_of_peak"] >= retain),
+                    key=lambda point: point["joules_per_hash"])
+    return {"schema": 1, "scope": "whole_invocation_package_energy", "points": points,
+            "comparisons_to_baseline": comparisons, "retain_throughput_fraction": retain,
+            "observed_peak_threads": peak["threads"],
+            "efficiency_shortlist_threads": efficient["threads"],
+            "interpretation": "Exploratory observed means, not a statistically confirmed winner. "
+            "Confirm shortlisted counts with fresh interleaved pairs; package watts are not wall watts. "
+            "The baseline is repeated beside each challenger and has more samples."}
+
+
+def sweep(args: argparse.Namespace, zones: list[dict]) -> dict:
+    plan = sweep_plan(args.threads, args.baseline_threads, args.pairs)
+    packages = select_packages(zones, args.zone)
+    # Validate the sensor before reserving an output directory or starting work.
+    before = snapshot(packages)
+    interval_joules(before, dict(before, monotonic=before["monotonic"] + args.interval),
+                    packages, args.max_domain_watts)
+    check_capacity(max(args.threads), args.page_mode)
+    root = args.output_dir.expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=False)
+    manifest = {"schema": 1, "status": "running", "plan": plan, "completed": [],
+                "baseline_threads": args.baseline_threads, "settle_secs": args.settle_secs,
+                "max_seconds": args.max_seconds, "seconds": args.seconds, "rounds": args.rounds,
+                "label": args.label}
+    deadline = time.monotonic() + args.max_seconds
+    fixed_context = None
+    try:
+        for leg in plan:
+            write_json(root / "sweep.json", manifest)
+            remaining = deadline - time.monotonic() - args.settle_secs
+            if remaining <= args.seconds * args.rounds:
+                raise EnergyError("sweep time budget exhausted; partial runs retained without ranking")
+            time.sleep(args.settle_secs)
+            print(f"Energy sweep: pair {leg['pair']} {leg['role']}, {leg['threads']} workers", file=sys.stderr)
+            sample_args = argparse.Namespace(**vars(args))
+            sample_args.threads = leg["threads"]
+            sample_args.output_dir = root / leg["directory"]
+            sample_args.label = f"{args.label}/{leg['directory']}"
+            sample_args.timeout = min(args.timeout, deadline - time.monotonic())
+            run(sample_args, zones)
+            record, report = load_measurement(sample_args.output_dir)
+            context = sweep_context(record, report)
+            if fixed_context is None:
+                fixed_context = context
+            if context != fixed_context:
+                raise EnergyError("host, build, kernel, page or power settings changed across the sweep")
+            manifest["completed"].append(leg["directory"])
+        summary = summarize_sweep(root, plan, args.retain_throughput)
+        write_json(root / "summary.json", summary)
+        manifest["status"] = "complete"
+        return summary
+    except BaseException as exc:
+        manifest.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+        raise
+    finally:
+        write_json(root / "sweep.json", manifest)
+
+
+def measurement_arguments(measure: argparse.ArgumentParser, *, sweep_mode: bool = False) -> None:
     measure.add_argument("--binary", type=Path, required=True)
     measure.add_argument("--output-dir", type=Path, required=True)
-    measure.add_argument("--threads", type=int, required=True)
+    measure.add_argument("--threads", type=int, required=True, **({"nargs": "+"} if sweep_mode else {}))
     measure.add_argument("--page-mode", choices=("regular", "large", "large-1g"), default="regular")
-    measure.add_argument("--kernel", choices=("auto", "scalar", "avx2", "avx512", "avx512-256", "neon"), default="auto")
+    measure.add_argument("--kernel", choices=("auto", "scalar", "avx2", "avx512", "avx512-256",
+                                             "avx512-256-stream", "neon"), default="auto")
     measure.add_argument("--seconds", type=int, default=60)
     measure.add_argument("--rounds", type=int, default=3)
     measure.add_argument("--interval", type=float, default=0.25)
@@ -408,6 +540,24 @@ def parser() -> argparse.ArgumentParser:
                          help="conservative physical upper bound per package; bounds counter wraps")
     measure.add_argument("--label", default="current-settings")
     measure.add_argument("--zone", type=Path, action="append", help="select one source for each package when multiple drivers expose it")
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--counter-root", type=Path, default=Path("/sys/class/powercap"))
+    commands = result.add_subparsers(dest="action", required=True)
+    commands.add_parser("probe", help="list available domains without starting a workload")
+    measure = commands.add_parser("run")
+    measurement_arguments(measure)
+    campaign = commands.add_parser("sweep", help="interleave worker-count trials with package energy capture")
+    measurement_arguments(campaign, sweep_mode=True)
+    campaign.add_argument("--baseline-threads", type=int, required=True)
+    campaign.add_argument("--pairs", type=int, default=3)
+    campaign.add_argument("--settle-secs", type=float, default=10)
+    campaign.add_argument("--max-seconds", type=float, default=3600,
+                          help="total campaign budget, including settling and invocation overhead")
+    campaign.add_argument("--retain-throughput", type=float, default=.95,
+                          help="minimum observed fraction of peak H/s for the efficiency shortlist")
     comparison = commands.add_parser("compare", help="compare three or more paired worker/power measurements")
     comparison.add_argument("--baseline", type=Path, nargs="+", required=True)
     comparison.add_argument("--candidate", type=Path, nargs="+", required=True)
@@ -428,22 +578,37 @@ def main() -> int:
                 write_json(args.output, result)
             print(json.dumps(result, indent=2))
         else:
-            if args.threads < 1 or args.seconds < 1 or args.rounds < 1:
+            counts = args.threads if args.action == "sweep" else [args.threads]
+            if any(n < 1 for n in counts) or args.seconds < 1 or args.rounds < 1:
                 raise EnergyError("threads, seconds and rounds must be positive")
             if not all(math.isfinite(x) and x > 0 for x in (args.interval, args.timeout, args.max_domain_watts)):
                 raise EnergyError("interval, timeout and power bound must be finite and positive")
             if args.interval > 5:
                 raise EnergyError("counter interval must be at most five seconds")
+            if args.action == "sweep":
+                sweep_plan(args.threads, args.baseline_threads, args.pairs)
+                if not math.isfinite(args.settle_secs) or args.settle_secs < 0:
+                    raise EnergyError("settling time must be finite and nonnegative")
+                if not math.isfinite(args.max_seconds) or args.max_seconds <= 0:
+                    raise EnergyError("campaign time budget must be finite and positive")
+                if not math.isfinite(args.retain_throughput) or not 0 < args.retain_throughput <= 1:
+                    raise EnergyError("retained throughput must be in (0, 1]")
             def stop(signum, _frame):
                 raise KeyboardInterrupt(f"signal {signum}")
             previous = {signum: signal.signal(signum, stop) for signum in (signal.SIGINT, signal.SIGTERM)}
             try:
-                record = run(args, discover(args.counter_root))
+                zones = discover(args.counter_root)
+                if args.action == "sweep":
+                    summary = sweep(args, zones)
+                    print(json.dumps({key: summary[key] for key in
+                                      ("points", "observed_peak_threads", "efficiency_shortlist_threads", "interpretation")}, indent=2))
+                else:
+                    record = run(args, zones)
+                    print(json.dumps({key: record[key] for key in ("status", "completed_hashes",
+                                      "invocation_joules_per_completed_hash", "average_package_watts")}, indent=2))
             finally:
                 for signum, handler in previous.items():
                     signal.signal(signum, handler)
-            print(json.dumps({key: record[key] for key in ("status", "completed_hashes",
-                              "invocation_joules_per_completed_hash", "average_package_watts")}, indent=2))
         return 0
     except KeyboardInterrupt:
         print("CPU energy capture interrupted; owned benchmark stopped", file=sys.stderr)
