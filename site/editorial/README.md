@@ -40,9 +40,10 @@ thin keyword-permutation pages, which Google's scaled-content policy penalizes.
 7. **Publish.** Remove `draft: true`, add the post's row to `keyword-map.md`, remove it from
    `backlog.md`, and commit everything together. The build refuses a published post without a
    keyword-map row or without reviewed, current translations. Pushing to `master` deploys.
-8. **After publishing.** Submit the URLs in Google Search Console, Bing Webmaster Tools and
-   Baidu Ziyuan (for the Chinese pages), and link to the post from somewhere relevant (README,
-   release notes, pool FAQ, a reply on X). After 4-8 weeks, read the Search Console queries and
+8. **After publishing.** Google reads `sitemap.xml` (the domain property is verified in Search
+   Console) and IndexNow notifies Bing on each deploy; request indexing for a new post with URL
+   inspection in Search Console if you want it sooner. Submit Chinese pages to Baidu Ziyuan,
+   and link to the post from somewhere relevant (README, release notes, pool FAQ, a reply on X). After 4-8 weeks, read the Search Console queries and
    strengthen what ranks 5-20 rather than adding near-duplicates.
 
 ## Post format

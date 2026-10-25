@@ -9,7 +9,8 @@
     "dev": "astro dev --port 8791",
     "preview": "astro preview --port 8791",
     "check": "node scripts/check-content.mjs",
-    "overlap": "node scripts/check-content.mjs --overlap"
+    "overlap": "node scripts/check-content.mjs --overlap",
+    "indexnow": "node scripts/indexnow.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "8.0.3",

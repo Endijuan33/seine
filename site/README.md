@@ -23,6 +23,9 @@ npm run check      # editorial and translation checks only
   site and README stay in sync.
 - Fonts are self-hosted from `@fontsource` packages; Google Fonts is blocked in mainland China.
 
+After a deploy, `npm run indexnow` tells Bing and the other IndexNow engines about every URL in
+the sitemap (CI does this automatically). The key file is `public/<key>.txt`.
+
 Pushes to `master` that touch the site or brand assets deploy through
 `.github/workflows/site.yml`, which needs the `CLOUDFLARE_API_TOKEN` (Pages: Edit) and
 `CLOUDFLARE_ACCOUNT_ID` secrets. Manual deploy from `site/`:
