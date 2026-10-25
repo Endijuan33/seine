@@ -2,8 +2,10 @@
 import copy
 import hashlib
 import importlib.util
+import json
 import unittest
 
+from audit_decisions import audit
 from export_records import BASE, apply_review, records
 
 spec = importlib.util.spec_from_file_location('ordering_record_tests', BASE / 'test_export_records.py')
@@ -33,6 +35,22 @@ def fixture():
 
 
 class ExportTests(unittest.TestCase):
+    def test_saved_raw_review_roundtrips_and_still_rejects_changed_samples(self):
+        data, review = fixture()
+        data['numerical_gain_gate_passed'] = True
+        raw = audit('cpu-autotune | keeping current kernel; no confirmed gain '
+                    'raw_hashes_secs=[600/10,500/10,600/10]', short_trials=True)
+        data['resource_validation']['raw_kernel_decisions'] = {'first': raw}
+        data['raw_decision_audit'] = {'example': raw}
+        for key in ('resource_validation', 'raw_decision_audit'):
+            review[key] = copy.deepcopy(data[key])
+        saved = json.loads(json.dumps(review))
+        apply_review(data, b'evidence', saved)
+        saved['resource_validation']['raw_kernel_decisions']['first']['decisions'][0][
+            'samples_hashes_seconds'][0][0] += 1
+        with self.assertRaisesRegex(AssertionError, 'resource_validation'):
+            apply_review(data, b'evidence', saved)
+
     def test_acceptance_requires_gain_and_binds_raw_audit_and_archive(self):
         data, review = fixture()
         with self.assertRaises(AssertionError):

@@ -11,7 +11,7 @@ const MAX_DRIFT: f64 = 0.05;
 
 const CACHE_SCHEMA: u32 = 3;
 
-// Experimental policy, restricted to the native Turin validation identity.
+// Validated policy, restricted to the native Turin measurement identity.
 // Slow samples and explicitly lengthened trials retain the existing window.
 fn short_trials_for(
     identity: &crate::runtime_identity::CpuIdentity,

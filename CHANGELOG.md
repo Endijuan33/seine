@@ -10,6 +10,13 @@ refactors.
 
 ## Unreleased
 
+**Faster automatic tuning on the tested AMD EPYC 9355P.** Building on the
+earlier streaming-first policy, shorter high-count samples improved completed
+work by 7.32% over four paired 20-minute cold starts and 15.32% over four paired
+three-minute own-cache restarts. These runs used automatic worker/kernel
+selection, the balanced profile and 2 MiB huge pages. Two confirming comparisons
+and resource safeguards remain required; other CPU identities keep their policy.
+
 **About 8% faster cached CPU mining on the tested AMD EPYC 9R14.** Automatic
 tuning can now try the streaming kernel on validated Genoa processors and keep
 it after two confirmed gains. In a 32-vCPU AWS VM with a 24-worker ceiling and

@@ -1,9 +1,12 @@
 # Turin productive kernel-sample windows
 
 Prepared on 2026-10-25 while separate frozen Turin and Genoa validations were
-running. **Experimental branch only; native validation is running and no
-short-sample policy has shipped.** Earlier candidate-order, streaming-ring and
-page-size measurements completed and were archived before admission.
+running. **Accepted after the complete native protocol and raw-evidence review.**
+Four paired cold windows improved productive H/s by 7.32%; four own-cache restart
+pairs improved 15.32%. See [results and scope](RESULTS.md),
+[the bound adoption review](adoption-review.json), and
+[JSON graph records](benchmark-records.json). Earlier candidate-order,
+streaming-ring and page-size measurements were archived before admission.
 
 ## Hypothesis and candidate
 

@@ -2,6 +2,49 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 Turin high-count sample windows — accepted
+
+On the same EPYC 9355P with 32 cores/64 threads and twelve DDR5-4800 channels,
+four paired 1,200-second cold productive windows improved **7.316%**
+(descriptive 95% interval +6.988 to +7.598%). Four paired 180-second own-cache
+restarts improved **15.323%** (+13.857 to +17.839%). Rates are completed-hash
+lower bounds over service start through shutdown, with automatic count/kernel
+selection, balanced profile, explicit 2 MiB pages and the stock 280 W cap.
+Package, DRAM and wall power are unmeasured. The baseline already includes the
+earlier accepted challenger ordering; do not multiply independent gains.
+
+Only AuthenticAMD family 1Ah/model 02h, a supported streaming candidate and the
+default six-second tuning setting qualify. Samples may finish after both ten
+seconds and 256 hashes; slow samples retain the original rule. The 2% gain,
+quantization, drift, two-cycle confirmation, acknowledgements and resource gates
+remain unchanged. The affected kernel-cache fingerprint changes once.
+
+Cold runs started at 32 workers. Candidate counts finished at 64, versus 47–48
+for control, and first streaming confirmation was observed near 80 rather than
+201 seconds with ten-second snapshots. Own-cache starts restored their own
+counts; streaming restoration appeared at 4.6 versus 36.5–37.0 seconds.
+Candidate cached runs ended at 63–64 workers. This does not establish full
+convergence, first-upgrade cache behavior or a fixed-kernel throughput gain.
+The fixed-streaming build control changed only +0.074% without correction.
+
+All 21 full-size reference/dirty-arena/guard transitions passed. The raw audit
+recomputed all 68 productive decisions and five resource decisions, including
+all eight promotions. Candidate productive samples exercised 120 sub-30-second
+windows; the resource fixture also exercised three 28–29-second samples once
+their counts reached 256. Real reclaim produced 4,257 memory-high events and
+32.258 seconds of memory PSI, with parking at zero workers and no OOM/swap.
+The remembered count of three survived a one-worker restart cap; recovery
+allocated multiple arenas, including a three-worker probe. Opt-out and settings
+restoration passed. All 303 archive entries verified.
+
+Uninstrumented shipping logic passed 566 CPU-only workspace tests (six ignored)
+and 586 AMD-feature workspace tests (nine ignored). The exact ignored cases are
+disclosed in the result report; the three native AMD GPU tests did not run.
+Eighteen Python experiment tests cover admission, evidence and export, including
+JSON round-trip binding of raw decisions and rejection of changed samples.
+
+[Full results, acceptance review, plots and four graph records](experiments/amd-trial-windows-20261025/RESULTS.md).
+
 ## 2026-10-25 Turin page size and streaming-buffer locality
 
 On the qualified 32-core/64-thread EPYC 9355P, four alternating same-binary

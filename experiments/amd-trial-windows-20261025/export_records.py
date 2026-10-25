@@ -19,7 +19,9 @@ def apply_review(analysis, manifest_bytes, review):
     assert review['decision'] in ('accept_short_samples', 'reject_short_samples')
     assert review['result_manifest_sha256'] == hashlib.sha256(manifest_bytes).hexdigest()
     for key in ('binary_provenance', 'resource_validation', 'raw_decision_audit', 'evidence'):
-        assert review[key] == analysis[key], key
+        # Reviews are JSON files: tuples become arrays and histogram keys become
+        # strings. Compare their persisted representation without dropping fields.
+        assert json.loads(json.dumps(review[key])) == json.loads(json.dumps(analysis[key])), key
     for phase in ('cold', 'warm', 'fixed_streaming_build_control'):
         assert review[phase + '_comparison'] == analysis[phase]['comparison'], phase
     assert review['rationale'].strip()
