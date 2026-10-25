@@ -32,6 +32,12 @@ the release builder can set `SEINE_TELEMETRY_URL` to the complete HTTPS ingest U
 when building Seine. This supplies the default destination with no startup prompt.
 Until then, ordinary builds make no telemetry requests.
 
+Official release builds read the GitHub repository variable
+`SEINE_TELEMETRY_URL`; set it to the verified HTTPS ingest URL before tagging a
+release. Clearing it disables the default in future builds, not already
+distributed binaries. Release archives include `PRIVACY.md`. The website workflow
+also publishes changes made only to that policy file.
+
 The first report is sent after five minutes; subsequent reports are hourly.
 Requests have a five-second total timeout, no redirects, no offline spool and no
 immediate retries. HTTP is allowed only for loopback testing. CPU-only builds need
@@ -102,6 +108,37 @@ views use this retained window; no permanent device inventory is kept. At 1,000
 always-running installations, expect about 24,000 reports/day. At an assumed
 4 KiB per report, that is about 3 GB of raw payload per 30 days, before PostgreSQL
 indexes, WAL and backups. Revisit disk sizing using measured production growth.
+
+### Recovery backups
+
+For a checkout at `/opt/seine`, install the supplied daily backup timer:
+
+```sh
+sudo install -m 644 telemetry/deploy/seine-telemetry-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now seine-telemetry-backup.timer
+sudo systemctl start seine-telemetry-backup.service
+```
+
+`backup.sh` writes private schema and compressed CSV files under
+`/var/backups/seine-telemetry`. Each backup contains only the most recent seven
+days of reports and expires after seven days, so backed-up records stay well
+inside the 30-day raw-data limit. Expiration runs even if the database is down.
+The timer must keep running; purge expired backups before bringing an offline
+host back into service. Full-volume snapshots must not retain telemetry beyond
+the same limit. These local backups protect against accidental database changes,
+not loss of the server; an off-host copy needs the same access and expiry rules.
+
+Test recovery into a **separate empty database**, using PostgreSQL 17 or later:
+
+```sh
+psql "$RESTORE_DATABASE_URL" -v ON_ERROR_STOP=1 -f /path/to/backup/schema.sql
+gzip -dc /path/to/backup/reports.csv.gz | psql "$RESTORE_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'COPY telemetry_reports (report_id, installation_id, received_at, payload) FROM STDIN WITH (FORMAT csv)'
+```
+
+Check `systemctl status seine-telemetry-backup.timer`, backup file freshness and
+free disk space during operations. Restored records retain their original receipt
+times and remain subject to collector cleanup.
 
 ## Analysis
 

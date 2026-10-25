@@ -3,7 +3,7 @@ name: site
 on:
   push:
     branches: [master]
-    paths: ["site/**", "docs/assets/brand/**", ".github/workflows/site.yml"]
+    paths: ["site/**", "PRIVACY.md", "docs/assets/brand/**", ".github/workflows/site.yml"]
   workflow_dispatch:
 
 permissions:
