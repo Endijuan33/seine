@@ -137,6 +137,11 @@ selection commands, and the publicly frozen executable checksums. These checks
 were made explicit while the unchanged native protocol was running; they do not
 change its measurements or numerical acceptance thresholds.
 
+The same raw-decision review also covers the resource fixture's initial run,
+constrained restart and explicit opt-out logs. These checks are included in the
+resource evidence bound to the final adoption review; they do not contribute
+additional hashrate observations to the productive comparison.
+
 ```sh
 /usr/bin/python3 experiments/amd-trial-windows-20261025/analyze.py COLLECTED results.json
 /usr/bin/python3 experiments/amd-trial-windows-20261025/export_records.py COLLECTED OUTPUT --review adoption-review.json

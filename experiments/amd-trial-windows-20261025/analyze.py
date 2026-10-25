@@ -92,6 +92,8 @@ def analyze(root):
     logs = {role: (folder / (prefix + role + '.service.log')).read_text() for role in samples}
     resource = audit_samples(samples['first'], samples['restart'], samples['optout'],
         read(folder / 'seed-before-restart.json'), read(folder / 'seed-during-constrained-restart.json'), logs)
+    resource['raw_kernel_decisions'] = {
+        role: audit(text, short_trials=True) for role, text in logs.items()}
     resource['reclaim_helper_exit'] = read(folder / 'reclaim-load-exit.json')
     assert resource['reclaim_helper_exit']['exit_code'] is not None
     helpers = read(root / 'helper-provenance.json')
