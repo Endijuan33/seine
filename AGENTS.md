@@ -93,6 +93,17 @@ set so stale caches from a different path get re-tuned, not reused.
 - Format only files you edited. No repo-wide `cargo fmt --all` and no
   formatting-only churn in commits unless asked.
 
+## Release notes (`CHANGELOG.md`)
+
+- Word every entry for miners, by its benefit to them. Lead with the hashrate
+  gain (H/s and/or %) and the hardware it was measured on, then say what
+  changed. Order entries biggest hashrate win first; non-performance items
+  come after.
+- Never show losses, regressions or no-gain results in release notes. Those
+  belong in `CPU_OPTIMIZATION_LOG.md` / `NVIDIA_OPTIMIZATION_LOG.md`.
+- Quote only measured gains on named hardware, and don't extrapolate to
+  untested models. Keep entries brief and skip internal refactors.
+
 ## References
 
 - Every flag: `docs/MINER_FLAGS.md` / `seine --help`.
