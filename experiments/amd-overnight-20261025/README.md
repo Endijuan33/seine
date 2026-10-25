@@ -37,6 +37,9 @@ drift gate, retry, ISA check or resource-pressure safeguard.
   DDR5-4800 channels, 192 GiB installed RAM, one NUMA node. Stock 280 W cap.
 - First check the new fixture/controller for 60 seconds; this plumbing run is
   excluded from comparative results.
+- Check fixed streaming at 32 workers in three alternating build-control pairs
+  (one 20-second warmup, two measured 20-second rounds per invocation). This
+  separates changes in discovery from incidental build/code-layout effects.
 - Four fresh paired cold runs, alternating control/candidate then
   candidate/control, **1,200 seconds per invocation**. Each gets an empty data
   directory. All 64 logical CPUs are available, with no explicit thread count,
