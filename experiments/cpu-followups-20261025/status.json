@@ -9,7 +9,7 @@
       "source": "7477914",
       "status": "native validation complete: C5 +2.0% cold/+5.4% cached, Ice Lake -1.1%/-0.2%, Turin +3.5%/+19.9%; see joint-native-results.json",
       "local_tests": "508 passed, 5 existing resource tests ignored; pinned scoped formatting passed",
-      "native_boundary": "C5 lifecycle: pressure/load/park/constrained-restart passed; recovery failed as expected without PR43 (now merged to master)",
+      "native_boundary": "Merged build 211657d (with PR43) lifecycle COMPLETE on fresh C5: interrupt/restore, remembered count, recovery 1->2->3, opt-out; no swap/OOM",
       "review_fix": "Test-only cache schema fixture corrected and verified in final workspace suite; frozen native production code unchanged"
     },
     "intel_regression": {
@@ -29,7 +29,8 @@
   "hardware": {
     "intel": "terminated 2026-10-25T02:26:53Z",
     "skylake": "terminated 2026-10-25T02:29:21Z",
-    "epyc": "terminated 2026-10-25T03:57:33Z (joint-only takeover controller)"
+    "epyc": "terminated 2026-10-25T03:57:33Z (joint-only takeover controller)",
+    "lifecycle-merged": "c5.4xlarge i-0c8b169390c8bf5a2 terminated 2026-10-25T04:51:34Z"
   },
   "alignment_preflight": "Shared Cargo target reused control artifact; identical SHA caught before timing and excluded. Replacement built in a new isolated target: distinct source fingerprints and SHA verified, all 13 inspected function entries aligned to 64 bytes."
 }

@@ -60,11 +60,18 @@ runs also restored the confirmed streaming kernel on Turin and AVX2 on C5. The
 cold cost of searching more contexts is visible: +3.5% cold versus +19.9% cached
 on Turin, and −1.1% cold on Ice Lake.
 
-Separate C5 RAM/load/restart lifecycle on the candidate: pressure, CPU-load,
-parking and constrained-restart phases passed. Recovery above the temporary
-one-arena cap failed, staying at 1 thread for 210 s. That is the v0.2.22 bug
-fixed by PR43, which this branch deliberately excludes. Lifecycle validation of
-the combined policy is therefore still needed after PR43 merges.
+C5 RAM/load/restart lifecycle, frozen candidate without PR43: the pressure,
+CPU-load, parking and constrained-restart phases passed. Recovery above the
+temporary one-arena cap failed, staying at 1 thread for all 104 samples, which
+is the v0.2.22 bug PR43 fixes.
+
+Rerun on the merged build (`211657d`, master with PR43 plus this branch;
+Linux CPU-only SHA-256 `41a33332…`) on a fresh c5.4xlarge: **COMPLETE**, with
+no swap or OOM and all 21 archive files verified. A 3 GiB memory limit
+interrupted the joint comparison and restored the safe baseline. The
+remembered 3-worker count survived the constrained restart. After RAM
+returned, recovery grew 1 → 2 → 3 workers (45/43/16 samples), followed by the
+explicit opt-out check. Runner: `run_lifecycle_merged.py`.
 
 ## Conventions
 
