@@ -1,7 +1,7 @@
 {
   "schema": "seine-benchmark-campaign-index/v1",
   "date": "2026-10-25",
-  "record_count": 29,
+  "record_count": 33,
   "datasets": [
     {
       "campaign": "cherry-epyc-energy-20261025",
@@ -152,6 +152,35 @@
       ],
       "selection_modes": [
         "manual_fixed_configuration"
+      ],
+      "workloads": [
+        "legacy_argon2id_2gib"
+      ]
+    },
+    {
+      "campaign": "amd-trial-windows-20261025",
+      "status": "accepted_automatic_policy",
+      "default_policy_changed": true,
+      "results": "experiments/amd-trial-windows-20261025/RESULTS.md",
+      "records_json": "experiments/amd-trial-windows-20261025/benchmark-records.json",
+      "records_csv": "experiments/amd-trial-windows-20261025/benchmark-records.csv",
+      "records_json_sha256": "38f96c02f866bf61d4afd7dcec7ff7fc8d6b605ed49541f4d0e435f98efc8fef",
+      "records_csv_sha256": "0bc9d715701db40859e2e82c7c3573295db80f8658563f0ffd583377a51f06f6",
+      "record_count": 4,
+      "record_ids": [
+        "turin-short-samples-cold_discovery-control",
+        "turin-short-samples-cold_discovery-candidate",
+        "turin-short-samples-cached_restart-control",
+        "turin-short-samples-cached_restart-candidate"
+      ],
+      "metric_scopes": [
+        "completed_hash_lower_bound_from_start_request_through_stopped_service"
+      ],
+      "power_scopes": [
+        "unmeasured"
+      ],
+      "selection_modes": [
+        "automatic_cpu_count_and_kernel"
       ],
       "workloads": [
         "legacy_argon2id_2gib"

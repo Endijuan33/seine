@@ -1,9 +1,10 @@
 # AMD performance campaign — 2026-10-25
 
-Research status at **10:40 EDT**: five completed datasets provide **29 reusable
-benchmark records**. The full short-sample tuning experiment is still running;
-the combined page/power comparison is prepared but unmeasured. This is an
-interim research report, not a claim that the campaign or rental cleanup is done.
+Hardware measurements finished at **13:40:36 EDT**: six completed datasets provide
+**33 reusable benchmark records**. The accepted short-sample policy and its
+evidence are landed on `master`. The combined page/power comparison remains
+unmeasured. **Cherry provider deletion and final billing verification are still
+pending authentication**; this report does not claim rental cleanup is complete.
 
 ## Measured results
 
@@ -13,6 +14,8 @@ interim research report, not a claim that the campaign or rental cleanup is done
 | Same Genoa VM | Each run's own-cache restart, two 180-second pairs | +7.99% productive H/s | Same accepted eligibility change; separate cached phase |
 | EPYC 9355P | Automatic cold discovery, four 1,200-second pairs | +0.685% productive H/s; first streaming confirmation observed about 90 seconds earlier | Challenger ordering accepted for family 1Ah/model 02h |
 | Same Turin host | Each run's own-cache restart, four 180-second pairs | −0.092%, interval spans zero | Preserved alongside accepted cold-discovery result |
+| EPYC 9355P, shorter high-count samples | Automatic cold discovery, four 1,200-second pairs against the accepted ordering policy | +7.316% productive H/s | Sample policy accepted for family 1Ah/model 02h with default timing |
+| Same short-sample comparison | Each run's own-cache restart, four 180-second pairs | +15.323% productive H/s | Own-cache startup and count trajectories included; not a fixed-kernel gain |
 | EPYC 9355P, 32 → 64 fixed workers | Fresh 60-second whole-invocation pairs, stock cap | +11.54% H/s, −8.12% CPU-package J/hash | Manual SMT scaling evidence |
 | EPYC 9355P, 280 → 240 W cap | Four fresh 120-second pairs, 64 fixed workers | −13.41% CPU-package J/hash, retaining 98.42% H/s | Manual power configuration; 66.56 H/s at measured 213.03 package W |
 | EPYC 9355P, 2 MiB → 1 GiB pages | Four fresh 120-second pairs, same executable and 64 workers | +0.908% H/s, −0.330% CPU-package J/hash | Manual page configuration; measured package watts rose 0.575% |
@@ -46,6 +49,7 @@ field against the JSON record and binds both formats by checksum. Revalidate it 
 - [Turin automatic challenger ordering](../amd-overnight-20261025/RESULTS.md): four records.
 - [Streaming ring screen and rejected confirmation](../amd-ring-locality-20261025/RESULTS.md): ten records.
 - [Explicit 1 GiB pages](../amd-page-size-20261025/RESULTS.md): two records.
+- [Turin high-count sample windows](../amd-trial-windows-20261025/RESULTS.md): four records.
 
 Each dataset preserves frozen source/binary identity, settings, repetitions,
 variability, raw numerators and observation hashes. Raw archives remain private
@@ -60,19 +64,45 @@ full-size reference/dirty-arena/guard transitions; the 1 GiB verifier additional
 confirmed actual 1 GiB mapping. Ignored hardware tests are disclosed in each
 integration report, not counted as native passes.
 
-## Remaining work in this campaign
+## Short-sample validation and deferred combined configuration
 
-The [short-sample experiment](../amd-trial-windows-20261025/README.md) compares
-unchanged kernel code with shorter, high-count tuning samples. Its full four-pair
-cold/cache protocol and real-reclaim lifecycle must finish before adoption. Early
-logs confirm that the candidate exercises 10-second samples and that its logged
-decisions agree with raw counts; this is not a throughput conclusion.
+The [short-sample experiment](../amd-trial-windows-20261025/RESULTS.md) completed
+all sixteen cold/cache windows, 21 full-size reference transitions and the full
+real-reclaim lifecycle. All 303 archive entries verified. The cold descriptive
+interval was +6.988 to +7.598%; cached was +13.857 to +17.839%. Every one of the
+68 productive and five resource kernel decisions recomputes from raw counts and
+durations. Resource pressure parked workers at zero, preserved a three-worker
+cache under a one-worker restart limit, and recovered actual multiple arenas
+without OOM/swap. Opt-out and restored settings passed. The fixed-streaming build
+control changed only +0.074%, without correction.
+
+First streaming confirmation was observed near 80 rather than 201 seconds. Cold
+candidates cached 64 workers versus control 47–48. Each cached restart restored
+its own count, and candidates finished at 63–64; neither phase establishes full
+convergence or first-upgrade cache behavior. Package and wall power are unmeasured
+for this automatic-policy comparison.
 
 The [combined configuration protocol](../amd-efficient-config-20261025/README.md)
-compares 2 MiB/280 W against 1 GiB/240 W directly. It may start only after the full
-previous experiment and evidence collection, with enough time for all four pairs
-and cleanup. Until measured, its gain is unknown. If the complete protocol cannot
-fit, preserve it as unmeasured rather than publishing a partial comparison.
+would compare 2 MiB/280 W against 1 GiB/240 W directly. It was **not launched**:
+fresh provider cleanup access was unresolved when the preregistered **13:42 EDT**
+latest-start deadline passed. Its gain remains unknown. No shortened comparison,
+synthetic combined point, new rental or policy change was substituted.
+
+## Landed work
+
+- `9886ba6`: accepted high-count Turin samples, full evidence, four records and plots.
+- `e517d68`: accepted Turin challenger ordering and bound resource supplement.
+- `caab47f`: Genoa streaming-validation evidence and integration finalization.
+- `d92abe5`: package-energy, worker and power-cap measurements.
+- `b254fb6`: rejected buffer confirmation and measured 1 GiB page comparison.
+- `4c2605e`: AMD-only build fix and qualified Radeon bring-up guidance.
+
+No release tag or production deployment was made. The uninstrumented short-sample
+logic passed 566 CPU-only workspace tests and 586 AMD-feature workspace tests;
+six and nine cases respectively remained ignored, including all three native
+AMD GPU tests. The native result report names those cases. Eighteen short-sample
+experiment tests cover admission, auditing and graph export, including serialized
+review binding and rejection of altered raw samples.
 
 ## Separate software follow-up: cached startup
 
@@ -104,6 +134,12 @@ startup-controller values: exact startup tracing is still needed. Reproduce the
 review with `review_cached_startup.py COLLECTED OUTPUT.json`; it verifies the
 original archive and preserves individual log/snapshot hashes. This diagnostic
 does not add a hashrate record or change the original failed-fixture status.
+
+The later short-sample comparison also observed 36.5–37.0-second restoration
+delays on controls starting at 47–48 workers, versus 4.6 seconds on candidates
+starting at 64. This is consistent with the proposed follow-up, but count and
+cache trajectories also differ. It does not isolate a startup-accounting fix;
+the exact trace and targeted experiment remain future work.
 
 ## AMD GPU build preparation
 
@@ -150,9 +186,17 @@ This is build preparation, not native HIP validation or a GPU performance point.
 The approved campaign limit is USD 25. Current reservations are USD 13.20 for
 Cherry and USD 3.25 for AWS, USD 16.45 total. Account top-ups are credit funding,
 not a second rental charge. Final Cherry consumption and cleanup are pending.
+The conservative estimate at **13:52 EDT** is **USD 15.965**: eleven started
+Cherry hours at USD 1.20 (USD 13.20) plus the closed AWS estimate below. This is
+not a provider invoice or a current portal balance. The last confirmed Cherry
+charge reading was USD 7.20 at **09:37 EDT**; later access needs fresh login.
 
 The AWS instance, root volume and security group were removed at **07:44 EDT**
 after collection; its conservative duration-based estimate is USD 2.765 including
-IPv4, storage and a transfer allowance, not a provider invoice. The active Cherry
-rental must be terminated through the provider by **14:25 EDT**; shutting down
-the OS alone does not stop billing. The full goal ends at **14:42:52 EDT**.
+IPv4, storage and a transfer allowance, not a provider invoice. All owned Cherry
+measurement services are inactive and its complete evidence is local. The idle
+rental is ready for immediate provider deletion and must be terminated by
+**14:25 EDT**; OS shutdown alone does not end billing, as the
+[provider FAQ](https://www.cherryservers.com/knowledge/faq) explains. The full goal
+ends at **14:42:52 EDT**. A manual authentication handoff is pending; no further
+rental or extension was started while cleanup access was unavailable.

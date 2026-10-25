@@ -1,8 +1,11 @@
 # EPYC 9355P: combined page and power configuration
 
-**Prepared, not measured.** This optional follow-up may run only after the full
-short-sample experiment is terminal, collected and audited. Its preparation does
-not change the running experiment or authorize a shorter replacement protocol.
+**Prepared, not measured; not launched in this campaign.** The full short-sample
+experiment completed and its evidence was collected, but fresh provider cleanup
+access was not restored before this protocol's **13:42 EDT** latest-start deadline.
+No combined page/power result, partial comparison or additional rental was created.
+The frozen protocol below remains a future experiment; its preparation did not
+change or shorten the preceding measurement protocol.
 
 The earlier independent experiments found a package-efficiency benefit from a
 240 W cap and a small benefit from 1 GiB pages. Their gains cannot be multiplied:

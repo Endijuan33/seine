@@ -14,6 +14,7 @@ DATASETS = (
     ('amd-overnight-20261025', 'accepted_automatic_policy', True),
     ('amd-ring-locality-20261025', 'rejected_kernel_candidate', False),
     ('amd-page-size-20261025', 'measured_manual_configuration', False),
+    ('amd-trial-windows-20261025', 'accepted_automatic_policy', True),
 )
 
 
