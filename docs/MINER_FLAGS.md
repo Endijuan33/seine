@@ -24,6 +24,15 @@ For the raw CLI output, run:
 | `--daemon-dir` | path, default wrapper-managed `~/.config/bnt/data/mainnet` | Daemon data dir used to find `api.cookie` when `--cookie` is not set. Also used by pool mode when probing for a local daemon wallet. |
 | `--data-dir` | path, default `./seine-data` | Seine data dir for persisted state (`seine.config.json`, autotune caches, etc). |
 
+## Hardware Telemetry
+
+| Flag | Values / Default | What it does |
+|---|---|---|
+| `--telemetry` | `on`, `off`; on when a collector is configured | Saves the hardware/performance reporting preference in `seine.telemetry.json`. Applies to interactive and headless mining. |
+| `--telemetry-url` | HTTPS URL; no default unless supplied by the release builder | Sets the collector destination. A new destination preserves an explicit opt-out. HTTP is allowed only on loopback for local testing. |
+
+See [collection fields and self-hosting](../telemetry/README.md).
+
 ## Backend Selection and Topology
 
 | Flag | Values / Default | What it does |

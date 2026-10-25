@@ -528,6 +528,20 @@ impl CpuBackend {
 }
 
 impl PowBackend for CpuBackend {
+    fn hardware_telemetry(&self) -> seine_telemetry::BackendSettings {
+        let snapshot = self.adaptive_snapshot();
+        seine_telemetry::BackendSettings {
+            backend: "cpu".into(),
+            device_model: None,
+            memory_mib: None,
+            lanes: snapshot.threads as u32,
+            cpu_kernel: Some(snapshot.kernel.to_string()),
+            cpu_page_mode: Some(self.shared.page_mode.as_str().into()),
+            gpu_register_cap: None,
+            gpu_launch_depth: None,
+        }
+    }
+
     fn name(&self) -> &'static str {
         "cpu"
     }

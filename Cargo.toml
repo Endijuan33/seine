@@ -5,10 +5,11 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [workspace]
-members = ["pow-kernel", "pow-spec"]
+members = ["pow-kernel", "pow-spec", "telemetry"]
 resolver = "2"
 
 [dependencies]
+seine-telemetry = { path = "telemetry" }
 anyhow = "1.0"
 base64 = "0.22"
 ring = "0.17"

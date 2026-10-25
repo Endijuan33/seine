@@ -92,4 +92,6 @@ Seine is fast out of the box. These guides cover the last few percent:
 
 ## License
 
+[Privacy policy](PRIVACY.md).
+
 [BSD 3-Clause](LICENSE).

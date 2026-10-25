@@ -297,6 +297,12 @@ pub struct BackendSpec {
     pub assign_timeout_strikes_override: Option<u32>,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+enum TelemetryChoice {
+    On,
+    Off,
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "seine",
@@ -304,6 +310,13 @@ pub struct BackendSpec {
     about = "Seine net miner for Blocknet"
 )]
 struct Cli {
+    /// Save hardware telemetry preference. Requires a collector URL on first opt-in.
+    #[arg(long, value_enum)]
+    telemetry: Option<TelemetryChoice>,
+
+    /// Hardware telemetry collector (HTTPS). An explicit opt-out is preserved across destinations.
+    #[arg(long)]
+    telemetry_url: Option<String>,
     /// Mining mode. Default is pool mode.
     #[arg(long, value_enum)]
     mode: Option<MiningMode>,
@@ -728,6 +741,7 @@ struct Cli {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub(crate) hardware_telemetry: Option<crate::hardware_telemetry::Options>,
     pub mode: MiningMode,
     pub pool_url: Option<String>,
     pub pool_worker: Option<String>,
@@ -1242,6 +1256,7 @@ impl Config {
         };
 
         let mut cfg = Self {
+            hardware_telemetry: None,
             mode,
             pool_url: cli.pool_url.as_deref().and_then(normalize_pool_url),
             pool_worker: cli
@@ -1350,6 +1365,15 @@ impl Config {
         if cfg.cpu_autotune_threads && !cfg.bench {
             cfg.cpu_auto_threads_cap = cpu_autotune_capacity(&cfg, 0).0;
         }
+        cfg.hardware_telemetry = match crate::hardware_telemetry::resolve(
+            &cfg.data_dir,
+            cli.telemetry.map(|v| v == TelemetryChoice::On),
+            cli.telemetry_url.as_deref(),
+        ) {
+            Ok(options) => options,
+            Err(err) if cli.telemetry.is_some() || cli.telemetry_url.is_some() => return Err(err),
+            Err(_) => None,
+        };
         Ok(cfg)
     }
 }
@@ -3338,6 +3362,8 @@ mod tests {
 
     fn sample_cli() -> Cli {
         Cli {
+            telemetry: None,
+            telemetry_url: None,
             mode: Some(MiningMode::Daemon),
             testnet: false,
             pool_url: None,

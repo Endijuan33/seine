@@ -1317,6 +1317,21 @@ impl Drop for NvidiaBackend {
 }
 
 impl PowBackend for NvidiaBackend {
+    fn hardware_telemetry(&self) -> seine_telemetry::BackendSettings {
+        let device = self.resolved_device.try_read().ok().and_then(|d| d.clone());
+        let tuning = self.kernel_tuning.try_read().ok().and_then(|t| *t);
+        seine_telemetry::BackendSettings {
+            backend: "nvidia".into(),
+            device_model: device.as_ref().map(|d| d.name.clone()),
+            memory_mib: device.map(|d| d.memory_total_mib),
+            lanes: self.enabled_lanes() as u32,
+            cpu_kernel: None,
+            cpu_page_mode: None,
+            gpu_register_cap: tuning.map(|t| t.max_rregcount),
+            gpu_launch_depth: tuning.map(|t| t.hashes_per_launch_per_lane),
+        }
+    }
+
     fn name(&self) -> &'static str {
         BACKEND_NAME
     }

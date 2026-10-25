@@ -2722,6 +2722,7 @@ mod tests {
 
     fn test_config(server: &MockServer) -> Config {
         Config {
+            hardware_telemetry: None,
             mode: crate::config::MiningMode::Daemon,
             pool_url: None,
             pool_worker: None,

@@ -939,6 +939,19 @@ pub enum BackendCallStatus {
 pub trait PowBackend: Send + Sync {
     fn name(&self) -> &'static str;
 
+    fn hardware_telemetry(&self) -> seine_telemetry::BackendSettings {
+        seine_telemetry::BackendSettings {
+            backend: self.name().into(),
+            device_model: None,
+            memory_mib: self.device_memory_bytes().map(|v| v / (1024 * 1024)),
+            lanes: self.enabled_lanes() as u32,
+            cpu_kernel: None,
+            cpu_page_mode: None,
+            gpu_register_cap: None,
+            gpu_launch_depth: None,
+        }
+    }
+
     fn lanes(&self) -> usize;
 
     /// Workers currently enabled; a resource-paused backend can report zero

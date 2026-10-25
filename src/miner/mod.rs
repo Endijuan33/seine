@@ -474,6 +474,16 @@ pub(crate) fn run_with_thread_control(
     let cfg = &runtime_cfg;
 
     let backend_executor = backend_executor::BackendExecutor::new();
+    let _telemetry_worker =
+        cfg.hardware_telemetry
+            .as_ref()
+            .and_then(|options| match crate::hardware_telemetry::start(options) {
+                Ok((recorder, worker)) => {
+                    backend_executor.set_hardware_telemetry(recorder);
+                    Some(worker)
+                }
+                Err(_) => None,
+            });
     let daemon_client = if let Some(token) = cfg.token.clone() {
         Some(ApiClient::new(
             cfg.api_url.clone(),
@@ -2551,6 +2561,7 @@ fn collect_backend_hashes(
     let runtime_telemetry = backend_executor.take_backend_telemetry_ordered(backends.iter());
     for (slot, runtime) in backends.iter().zip(runtime_telemetry.into_iter()) {
         let slot_hashes = slot.backend.take_hashes();
+        backend_executor.record_hardware_sample(slot, slot_hashes);
         let telemetry = slot.backend.take_telemetry();
         if let Some(per_backend_telemetry) = round_backend_telemetry.as_deref_mut() {
             merge_backend_telemetry(per_backend_telemetry, slot.id, telemetry);
@@ -2598,6 +2609,7 @@ fn collect_round_backend_samples(
     for (slot, runtime) in due_slots.into_iter().zip(runtime_telemetry.into_iter()) {
         let backend_id = slot.id;
         let hashes = slot.backend.take_hashes();
+        backend_executor.record_hardware_sample(slot, hashes);
         let telemetry = slot.backend.take_telemetry();
         merge_backend_telemetry(round_backend_telemetry, backend_id, telemetry);
         merge_backend_telemetry(round_backend_telemetry, backend_id, runtime);
@@ -3667,6 +3679,7 @@ pub(crate) mod tests {
 
     pub(crate) fn test_config() -> Config {
         Config {
+            hardware_telemetry: None,
             mode: MiningMode::Daemon,
             pool_url: None,
             pool_worker: None,
