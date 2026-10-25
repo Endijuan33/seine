@@ -1327,4 +1327,20 @@ mod tests {
         assert_eq!(action.kernel, Some(CpuKernel::preferred()));
         assert!(t.trial.is_none());
     }
+    #[test]
+    fn abort_between_challengers_backs_off_only_that_count() {
+        let mut t = three_path_tuner();
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512;
+        let mut now = 0;
+        run_comparison(&mut t, &mut s, &mut now, &[100, 95, 100]);
+        assert!(t.is_comparing() && t.trial.is_none());
+        assert!(t.abort(now + 1).interrupted);
+        assert!(t.pending.is_empty() && t.cache.winners.is_empty());
+        assert!(t.retry_pending(now + 2, &[s]));
+        s.threads += 1;
+        s.warmed += 1;
+        assert!(t.tick(now + 2, &[s], true, true).hold_counts);
+        let _ = fs::remove_file(t.path);
+    }
 }
