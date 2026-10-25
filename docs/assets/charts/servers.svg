@@ -40,7 +40,7 @@ Q 0.72 628.56 0.72 615.6
 L 0.72 13.68 
 Q 0.72 0.72 13.68 0.72 
 z
-" clip-path="url(#p1b7f67a4d7)" style="fill: #042329"/>
+" clip-path="url(#pc59ca2acc1)" style="fill: #042329"/>
    </g>
   </g>
   <g id="axes_2">
@@ -56,42 +56,42 @@ z
    <g id="line2d_1">
     <path d="M 239.04 568.8 
 L 239.04 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="line2d_2">
     <path d="M 307.008 568.8 
 L 307.008 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="line2d_3">
     <path d="M 374.976 568.8 
 L 374.976 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="line2d_4">
     <path d="M 442.944 568.8 
 L 442.944 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="line2d_5">
     <path d="M 510.912 568.8 
 L 510.912 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="line2d_6">
     <path d="M 578.88 568.8 
 L 578.88 74.88 
-" clip-path="url(#p9e9422d62e)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
+" clip-path="url(#pe7eec21804)" style="fill: none; stroke: #0e3b40; stroke-width: 0.75; stroke-linecap: square"/>
    </g>
    <g id="patch_4">
     <path d="M 239.04 108 
-L 540.262426 108 
-C 541.85305 108 543.142426 108.136586 543.142426 108.305085 
-L 543.142426 122.094915 
-C 543.142426 122.263414 541.85305 122.4 540.262426 122.4 
+L 571.874342 108 
+C 573.464966 108 574.754342 108.136586 574.754342 108.305085 
+L 574.754342 122.094915 
+C 574.754342 122.263414 573.464966 122.4 571.874342 122.4 
 L 239.04 122.4 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #e5603e"/>
+" clip-path="url(#pe7eec21804)" style="fill: #e5603e"/>
    </g>
    <g id="patch_5">
     <path d="M 239.04 139.68 
@@ -101,7 +101,7 @@ L 481.672166 153.774915
 C 481.672166 153.943414 480.38279 154.08 478.792166 154.08 
 L 239.04 154.08 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #e5603e"/>
+" clip-path="url(#pe7eec21804)" style="fill: #e5603e"/>
    </g>
    <g id="patch_6">
     <path d="M 239.04 171.36 
@@ -111,7 +111,7 @@ L 318.086784 185.454915
 C 318.086784 185.623414 316.797408 185.76 315.206784 185.76 
 L 239.04 185.76 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #e5603e"/>
+" clip-path="url(#pe7eec21804)" style="fill: #e5603e"/>
    </g>
    <g id="patch_7">
     <path d="M 239.04 203.04 
@@ -121,7 +121,7 @@ L 279.902362 217.134915
 C 279.902362 217.303414 278.612986 217.44 277.022362 217.44 
 L 239.04 217.44 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #e5603e"/>
+" clip-path="url(#pe7eec21804)" style="fill: #e5603e"/>
    </g>
    <g id="patch_8">
     <path d="M 239.04 234.72 
@@ -131,7 +131,7 @@ L 270.278093 248.814915
 C 270.278093 248.983414 268.988717 249.12 267.398093 249.12 
 L 239.04 249.12 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #e5603e"/>
+" clip-path="url(#pe7eec21804)" style="fill: #e5603e"/>
    </g>
    <g id="patch_9">
     <path d="M 239.04 290.88 
@@ -141,7 +141,7 @@ L 328.071283 304.974915
 C 328.071283 305.143414 326.781907 305.28 325.191283 305.28 
 L 239.04 305.28 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #2f86e8"/>
+" clip-path="url(#pe7eec21804)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_10">
     <path d="M 239.04 322.56 
@@ -151,7 +151,7 @@ L 326.827469 336.654915
 C 326.827469 336.823414 325.538093 336.96 323.947469 336.96 
 L 239.04 336.96 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #2f86e8"/>
+" clip-path="url(#pe7eec21804)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_11">
     <path d="M 239.04 354.24 
@@ -161,7 +161,7 @@ L 321.994944 368.334915
 C 321.994944 368.503414 320.705568 368.64 319.114944 368.64 
 L 239.04 368.64 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #2f86e8"/>
+" clip-path="url(#pe7eec21804)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_12">
     <path d="M 239.04 385.92 
@@ -171,7 +171,7 @@ L 308.68681 400.014915
 C 308.68681 400.183414 307.397434 400.32 305.80681 400.32 
 L 239.04 400.32 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #2f86e8"/>
+" clip-path="url(#pe7eec21804)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_13">
     <path d="M 239.04 417.6 
@@ -181,7 +181,7 @@ L 305.11849 431.694915
 C 305.11849 431.863414 303.829114 432 302.23849 432 
 L 239.04 432 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #2f86e8"/>
+" clip-path="url(#pe7eec21804)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_14">
     <path d="M 239.04 473.76 
@@ -191,7 +191,7 @@ L 385.19159 487.854915
 C 385.19159 488.023414 383.902214 488.16 382.31159 488.16 
 L 239.04 488.16 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #bd8209"/>
+" clip-path="url(#pe7eec21804)" style="fill: #bd8209"/>
    </g>
    <g id="patch_15">
     <path d="M 239.04 505.44 
@@ -201,7 +201,7 @@ L 362.537856 519.534915
 C 362.537856 519.703414 361.24848 519.84 359.657856 519.84 
 L 239.04 519.84 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #bd8209"/>
+" clip-path="url(#pe7eec21804)" style="fill: #bd8209"/>
    </g>
    <g id="patch_16">
     <path d="M 239.04 537.12 
@@ -211,7 +211,7 @@ L 314.12425 551.214915
 C 314.12425 551.383414 312.834874 551.52 311.24425 551.52 
 L 239.04 551.52 
 z
-" clip-path="url(#p9e9422d62e)" style="fill: #bd8209"/>
+" clip-path="url(#pe7eec21804)" style="fill: #bd8209"/>
    </g>
    <g id="matplotlib.axis_1">
     <g id="xtick_1">
@@ -500,7 +500,7 @@ Q 23.04 91.44 23.04 89.64
 L 23.04 86.04 
 Q 23.04 84.24 24.84 84.24 
 z
-" clip-path="url(#p1b7f67a4d7)" style="fill: #e5603e"/>
+" clip-path="url(#pc59ca2acc1)" style="fill: #e5603e"/>
    </g>
    <g id="patch_18">
     <path d="M 24.84 267.12 
@@ -513,7 +513,7 @@ Q 23.04 274.32 23.04 272.52
 L 23.04 268.92 
 Q 23.04 267.12 24.84 267.12 
 z
-" clip-path="url(#p1b7f67a4d7)" style="fill: #2f86e8"/>
+" clip-path="url(#pc59ca2acc1)" style="fill: #2f86e8"/>
    </g>
    <g id="patch_19">
     <path d="M 24.84 450 
@@ -526,7 +526,7 @@ Q 23.04 457.2 23.04 455.4
 L 23.04 451.8 
 Q 23.04 450 24.84 450 
 z
-" clip-path="url(#p1b7f67a4d7)" style="fill: #bd8209"/>
+" clip-path="url(#pc59ca2acc1)" style="fill: #bd8209"/>
    </g>
    <g id="text_7">
     <!-- Servers -->
@@ -1734,7 +1734,7 @@ z
     </g>
    </g>
    <g id="text_11">
-    <!-- Zen 5 Turin · 24 threads -->
+    <!-- Zen 5 Turin · 32 threads -->
     <g style="fill: #6fa9a2" transform="translate(23.04 126) scale(0.08625 -0.08625)">
      <defs>
       <path id="IBMPlexSans-Regular-5a" d="M 3482 474 
@@ -1774,6 +1774,46 @@ Q 1434 1747 1341 1641
 Q 1248 1536 1043 1536 
 z
 " transform="scale(0.015625)"/>
+      <path id="IBMPlexSans-Regular-33" d="M 1184 2573 
+L 1670 2573 
+Q 2125 2573 2352 2784 
+Q 2579 2995 2579 3315 
+L 2579 3360 
+Q 2579 3712 2358 3888 
+Q 2138 4064 1779 4064 
+Q 1434 4064 1216 3913 
+Q 998 3763 858 3507 
+L 461 3814 
+Q 576 3994 749 4160 
+Q 922 4326 1178 4435 
+Q 1434 4544 1792 4544 
+Q 2170 4544 2477 4413 
+Q 2784 4282 2966 4032 
+Q 3149 3782 3149 3418 
+Q 3149 2989 2899 2726 
+Q 2650 2464 2291 2374 
+L 2291 2349 
+Q 2534 2304 2748 2166 
+Q 2963 2029 3097 1795 
+Q 3232 1562 3232 1222 
+Q 3232 838 3043 547 
+Q 2854 256 2512 89 
+Q 2170 -77 1715 -77 
+Q 1331 -77 1059 35 
+Q 787 147 598 320 
+Q 410 493 269 685 
+L 672 992 
+Q 845 730 1072 566 
+Q 1299 403 1709 403 
+Q 2182 403 2425 620 
+Q 2669 838 2669 1229 
+L 2669 1280 
+Q 2669 1677 2425 1891 
+Q 2182 2106 1709 2106 
+L 1184 2106 
+L 1184 2573 
+z
+" transform="scale(0.015625)"/>
      </defs>
      <use xlink:href="#IBMPlexSans-Regular-5a"/>
      <use xlink:href="#IBMPlexSans-Regular-65" transform="translate(57.999985 0)"/>
@@ -1789,8 +1829,8 @@ z
      <use xlink:href="#IBMPlexSans-Regular-20" transform="translate(509.399887 0)"/>
      <use xlink:href="#IBMPlexSans-Regular-b7" transform="translate(532.999878 0)"/>
      <use xlink:href="#IBMPlexSans-Regular-20" transform="translate(565.599869 0)"/>
-     <use xlink:href="#IBMPlexSans-Regular-32" transform="translate(589.19986 0)"/>
-     <use xlink:href="#IBMPlexSans-Regular-34" transform="translate(649.199844 0)"/>
+     <use xlink:href="#IBMPlexSans-Regular-33" transform="translate(589.19986 0)"/>
+     <use xlink:href="#IBMPlexSans-Regular-32" transform="translate(649.199844 0)"/>
      <use xlink:href="#IBMPlexSans-Regular-20" transform="translate(709.199829 0)"/>
      <use xlink:href="#IBMPlexSans-Regular-74" transform="translate(732.79982 0)"/>
      <use xlink:href="#IBMPlexSans-Regular-68" transform="translate(767.899811 0)"/>
@@ -1803,15 +1843,15 @@ z
    </g>
    <g id="text_12">
     <g id="patch_20">
-     <path d="M 548.879926 122.8725 
-L 578.804926 122.8725 
-L 578.804926 109.3725 
-L 548.879926 109.3725 
+     <path d="M 580.491842 122.8725 
+L 610.416842 122.8725 
+L 610.416842 109.3725 
+L 580.491842 109.3725 
 z
 " style="fill: #042329"/>
     </g>
-    <!-- 44.7 -->
-    <g style="fill: #dffbf6" transform="translate(550.342426 119.16) scale(0.1125 -0.1125)">
+    <!-- 49.4 -->
+    <g style="fill: #dffbf6" transform="translate(581.954342 119.16) scale(0.1125 -0.1125)">
      <defs>
       <path id="IBMPlexMono-Medium-34" d="M 2317 0 
 L 2317 870 
@@ -1833,6 +1873,47 @@ L 2278 3808
 L 800 1434 
 z
 " transform="scale(0.015625)"/>
+      <path id="IBMPlexMono-Medium-39" d="M 3501 2803 
+Q 3501 2317 3353 1888 
+Q 3206 1459 2969 1100 
+Q 2733 742 2445 460 
+Q 2157 179 1875 0 
+L 915 0 
+Q 1299 275 1606 531 
+Q 1914 787 2141 1056 
+Q 2368 1325 2521 1622 
+Q 2675 1920 2758 2285 
+L 2714 2298 
+Q 2643 2163 2547 2044 
+Q 2451 1926 2323 1836 
+Q 2195 1747 2028 1696 
+Q 1862 1645 1651 1645 
+Q 1363 1645 1120 1741 
+Q 877 1837 697 2019 
+Q 518 2202 419 2458 
+Q 320 2714 320 3034 
+Q 320 3366 432 3644 
+Q 544 3923 752 4121 
+Q 960 4320 1254 4432 
+Q 1549 4544 1907 4544 
+Q 2278 4544 2576 4422 
+Q 2874 4301 3078 4073 
+Q 3283 3846 3392 3526 
+Q 3501 3206 3501 2803 
+z
+M 1914 2214 
+Q 2317 2214 2541 2435 
+Q 2765 2656 2765 3059 
+L 2765 3123 
+Q 2765 3526 2541 3747 
+Q 2317 3968 1914 3968 
+Q 1504 3968 1280 3747 
+Q 1056 3526 1056 3123 
+L 1056 3059 
+Q 1056 2656 1280 2435 
+Q 1504 2214 1914 2214 
+z
+" transform="scale(0.015625)"/>
       <path id="IBMPlexMono-Medium-2e" d="M 1920 -64 
 Q 1613 -64 1488 64 
 Q 1363 192 1363 378 
@@ -1846,23 +1927,11 @@ Q 2477 192 2352 64
 Q 2227 -64 1920 -64 
 z
 " transform="scale(0.015625)"/>
-      <path id="IBMPlexMono-Medium-37" d="M 1082 0 
-L 2739 3872 
-L 998 3872 
-L 998 3046 
-L 378 3046 
-L 378 4467 
-L 3456 4467 
-L 3456 3840 
-L 1843 0 
-L 1082 0 
-z
-" transform="scale(0.015625)"/>
      </defs>
      <use xlink:href="#IBMPlexMono-Medium-34"/>
-     <use xlink:href="#IBMPlexMono-Medium-34" transform="translate(59.999985 0)"/>
+     <use xlink:href="#IBMPlexMono-Medium-39" transform="translate(59.999985 0)"/>
      <use xlink:href="#IBMPlexMono-Medium-2e" transform="translate(119.999969 0)"/>
-     <use xlink:href="#IBMPlexMono-Medium-37" transform="translate(179.999954 0)"/>
+     <use xlink:href="#IBMPlexMono-Medium-34" transform="translate(179.999954 0)"/>
     </g>
    </g>
    <g id="text_13">
@@ -2060,6 +2129,18 @@ L 3270 4467
 L 3270 3846 
 z
 " transform="scale(0.015625)"/>
+      <path id="IBMPlexMono-Medium-37" d="M 1082 0 
+L 2739 3872 
+L 998 3872 
+L 998 3046 
+L 378 3046 
+L 378 4467 
+L 3456 4467 
+L 3456 3840 
+L 1843 0 
+L 1082 0 
+z
+" transform="scale(0.015625)"/>
      </defs>
      <use xlink:href="#IBMPlexMono-Medium-33"/>
      <use xlink:href="#IBMPlexMono-Medium-35" transform="translate(59.999985 0)"/>
@@ -2081,46 +2162,6 @@ L 442 4467
 L 3373 4467 
 L 3373 3994 
 L 1696 0 
-z
-" transform="scale(0.015625)"/>
-      <path id="IBMPlexSans-Regular-33" d="M 1184 2573 
-L 1670 2573 
-Q 2125 2573 2352 2784 
-Q 2579 2995 2579 3315 
-L 2579 3360 
-Q 2579 3712 2358 3888 
-Q 2138 4064 1779 4064 
-Q 1434 4064 1216 3913 
-Q 998 3763 858 3507 
-L 461 3814 
-Q 576 3994 749 4160 
-Q 922 4326 1178 4435 
-Q 1434 4544 1792 4544 
-Q 2170 4544 2477 4413 
-Q 2784 4282 2966 4032 
-Q 3149 3782 3149 3418 
-Q 3149 2989 2899 2726 
-Q 2650 2464 2291 2374 
-L 2291 2349 
-Q 2534 2304 2748 2166 
-Q 2963 2029 3097 1795 
-Q 3232 1562 3232 1222 
-Q 3232 838 3043 547 
-Q 2854 256 2512 89 
-Q 2170 -77 1715 -77 
-Q 1331 -77 1059 35 
-Q 787 147 598 320 
-Q 410 493 269 685 
-L 672 992 
-Q 845 730 1072 566 
-Q 1299 403 1709 403 
-Q 2182 403 2425 620 
-Q 2669 838 2669 1229 
-L 2669 1280 
-Q 2669 1677 2425 1891 
-Q 2182 2106 1709 2106 
-L 1184 2106 
-L 1184 2573 
 z
 " transform="scale(0.015625)"/>
      </defs>
@@ -2768,47 +2809,6 @@ Q 2496 1709 2259 1517
 L 1178 608 
 L 3488 608 
 L 3488 0 
-z
-" transform="scale(0.015625)"/>
-      <path id="IBMPlexMono-Medium-39" d="M 3501 2803 
-Q 3501 2317 3353 1888 
-Q 3206 1459 2969 1100 
-Q 2733 742 2445 460 
-Q 2157 179 1875 0 
-L 915 0 
-Q 1299 275 1606 531 
-Q 1914 787 2141 1056 
-Q 2368 1325 2521 1622 
-Q 2675 1920 2758 2285 
-L 2714 2298 
-Q 2643 2163 2547 2044 
-Q 2451 1926 2323 1836 
-Q 2195 1747 2028 1696 
-Q 1862 1645 1651 1645 
-Q 1363 1645 1120 1741 
-Q 877 1837 697 2019 
-Q 518 2202 419 2458 
-Q 320 2714 320 3034 
-Q 320 3366 432 3644 
-Q 544 3923 752 4121 
-Q 960 4320 1254 4432 
-Q 1549 4544 1907 4544 
-Q 2278 4544 2576 4422 
-Q 2874 4301 3078 4073 
-Q 3283 3846 3392 3526 
-Q 3501 3206 3501 2803 
-z
-M 1914 2214 
-Q 2317 2214 2541 2435 
-Q 2765 2656 2765 3059 
-L 2765 3123 
-Q 2765 3526 2541 3747 
-Q 2317 3968 1914 3968 
-Q 1504 3968 1280 3747 
-Q 1056 3526 1056 3123 
-L 1056 3059 
-Q 1056 2656 1280 2435 
-Q 1504 2214 1914 2214 
 z
 " transform="scale(0.015625)"/>
      </defs>
@@ -3650,10 +3650,10 @@ z
   </g>
  </g>
  <defs>
-  <clipPath id="p1b7f67a4d7">
+  <clipPath id="pc59ca2acc1">
    <rect x="0" y="0" width="648" height="629.28"/>
   </clipPath>
-  <clipPath id="p9e9422d62e">
+  <clipPath id="pe7eec21804">
    <rect x="239.04" y="74.88" width="339.84" height="493.92"/>
   </clipPath>
  </defs>

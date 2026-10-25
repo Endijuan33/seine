@@ -62,7 +62,7 @@ def host(label, leases):
         if r['phase'] != 'grid':
             continue
         cell = grid.setdefault(f"{r['variant']}@{r['workers']}", {
-            'variant': r['variant'], 'kernel': r['kernel'], 'binary': r['binary'], 'workers': r['workers'],
+            'variant': r['variant'], 'kernel': r['kernel'], 'binary': r['binary'], 'threads': r['workers'],
             'samples_completed_hps': [], 'rejected': 0})
         if r['accepted']:
             cell['samples_completed_hps'].append(r['completed_hps'])
@@ -80,7 +80,7 @@ def host(label, leases):
         rows = cells.get(key, [])
         values = [r['completed_hps'] for r in rows]
         return {'variant': key[0], 'kernel': variants[key[0]]['kernel'], 'binary': variants[key[0]]['binary'],
-                'workers': key[1], 'n_runs': len(values), 'values_completed_hps': values,
+                'threads': key[1], 'n_runs': len(values), 'values_completed_hps': values,
                 'mean_completed_hps': statistics.mean(values) if values else None,
                 'stdev_completed_hps': statistics.stdev(values) if len(values) > 1 else None,
                 'confirm_values': [r['completed_hps'] for r in rows if r['phase'] == 'confirm']}
@@ -118,16 +118,16 @@ def host(label, leases):
                    'hugetlb_restored_to_zero': status['hugetlb_restored'],
                    'hugetlb_retry_after_compaction': status.get('hugetlb_retry_after_compaction', False)},
         'kernel_os': hw['kernel'],
-        'worker_counts': status['worker_counts'], 'max_fitting_workers': status['max_fitting_workers'],
+        'thread_counts': status['worker_counts'], 'max_fitting_threads': status['max_fitting_workers'],
         'variants_timed': list(variants.values()),
         'parity': {k: {kk: v.get(kk) for kk in ('exit_code', 'passed', 'unsupported', 'sha256', 'covers_binary', 'status')}
                    for k, v in parity.items()},
-        'grid': sorted(grid.values(), key=lambda c: (c['workers'], c['variant'])),
+        'grid': sorted(grid.values(), key=lambda c: (c['threads'], c['variant'])),
         'grid_order': status['grid_plan'],
         'best_grid_cell': b, 'runner_up_cell': r_, 'runner_up_basis': status.get('runner_up_basis'),
         'confirmation_reversed_grid_choice': reversed_,
         'best': {'variant': best['variant'], 'kernel': best['kernel'], 'binary': best['binary'],
-                 'workers': best['workers'], 'mean_completed_hps': best['mean_completed_hps'],
+                 'threads': best['threads'], 'mean_completed_hps': best['mean_completed_hps'],
                  'n_runs': best['n_runs']},
         'rejected_invocations': rejected,
         'skipped_for_deadline': status.get('skipped_for_deadline', []),
@@ -157,6 +157,7 @@ def main():
         'arm_candidate': {'pr': 44, 'commit': 'f20e7bb1772be024a12ac5cdcc92685ba89d3ddd',
                           'kernel_selection': 'explicit --bench-cpu-kernel neon-sha3 (runtime-guarded by '
                                               'is_aarch64_feature_detected!("sha3"); generic build, no RUSTFLAGS)'},
+        'terminology': 'threads = seine --threads = concurrent 2 GiB hashing workers',
         'metric': 'completed hashes / actual elapsed seconds including the round-end fence; mean over invocations '
                   '(each invocation = 1x20 s warmup + 2x20 s measured rounds)',
         'hosts': hosts,
@@ -175,30 +176,30 @@ def main():
             b = h['best']
             print(f"{h['host']:16} {h['instance_type']:12} {h['cpu']['brand'][:40]:40} "
                   f"{h['topology']['physical_cores']}/{h['topology']['logical_cpus']} "
-                  f"{b['variant']:20} w{b['workers']:<3} {b['mean_completed_hps']:8.3f} H/s n={b['n_runs']} "
+                  f"{b['variant']:20} t{b['threads']:<3} {b['mean_completed_hps']:8.3f} H/s n={b['n_runs']} "
                   f"{h['pricing']['hps_per_ondemand_usd_per_hour']:.3f} H/s per $/h")
         else:
             print(h['host'], h['status'])
     print('conservative cost', round(summary['cost']['conservative_total_usd'], 4))
-    md = ['| Host | Instance | CPU (guest-reported) | Cores / threads | Best kernel | Workers | H/s (mean, n) | On-demand $/h | H/s per $/h |',
-          '| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: |']
+    md = ['| Host | Instance | CPU (guest-reported) | Physical cores | SMT | Best kernel | Threads | H/s (mean, n) | On-demand $/h | H/s per $/h |',
+          '| --- | --- | --- | ---: | --- | --- | ---: | ---: | ---: | ---: |']
     for h in hosts:
         if h['status'] != 'complete':
             continue
         b = h['best']
         kernel = b['kernel'] + (' (f20e7bb)' if b['binary'] == 'seine-f20-arm' else '')
         md.append(f"| {h['host']} | {h['instance_type']} | {h['cpu']['brand']} | "
-                  f"{h['topology']['physical_cores']} / {h['topology']['logical_cpus']} | {kernel} | {b['workers']} | "
+                  f"{h['topology']['physical_cores']} | {'2-way (' + str(h['topology']['logical_cpus']) + ' vCPU)' if h['topology']['threads_per_core'] > 1 else 'none'} | {kernel} | {b['threads']} | "
                   f"{b['mean_completed_hps']:.2f} (n={b['n_runs']}) | {h['pricing']['ondemand_usd_per_hour']:.4f} | "
                   f"{h['pricing']['hps_per_ondemand_usd_per_hour']:.2f} |")
-    grid = ['| Host | Variant | ' + ' | '.join(['Workers: H/s samples (mean)']) + ' |', '| --- | --- | --- |']
+    grid = ['| Host | Variant | ' + ' | '.join(['Threads: H/s per grid pass (mean)']) + ' |', '| --- | --- | --- |']
     for h in hosts:
         if h['status'] != 'complete':
             continue
         by = {}
         for c in h['grid']:
             by.setdefault(c['variant'], []).append(
-                f"w{c['workers']}: " + ', '.join(f'{v:.2f}' for v in c['samples_completed_hps'])
+                f"t{c['threads']}: " + ', '.join(f'{v:.2f}' for v in c['samples_completed_hps'])
                 + (f" ({c['mean_completed_hps']:.2f})" if c['mean_completed_hps'] else ' (rejected)'))
         for v, cells in by.items():
             grid.append(f"| {h['host']} | {v} | {'; '.join(cells)} |")

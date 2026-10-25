@@ -363,8 +363,22 @@ def main():
     def pages_for(w):
         return math.ceil(1.05 * w * 1024)
     wmax = max(w for w in range(1, cpus + 1) if pages_for(w) * 2 * 1024 ** 2 + 5 * GIB <= available)
-    counts = sorted({c for c in (16, 24, wmax) if c <= wmax})
-    pages = pages_for(max(counts))
+    # Sweep (coordinator update 03:55 UTC): SMT hosts also try 20; 32-core hosts 30 and 32.
+    smt = hw['threads_per_core'] > 1
+    candidates = (16, 20, 24, wmax) if smt else (16, 24, 30, 32, wmax)
+    counts = sorted({c for c in candidates if c <= wmax})
+    flagship = CONFIG.get('mode') == 'flagship'
+    if flagship:
+        # Full-size host (coordinator plan): coarse 25/50/75/100% of physical cores,
+        # capped by RAM, then refine +/-12.5% around the best; reserve for the
+        # largest count that refinement could reach (logical CPUs on SMT hosts).
+        cores = hw['physical_cores']
+        counts = sorted({min(wmax, max(1, round(cores * p))) for p in (0.25, 0.5, 0.75, 1.0)})
+        ceiling = min(wmax, cpus if smt else cores)
+        pages = pages_for(ceiling)
+        status['flagship_ceiling'] = ceiling
+    else:
+        pages = pages_for(max(counts))
     status.update(mem_available_before_bytes=available, logical_cpus=cpus, max_fitting_workers=wmax,
                   worker_counts=counts, hugetlb_pages_requested=pages)
     save(ROOT / 'status.json', status)
@@ -387,6 +401,9 @@ def main():
         out.mkdir(exist_ok=False)
         sequence = [(w, v) for w in counts for v in variants]
         plan = [(1, w, v) for w, v in sequence] + [(2, w, v) for w, v in reversed(sequence)]
+        if flagship:
+            # One coarse pass, kernel order alternating per thread count.
+            plan = [(1, w, v) for i, w in enumerate(counts) for v in (variants if i % 2 == 0 else variants[::-1])]
         status['grid_plan'] = [f'p{p}-w{w}-{v["name"]}' for p, w, v in plan]
         save(ROOT / 'status.json', status)
         for p, w, v in plan:
@@ -397,15 +414,36 @@ def main():
             rec.update(phase='grid', pass_index=p)
             records.append(rec)
             save(ROOT / 'records.json', records)
+        if flagship:
+            coarse = {(r['variant'], r['workers']): r['completed_hps'] for r in records if r['accepted']}
+            assert coarse, 'no accepted coarse cell'
+            bv, bw = max(coarse, key=coarse.get)
+            step = max(1, round(hw['physical_cores'] * 0.125))
+            refine = sorted({w for w in (bw - step, bw + step) if 1 <= w <= status['flagship_ceiling']
+                             and (bv, w) not in coarse})
+            status['refine_counts'] = refine
+            for w in refine:
+                if time.time() + RUN_ESTIMATE > deadline:
+                    status.setdefault('skipped_for_deadline', []).append(f'refine-w{w}-{bv}')
+                    continue
+                v = next(x for x in variants if x['name'] == bv)
+                rec = run_case(out, f'grid-refine-w{w}-{bv}', v, w)
+                rec.update(phase='grid', pass_index='refine')
+                records.append(rec)
+                save(ROOT / 'records.json', records)
         cells = {}
         for r in records:
             if r['accepted']:
                 cells.setdefault((r['variant'], r['workers']), []).append(r['completed_hps'])
-        complete = {k: statistics.mean(x) for k, x in cells.items() if len(x) == 2}
+        complete = {k: statistics.mean(x) for k, x in cells.items() if len(x) == (1 if flagship else 2)}
         assert complete, 'no grid cell has two accepted samples'
         best = max(complete, key=complete.get)
         same_w = sorted((k for k in complete if k[1] == best[1] and k != best), key=complete.get, reverse=True)
-        if same_w:
+        if flagship:
+            others = sorted((k for k in complete if k != best), key=complete.get, reverse=True)
+            runner = others[0] if others else None
+            runner_basis = 'flagship: second-best measured cell'
+        elif same_w:
             runner = same_w[0]
             runner_basis = 'second kernel at best worker count'
         else:

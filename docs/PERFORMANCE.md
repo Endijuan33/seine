@@ -26,7 +26,7 @@ with `--threads` or see as "Threads" on the dashboard.
 
 | CPU | Generation | Threads | Kernel | H/s | Evidence |
 |---|---|---:|---|---:|---|
-| AMD EPYC 9R45 | Zen 5 Turin | 24 | streaming | 44.74 | [epyc-investigation](../experiments/epyc-investigation/INTEGRATED_VALIDATION.md) |
+| AMD EPYC 9R45 | Zen 5 Turin | 32 | streaming | 49.39 | [readme-hardware](../experiments/readme-hardware-20261025/summary.json) |
 | AMD EPYC 9R14 | Zen 4 Genoa | 24 | streaming | 35.70 | [high-end-streaming](../experiments/high-end-streaming-20261025/RESULTS.md) |
 | AMD EPYC 7R13 | Zen 3 Milan | 16 | AVX2 | 11.63 | [readme-hardware](../experiments/readme-hardware-20261025/README.md) |
 | AMD EPYC 7R32 | Zen 2 Rome | 12 | AVX2 | 6.01 | [cpu-campaign](../experiments/cpu-campaign-20261024/RESULTS.md) |
