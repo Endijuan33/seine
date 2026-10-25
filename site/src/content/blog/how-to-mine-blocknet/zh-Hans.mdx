@@ -9,7 +9,7 @@ faq:
     a: 'bntpool.com 按六小时窗口的 PPLNS 方式支付。区块奖励要等该区块获得 60 个确认（按五分钟出块约五小时）后才能支付，余额达到 0.1 BNT 后发送。首笔收益预计在第一批份额被接受几小时后到账。'
   - q: '可以同时用 CPU 和显卡挖 Blocknet 吗？'
     a: '可以。在 Windows 和 Linux 上，seine 会同时使用机器上的每个 CPU 核心和每张 NVIDIA 显卡挖矿，两者的算力会叠加。它在运行中分别为处理器和每张显卡调优，无需修改任何设置，就能让你的全部硬件发挥出最大算力。'
-sourceHash: 7033d5ddefc8
+sourceHash: 6a442d3fab0e
 translation: reviewed
 ---
 
@@ -24,7 +24,7 @@ translation: reviewed
 ## 开始之前需要准备什么？
 
 - **一个 Blocknet 地址。** 安装官方 Blocknet 钱包，即[命令行钱包](https://github.com/blocknetprivacy/blocknet/releases/latest)或[桌面钱包](https://github.com/blocknetprivacy/blocknet-gui/releases/latest)，然后复制你的地址。请把钱包和助记词保存在你自己的电脑上，不要放在与他人共用的矿机上。
-- **或者一个短名称。** 如果你在 [blocknet.id](https://blocknet.id) 注册了 Blocknet ID 短名称，就可以直接挖到 `@name`，不必粘贴很长的地址。
+- **或者一个短名称。** 如果你在 [blocknet.id](https://blocknet.id) 注册了 [Blocknet ID 短名称](/zh-hans/blog/blocknet-id-pay-by-name/)，就可以直接挖到 `@name`，不必粘贴很长的地址。
 - **每个挖矿线程约 2 GB 内存。** seine 会根据你的机器自动确定线程数，并为系统预留余量，所以无需事先计算。
 - **Windows、macOS 或 Linux。** 在 Windows 和 Linux 上，只要装有较新的驱动，NVIDIA 显卡就会被自动使用。
 
@@ -74,7 +74,7 @@ bntpool.com 采用 PPLNS：每个区块的奖励在其被找到前六小时内�
 | Arm 服务器（AWS Graviton4） | 16 | 21.5 H/s |
 | Intel Xeon（Sapphire Rapids 8488C） | 12 | 13.1 H/s |
 
-所有已测 CPU 的结果见[性能页面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)。
+所有已测 CPU 的结果见[性能页面](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md)，[Blocknet 挖矿硬件指南](/zh-hans/blog/blocknet-mining-hardware-hashrate/)则解释了内存容量和内存带宽如何决定这些数字。
 
 ## seine 如何让同一颗 CPU 挖得更快？
 

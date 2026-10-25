@@ -35,7 +35,6 @@ const FORBIDDEN = [
 ];
 const CAUTION = [
     [/\bworkers?\b/gi, "seine calls them threads (--threads); 'worker' is fine only for a pool worker name"],
-    [/\bpost[- ]quantum\b|\bquantum[- ](resistant|proof|safe)\b|抗量子|后量子|後量子/gi, "today's chain is classical crypto; only describe post-quantum as Faraday's plan, attributed to blocknetcrypto.com"],
     [/\bprofitab(le|ility)\b|盈利|获利|獲利/gi, 'profitability depends on price, difficulty and power cost; show the arithmetic, not a verdict'],
     [/\bASIC[- ](proof|resistant)\b/gi, "say 'designed to resist ASICs'"],
     [/\bfaster every release\b/gi, "don't promise future speedups"],
@@ -47,7 +46,7 @@ const args = process.argv.slice(2);
 const strict = args.includes('--strict');
 const overlapMode = args.includes('--overlap');
 const hashIdx = args.indexOf('--hash');
-const wanted = args.filter((a, i) => !a.startsWith('--') && i !== hashIdx + 1);
+const wanted = args.filter((a, i) => !a.startsWith('--') && (hashIdx < 0 || i !== hashIdx + 1));
 
 function readPost(slug, file) {
     const url = new URL(`${slug}/${file}`, BLOG);
@@ -60,7 +59,8 @@ function readPost(slug, file) {
     return { slug, file, raw, data, body: m[2] };
 }
 
-const sourceHash = (raw) => createHash('sha256').update(raw).digest('hex').slice(0, 12);
+// The draft flag is left out so publishing a post doesn't make its translations stale.
+const sourceHash = (raw) => createHash('sha256').update(raw.replace(/^draft:.*\n/m, '')).digest('hex').slice(0, 12);
 const stripCode = (s) => s.replace(/```[\s\S]*?```/g, ' ');
 const prose = (body) => stripCode(body).replace(/\]\([^)]*\)/g, ']').replace(/<[^>]+>/g, ' ');
 const words = (s) => (s.match(/[A-Za-z0-9][\w'’.-]*/g) ?? []).length;
@@ -98,9 +98,17 @@ function checkLinks(p, prefix, errors) {
     }
 }
 
+const QUANTUM = /\bpost[- ]quantum\b|\bquantum[- ](resistant|proof|safe)\b|抗量子|后量子|後量子/i;
+const FARADAY = /faraday|blocknetcrypto\.com/i;
+
 function claims(text, errors, warnings) {
     for (const [re, advice] of FORBIDDEN) { const m = text.match(re); if (m) errors.push(`forbidden claim '${m[0]}': ${advice}`); }
     for (const [re, advice] of CAUTION) for (const m of text.matchAll(re)) warnings.push(`check wording '${m[0]}': ${advice}`);
+    // Post-quantum is fine as Faraday's plan, attributed; flag sentences that don't say so.
+    for (const sentence of text.split(/(?<=[.!?。！？])\s*|\n+/)) {
+        const m = sentence.match(QUANTUM);
+        if (m && !FARADAY.test(sentence)) warnings.push(`'${m[0]}' without Faraday/blocknetcrypto.com in the sentence: today's chain is classical crypto, so attribute it to the Faraday plan`);
+    }
 }
 
 function checkSource(p) {

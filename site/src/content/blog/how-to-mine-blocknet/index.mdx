@@ -10,6 +10,7 @@ faq:
     a: The bntpool.com pool pays with PPLNS over a six-hour window. A block's reward can only be paid after it is 60 blocks deep, about five hours at five-minute blocks, and balances are sent once they reach 0.1 BNT. Expect the first payment several hours after your first accepted shares.
   - q: Can I mine Blocknet with my CPU and GPU at the same time?
     a: Yes. On Windows and Linux, seine mines on every CPU core and every NVIDIA graphics card in the machine at once, and the two hashrates add up. It tunes the processor and each card separately while it runs, so you get the most from all of your hardware without changing a setting.
+related: [blocknet-mining-hardware-hashrate, what-is-blocknet, blocknet-id-pay-by-name]
 ---
 
 This guide takes you from downloading **seine** to your first accepted shares and payouts on the bntpool.com pool, on Windows, macOS or Linux.
@@ -23,7 +24,7 @@ Get a Blocknet address or a Blocknet ID shortname, download seine for your syste
 ## What do you need before you start?
 
 - **A Blocknet address.** Install the official Blocknet wallet, either the [command-line wallet](https://github.com/blocknetprivacy/blocknet/releases/latest) or the [desktop wallet](https://github.com/blocknetprivacy/blocknet-gui/releases/latest), and copy your address. Keep the wallet and its recovery phrase on your own computer; don't put them on a shared mining rig.
-- **Or a shortname.** If you have a Blocknet ID shortname from [blocknet.id](https://blocknet.id), you can mine to `@name` instead of pasting the long address.
+- **Or a shortname.** If you have a [Blocknet ID shortname](/blog/blocknet-id-pay-by-name/) from [blocknet.id](https://blocknet.id), you can mine to `@name` instead of pasting the long address.
 - **About 2 GB of RAM per mining thread.** Seine sizes itself to your machine and leaves headroom for the system, so you don't need to work this out first.
 - **Windows, macOS or Linux.** On Windows and Linux, NVIDIA graphics cards are used automatically when a recent driver is installed.
 
@@ -73,7 +74,7 @@ Hashrate depends mostly on memory bandwidth and the number of threads your RAM a
 | Arm server (AWS Graviton4) | 16 | 21.5 H/s |
 | Intel Xeon (Sapphire Rapids 8488C) | 12 | 13.1 H/s |
 
-Results for every CPU tested are on the [performance page](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md).
+Results for every CPU tested are on the [performance page](https://github.com/zpalmtree/seine/blob/master/docs/PERFORMANCE.md), and the [Blocknet mining hardware guide](/blog/blocknet-mining-hardware-hashrate/) explains how RAM and memory bandwidth set these numbers.
 
 ## How does seine get more from the same CPU?
 

@@ -28,9 +28,21 @@ explain the collision to readers (owner decision 2026-10-25: assume the reader k
 | Primary keyword cluster | URL | Search job | Supporting phrases |
 |---|---|---|---|
 | how to mine blocknet | `/blog/how-to-mine-blocknet/` | Get a newcomer from zero to accepted shares on any OS, and set expectations for payouts and hashrate | blocknet mining guide, blocknet miner, mine Blocknet BNT, bntpool setup, Blocknet Argon2id miner, 如何挖 Blocknet |
+| what is blocknet | `/blog/what-is-blocknet/` | Explain what Blocknet is and does for someone new, then route to names, privacy and mining | Blocknet privacy coin, Blocknet cryptocurrency, Blocknet fair launch, Blocknet Faraday upgrade, Blocknet 是什么 |
+| blocknet privacy | `/blog/blocknet-privacy-features/` | Explain each layer of Blocknet's mandatory privacy and what it means when you pay | blocknet ring signatures, blocknet stealth address, blocknet ring size, blocknet encrypted memo, Blocknet 隐私 |
+| blocknet id | `/blog/blocknet-id-pay-by-name/` | Claim a Blocknet ID shortname and get paid to `@name` (wallet, payment links, pool payouts) | blocknet.id, blocknet shortname, pay by name blocknet, bntpay link, mine to @name, Blocknet ID 短名称 |
+| argon2id proof of work | `/blog/argon2id-proof-of-work-explained/` | Explain how Blocknet's Argon2id PoW works and why RAM and bandwidth decide hashrate | argon2id mining, argon2id parameters, memory-hard proof of work, blocknet 2 GB per thread, Argon2id 工作量证明 |
+| best hardware for blocknet mining | `/blog/blocknet-mining-hardware-hashrate/` | Pick or size a mining machine: fastest hardware, threads per GB of RAM, expected H/s, CPU and GPU together | blocknet hashrate, blocknet mining RAM per thread, best CPU for Blocknet, Argon2id mining hardware, 挖 Blocknet 用什么硬件 |
+| mine blocknet on mac | `/blog/mine-blocknet-on-mac/` | Set up and size Blocknet mining on an Apple Silicon Mac | blocknet apple silicon, blocknet m4 max hashrate, mine blocknet macbook, seine macos, 在 Mac 上挖 Blocknet |
 
 ## Boundaries
 
 | Broad owner | Narrow owner | Boundary |
 |---|---|---|
-| `/blog/how-to-mine-blocknet/` | (future) `/blog/blocknet-mining-hardware-hashrate/` | The guide shows one best-per-generation table and links out; the hardware post owns buying advice and full per-chip results. |
+| `/blog/how-to-mine-blocknet/` | `/blog/blocknet-mining-hardware-hashrate/` | The guide shows one best-per-generation table and links out; the hardware post owns buying advice and full per-chip results. |
+| `/blog/what-is-blocknet/` | `/blog/blocknet-privacy-features/`, `/blog/blocknet-id-pay-by-name/` | The overview summarizes privacy and names in a paragraph each and links out; the narrow posts own the mechanics. |
+| `/blog/blocknet-mining-hardware-hashrate/` | `/blog/mine-blocknet-on-mac/` | The hardware post has one Mac row; the Mac post owns macOS setup and thread sizing by Mac memory. |
+| `/blog/argon2id-proof-of-work-explained/` | `/blog/blocknet-mining-hardware-hashrate/` | The explainer owns why memory decides hashrate; the hardware post owns which machine to buy or use. |
+
+bntpool.com's blog (blocknet-pool repo, `frontend/blog/`) owns pool-side jobs (joining the pool,
+PPLNS payouts, miner stats, the reward schedule, the fair launch). Don't target those here.
