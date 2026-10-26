@@ -4782,3 +4782,38 @@ drift, different CPU membership, absence of learned scores while deferred, and
 resumption after the original deadline. Existing pressure, allocation failure,
 membership and joint-search tests remain in the adaptive suite. The hash kernel
 is unchanged; native performance attribution for this scheduling fix is pending.
+
+
+### 2026-10-26: Genoa prefetch locality and wider streaming stores
+
+Two separate changes were tested on native Linux EPYC 9R14, 32 physical
+workers with 64 GiB of verified THP arenas, OS scheduling, and the existing
+R8D2 demand-fence path. Allocation and five-second warmup were excluded.
+Frozen baseline c28a2b8 used T0 prefetch and 256-bit streaming stores. Each
+experiment had two interleaved 20-second screen pairs, with three fresh
+30-second confirmation pairs if the predeclared screen gate advanced.
+
+- NTA prefetch (e48a985): -0.06392% paired geometric screen result,
+  95% bootstrap interval [-0.09759%, -0.03024%], both pairs slower.
+  This exact change is retained as rejected research, without integration.
+- 512-bit streaming stores (de7a1f4), with unchanged T0 prefetch, addresses,
+  fences and ring: screen +0.37962%, interval [-0.14835%, +0.91038%].
+  Fresh confirmation passed the predeclared gate: +2.35286%, interval
+  [+0.16626%, +6.43741%], three of three pairs faster. The individual
+  confirmation gains were approximately +0.166%, +6.437%, and +0.574%;
+  substantial host variation limits the point estimate. This is a narrow
+  candidate for scoped integration, not a universal or whole-miner claim.
+
+All 15,406 timed hashes independently matched cached libargon2 references;
+24 native full-size RustCrypto parity checks also passed. The rental was
+terminated and its disk, security group and key cleanup verified at
+2:42:57 PM EDT, with a $0.3495 compute upper estimate. Neither kernel change
+is in the shipping default yet. User requested a pause after the current
+collector deployment, so integration is deferred until work resumes.
+
+Local raw evidence: `benchmark-evidence/longhorn-20261025/` under
+`native-linux-amd-genoa-prefetch-locality/ring-publication/campaign/`.
+Its `independent-verification.json` preserves report hashes and verification
+counts; `comparison-diagnostics/genoa-prefetch-and-wide-stores-result.json`
+preserves decisions and cleanup. These results do not replace the public
+steady-state benchmark or establish a power-efficiency gain.
