@@ -4146,7 +4146,7 @@ its provisional status output is excluded. Both rentals were terminated and
 cleanup verified.
 
 
-## 2026-10-26: Windows Genoa first-sweep frontier (native test pending)
+## 2026-10-26: Windows Genoa first-sweep frontier (validated startup gain)
 
 Native EPYC 9R14 Windows ordinary-page captures repeatedly reject AVX512 and
 AVX2 at 31 and 32 workers: roughly 27 H/s versus 34 H/s on streaming. The
@@ -4162,5 +4162,25 @@ The cache policy has a separate Windows fingerprint and preserves compatible
 previous confirmed winners; context, age and sample-proof checks remain in force.
 105 focused adaptive tests passed, five ignored, including neighboring identity,
 unsupported path, mixed backing, count, periodic full-search and cache-boundary
-checks. A frozen native MSVC baseline/candidate 600-second cold comparison is
-planned before landing. No performance gain is claimed yet.
+checks.
+
+The frozen native MSVC comparison used baseline `8747ea1` (v0.2.29 plus a
+journal-only commit) and candidate `de74dce`. On native Windows Server 2025,
+EPYC 9R14 / m7a.8xlarge, 32 physical cores and 128 GiB, a standard account used
+ordinary VirtualAlloc pages and shipping defaults with empty caches. The fixed
+600-second baseline followed by 600-second candidate measured **32.40833 to
+34.15333 useful H/s, +5.3844%**. All **39,941 captured hashes** independently
+matched libargon2, with zero invalid or duplicate hashes.
+
+The candidate reached its first confirmed count decision at **303.9 seconds**;
+the baseline did not reach one within its 600-second window. One candidate
+comparison rejected baseline drift; the existing safety gate remained effective.
+This is one launch-anchored startup pair, with no confidence interval. It is not
+a sustained-throughput or long-run fee-adjusted result, and not every observed
+variation can be attributed to the code. Kernel implementations, sample durations,
+periodic exhaustive retuning and efficiency opt-in behavior remain unchanged.
+
+Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
+`native-windows-amd-frontier/` and
+`comparison-diagnostics/windows-startup-frontier.json`. All captures, exact build
+identities and independent verification receipts are retained.

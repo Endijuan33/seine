@@ -197,9 +197,9 @@ fn genoa_frontier_context(context: &Context) -> bool {
     genoa_short_context(context) && matches!(context.workers.as_slice(), [31 | 32])
 }
 
-// Research candidate: native Windows 9R14 captures repeatedly reject AVX512
-// and AVX2 by about 20% at 31/32 workers. Validate stream-first startup natively
-// before promotion. Subsequent periodic sweeps remain exhaustive.
+// Native Windows 9R14 cold pair gained 5.38% by prioritizing streaming at
+// 31/32 workers with ordinary pages. Subsequent periodic sweeps remain
+// exhaustive once this context has a saved winner.
 fn windows_genoa_frontier_for(
     cfg: &Config,
     host: &CpuAutotuneHostFingerprint,
