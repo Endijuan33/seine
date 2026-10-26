@@ -248,7 +248,7 @@ Copy this row and fill every field after each pass:
 `| YYYY-MM-DD | <commit or working tree> | <exact code/config change> | <benchmark reports + averaged H/s> | <Kept/Reverted + rationale> |`
 
 
-## 2026-10-26: CUDA driver loader compatibility (validation in progress)
+## 2026-10-26: CUDA driver loader compatibility (validated)
 
 One native Windows v0.2.29 NVIDIA-only run reported initialization failure and a
 panic at cudarc 0.19.2 `driver/sys/mod.rs:21887`. The selected `cuda-12080`
@@ -267,8 +267,15 @@ The candidate changes only cudarc's selected ABI feature from `cuda-12080` to
 `cuda-12000`. The dependency version, CUDA kernels, GPU architecture selection
 and bundled Windows NVRTC 12.8 runtime are unchanged. The generic CUDA 12 NVRTC
 DLL name remains in the loader's candidate names. All 33 NVIDIA backend unit
-tests pass; the existing full-size GPU differential test is queued through gpuq
-and remains required before treating hardware validation as complete.
+tests pass. The existing full-size GPU differential test passed on the RTX 5090
+through gpuq: five nonces match the CPU reference at full 2-GiB memory, each with
+an exact-target hit and one-less-target miss. The frozen compatibility test
+executable has SHA-256
+`3f9a2f1b1c768718da0123e021eb4171dd4cd4151a421b8312af0c99198594c2`.
+The bounded hardware job completed in 139.45 seconds with zero failures. This
+validates actual GPU execution on the available current driver; compatibility
+with the affected older driver is supported by the exact synthetic loader
+reproduction, not a claim of testing that user's hardware.
 
 Evidence: workspace `benchmark-evidence/longhorn-20261025/cuda-loader-probe/`;
 `result.json`, `windows-result.json`, generated synthetic fixture, build logs and

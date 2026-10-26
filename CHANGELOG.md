@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.31
+
 - **Improved NVIDIA driver compatibility:** avoid a startup failure caused by a missing driver symbol on some older CUDA 12 drivers.
 
 ## v0.2.30
