@@ -124,3 +124,11 @@ The hardware article owns chip selection and measured hashrates; Argon2id owns a
 | update seine miner; update Blocknet miner | `/blog/update-seine-miner/` | Replace an existing installation while preserving its working directory, saved settings and launch options, then verify the replacement | seine update notification, seine-data, 更新 Blocknet 矿工软件 |
 
 Installation guides own first setup; the antivirus guide owns archive verification and warnings; the server guide owns service configuration. This guide owns maintaining an existing installation and diagnosing a changed configuration path after replacement. No URL is retargeted.
+
+## Tuning and Stratum (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job | Supporting phrases |
+|---|---|---|---|
+| seine automatic CPU tuning; mining autotune | `/blog/seine-automatic-cpu-tuning/` | Understand productive CPU count/kernel comparisons, cache reuse and memory responses | Blocknet mining, seine, bntpool |
+
+Dashboard owns panel interpretation; RAM owns capacity planning; huge pages owns OS reservation. This article owns automatic tuning decisions and manual overrides. No URL is retargeted.
