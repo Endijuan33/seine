@@ -136,6 +136,13 @@ fn startup_kernel_for(
     cohort_stream_kernel(identity, candidates)
 }
 
+/// The cohort kernel regardless of worker count, for the worker-count search:
+/// every candidate count must be measured with the kernel that will mine.
+pub(super) fn cohort_kernel() -> Option<CpuKernel> {
+    let identity = crate::runtime_identity::cpu_identity();
+    cohort_stream_kernel(&identity, &candidates_for(&identity, &supported_kernels()))
+}
+
 /// Kernel for fixed worker counts (explicit `--threads`), which run no trials.
 /// Uses the same cohort default the adaptive path starts from.
 pub(super) fn static_kernel_for(workers: usize) -> Option<CpuKernel> {

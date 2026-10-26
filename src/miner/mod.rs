@@ -1816,7 +1816,8 @@ fn bench_cpu_autotune_candidate(
             hash_flush_interval: cfg.cpu_hash_flush_interval,
             event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
             page_mode: cfg.cpu_page_mode,
-            kernel: None,
+            // Size workers for the kernel that will mine, not the plain fallback.
+            kernel: cfg.bench_cpu_kernel.or_else(adaptive_kernel::cohort_kernel),
         },
     );
 
@@ -2286,7 +2287,11 @@ fn build_backend_instances(cfg: &Config) -> Vec<(BackendSpec, Arc<dyn PowBackend
                         hash_flush_interval: cfg.cpu_hash_flush_interval,
                         event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
                         page_mode: cfg.cpu_page_mode,
-                        kernel: cfg.bench_cpu_kernel,
+                        kernel: cfg.bench_cpu_kernel.or_else(|| {
+                            adaptive_kernel::static_kernel_for(
+                                backend_spec.cpu_threads.unwrap_or(cfg.threads),
+                            )
+                        }),
                     },
                 )) as Arc<dyn PowBackend>,
                 BackendKind::Nvidia => Arc::new(NvidiaBackend::new(
