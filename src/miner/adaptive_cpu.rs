@@ -159,6 +159,36 @@ pub(super) fn sapphire_full_count_cold_start(
         && memory_capacity >= 32
 }
 
+// Research: test known streaming startup and THP allocation on native Turin.
+// Keep neighboring hosts, manual settings and efficiency mode unchanged.
+pub(super) fn turin_full_count_cold_start(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    max: usize,
+    memory_capacity: usize,
+) -> bool {
+    identity.vendor.as_deref() == Some("AuthenticAMD")
+        && identity.family == Some(0x1a)
+        && identity.model == Some(0x02)
+        && host.cpu_brand.as_deref() == Some("AMD EPYC 9R45")
+        && host.os == "linux"
+        && host.runtime_environment == "native"
+        && host.logical_cores == 32
+        && host.physical_cores == Some(32)
+        && (120 * 1024_u64.pow(3)..=130 * 1024_u64.pow(3)).contains(&host.total_memory_bytes)
+        && cfg.backend_specs.len() == 1
+        && instances(cfg) == 1
+        && cfg.backend_specs[0]
+            .cpu_affinity
+            .is_none_or(|affinity| affinity == crate::config::CpuAffinityMode::Auto)
+        && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
+        && cfg.cpu_page_mode == crate::config::CpuPageMode::Auto
+        && cfg.cpu_affinity == crate::config::CpuAffinityMode::Auto
+        && max == 32
+        && memory_capacity >= 32
+}
+
 fn initial_threads(
     record: Option<&CpuAutotuneRecord>,
     min: usize,
@@ -266,6 +296,12 @@ fn prepare_with_resources(
             max,
             memory_capacity,
         ) || sapphire_full_count_cold_start(
+            cfg,
+            &cpu_autotune_host_fingerprint(),
+            &crate::runtime_identity::cpu_identity(),
+            max,
+            memory_capacity,
+        ) || turin_full_count_cold_start(
             cfg,
             &cpu_autotune_host_fingerprint(),
             &crate::runtime_identity::cpu_identity(),
@@ -2482,6 +2518,75 @@ mod tests {
         assert!(!sapphire_full_count_cold_start(
             &cfg, &host, &identity, 32, 32
         ));
+    }
+
+    #[test]
+    fn turin_full_count_seed_requires_exact_native_host_and_configuration() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R45".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            stepping: Some(1),
+        };
+        assert!(turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        let mut windows = host.clone();
+        windows.os = "windows".into();
+        assert!(!turin_full_count_cold_start(
+            &cfg, &windows, &identity, 32, 32
+        ));
+        for (vendor, family, model) in [
+            ("GenuineIntel", 0x1a, 0x02),
+            ("AuthenticAMD", 0x19, 0x02),
+            ("AuthenticAMD", 0x1a, 0x44),
+        ] {
+            let mut other = identity.clone();
+            other.vendor = Some(vendor.into());
+            other.family = Some(family);
+            other.model = Some(model);
+            assert!(!turin_full_count_cold_start(&cfg, &host, &other, 32, 32));
+        }
+        for field in ["brand", "os", "runtime", "logical", "physical", "memory"] {
+            let mut other = host.clone();
+            match field {
+                "brand" => other.cpu_brand = Some("AMD EPYC 9354P".into()),
+                "os" => other.os = "macos".into(),
+                "runtime" => other.runtime_environment = "wsl2".into(),
+                "logical" => other.logical_cores = 64,
+                "physical" => other.physical_cores = Some(16),
+                "memory" => other.total_memory_bytes = 64 * 1024_u64.pow(3),
+                _ => unreachable!(),
+            }
+            assert!(
+                !turin_full_count_cold_start(&cfg, &other, &identity, 32, 32),
+                "{field}"
+            );
+        }
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 24, 32));
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 32, 24));
+        cfg.cpu_profile = CpuPerformanceProfile::Efficiency;
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_profile = CpuPerformanceProfile::Throughput;
+        assert!(turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_page_mode = CpuPageMode::Regular;
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_page_mode = CpuPageMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = Some(crate::config::CpuAffinityMode::Off);
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.backend_specs.push(cfg.backend_specs[0].clone());
+        assert!(!turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
     }
 
     #[test]

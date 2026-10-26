@@ -1365,6 +1365,62 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn turin_hint_first_thp_requires_exact_native_host() {
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            ..Default::default()
+        };
+        let matches =
+            |id: &crate::runtime_identity::CpuIdentity, brand, logical, physical, memory, env| {
+                super::hint_first_thp_matches(id, brand, logical, physical, memory, env)
+            };
+        let memory = 128 * 1024_u64.pow(3);
+        assert!(matches(
+            &identity,
+            Some("AMD EPYC 9R45"),
+            32,
+            Some(32),
+            memory,
+            "native"
+        ));
+        for (field, value) in [("model", 0x61), ("family", 0x19), ("vendor", 0)] {
+            let mut other = identity.clone();
+            match field {
+                "model" => other.model = Some(value),
+                "family" => other.family = Some(value),
+                _ => other.vendor = Some("GenuineIntel".into()),
+            }
+            assert!(!matches(
+                &other,
+                Some("AMD EPYC 9R45"),
+                32,
+                Some(32),
+                memory,
+                "native"
+            ));
+        }
+        for (brand, logical, physical, mem, env) in [
+            (Some("AMD EPYC 9354P"), 32, Some(32), memory, "native"),
+            (Some("AMD EPYC 9R45"), 64, Some(32), memory, "native"),
+            (Some("AMD EPYC 9R45"), 32, Some(16), memory, "native"),
+            (Some("AMD EPYC 9R45"), 32, None, memory, "native"),
+            (
+                Some("AMD EPYC 9R45"),
+                32,
+                Some(32),
+                64 * 1024_u64.pow(3),
+                "native",
+            ),
+            (Some("AMD EPYC 9R45"), 32, Some(32), memory, "wsl2"),
+        ] {
+            assert!(!matches(&identity, brand, logical, physical, mem, env));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn hint_first_thp_prefault_and_unsupported_fallback_are_zeroed_and_usable() {
         // Odd MiB size prevents an explicit HugeTLB success bypassing this path.
         let bytes = 3 * 1024 * 1024;
@@ -1869,9 +1925,12 @@ fn hint_first_thp_matches(
     environment: &str,
 ) -> bool {
     identity.vendor.as_deref() == Some("AuthenticAMD")
-        && identity.family == Some(0x19)
-        && identity.model == Some(0x11)
-        && brand == Some("AMD EPYC 9R14")
+        && ((identity.family == Some(0x19)
+            && identity.model == Some(0x11)
+            && brand == Some("AMD EPYC 9R14"))
+            || (identity.family == Some(0x1a)
+                && identity.model == Some(0x02)
+                && brand == Some("AMD EPYC 9R45")))
         && logical == 32
         && physical == Some(32)
         && (120 * 1024_u64.pow(3)..=130 * 1024_u64.pow(3)).contains(&memory)

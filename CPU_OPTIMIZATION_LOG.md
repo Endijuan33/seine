@@ -4461,3 +4461,19 @@ but do not advertise the larger screen effect or infer a meaningful miner-level
 win from 0.06% on one host. Automatic ring promotion is deferred: its extra
 productive search cost needs justification, and the existing streaming path is
 already nearly tied. The existing explicit ring option remains available.
+
+## 2026-10-26: Turin streaming startup and prefault order (research)
+
+The larger opportunity is avoiding cold-start discovery of the known 32-worker
+streaming path. This candidate seeds 32 workers and the existing streaming kernel
+only on native Linux EPYC 9R45, family1Ah/model02h, 32physical/32logical cores,
+120-130GiB RAM, automatic pages/placement and throughput objectives. The kernel
+startup requires actual full THP backing. Confirmed count/kernel caches, resource
+limits and productive challenger comparisons retain precedence. Prior kernel
+cache records with identical candidates/settings remain compatible with the new
+startup marker. Efficiency and neighboring hardware retain existing behavior.
+
+The same exact host also uses the already-tested THP hint-before-prefault
+allocation path; unsupported advice falls back to the original allocator.
+No hash implementation or automatic ring eligibility changes. Native combined
+cold-start baseline/candidate evidence is required before landing or release.

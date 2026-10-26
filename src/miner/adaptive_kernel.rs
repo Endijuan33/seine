@@ -146,6 +146,24 @@ fn sapphire_stream_startup(
         )
 }
 
+// Research: native Turin comparison must validate this exact startup context.
+// Actual full THP backing is checked separately before applying the startup hint.
+fn turin_stream_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> bool {
+    supported.contains(&CpuKernel::Avx512256Stream)
+        && super::adaptive_cpu::turin_full_count_cold_start(
+            cfg,
+            host,
+            identity,
+            32,
+            cfg.cpu_auto_threads_cap,
+        )
+}
+
 fn genoa_stream_context(context: &Context) -> bool {
     context.members.len() == 1
         && context.workers == [32]
@@ -436,6 +454,7 @@ pub(super) struct Tuner {
     genoa_startup: bool,
     windows_genoa_startup: bool,
     sapphire_startup: bool,
+    turin_startup: bool,
 }
 
 impl Tuner {
@@ -461,6 +480,7 @@ impl Tuner {
         if sapphire_startup {
             candidates.push(CpuKernel::Avx512256Stream);
         }
+        let turin_startup = turin_stream_startup(cfg, &host, identity, &supported);
         let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
         // Native ring/depth screen: retain the old streaming path as a challenger.
@@ -473,7 +493,7 @@ impl Tuner {
         }
         let startup = if ring_startup {
             Some(CpuKernel::Avx512256StreamR8D2)
-        } else if genoa_startup || windows_genoa_startup || sapphire_startup {
+        } else if genoa_startup || windows_genoa_startup || sapphire_startup || turin_startup {
             Some(CpuKernel::Avx512256Stream)
         } else {
             startup_kernel_for(identity, &candidates)
@@ -512,6 +532,9 @@ impl Tuner {
                     ";frontier_policy=genoa-thp31-32-stream-first-v1"
                 });
             }
+            if turin_startup {
+                configuration.push_str(";startup=turin9r45-32-thp-v1");
+            }
             if sapphire_startup {
                 configuration.push_str(";startup=sapphire8488c-32-thp-v1");
             }
@@ -525,6 +548,8 @@ impl Tuner {
         };
         let configuration =
             configuration_for(&candidates, genoa_short_trials, genoa_startup_frontier);
+        let prior_startup_configuration =
+            turin_startup.then(|| configuration.replace(";startup=turin9r45-32-thp-v1", ""));
         let prior_configuration = ring_startup.then(|| {
             let prior_paths: Vec<_> = candidates
                 .iter()
@@ -547,9 +572,12 @@ impl Tuner {
             .and_then(|mut record| {
                 if record.compatible(&host, &configuration) {
                     Some(record)
-                } else if prior_sample_configuration
+                } else if prior_startup_configuration
                     .as_ref()
                     .is_some_and(|prior| record.compatible(&host, prior))
+                    || prior_sample_configuration
+                        .as_ref()
+                        .is_some_and(|prior| record.compatible(&host, prior))
                     || prior_frontier_configuration
                         .as_ref()
                         .is_some_and(|prior| record.compatible(&host, prior))
@@ -595,6 +623,7 @@ impl Tuner {
             genoa_startup,
             windows_genoa_startup,
             sapphire_startup,
+            turin_startup,
         }
     }
 
@@ -822,7 +851,7 @@ impl Tuner {
                 }
                 if let Some(kernel) = self.startup.filter(|k| {
                     self.candidates.contains(k)
-                        && if self.genoa_startup || self.sapphire_startup {
+                        && if self.genoa_startup || self.sapphire_startup || self.turin_startup {
                             genoa_stream_context(&context)
                         } else if self.windows_genoa_startup {
                             windows_genoa_stream_context(&context)
@@ -2302,6 +2331,135 @@ mod tests {
         ] {
             let mut t = three_path_tuner();
             t.sapphire_startup = true;
+            t.startup = Some(CpuKernel::Avx512256Stream);
+            let mut s = snapshot();
+            s.threads = 32;
+            s.backing_bytes = backing;
+            s.kernel = CpuKernel::Avx512;
+            let action = t.tick(1, &[s], true, true);
+            assert_eq!(
+                action.kernel,
+                (backing[2] == 32 * CPU_LANE_MEMORY_BYTES).then_some(CpuKernel::Avx512256Stream)
+            );
+            assert!(
+                t.cache.winners.is_empty(),
+                "a startup hint is not a confirmed winner"
+            );
+        }
+    }
+
+    #[test]
+    fn turin_startup_policy_preserves_confirmed_cache() {
+        if !CpuKernel::Avx512256Stream.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-turin-startup-cache-{}.json",
+            std::process::id()
+        ));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R45".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            ..Default::default()
+        };
+        let fresh = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&fresh.path);
+        let context = Context {
+            members: vec![0],
+            workers: vec![32],
+            backing: vec![[0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]],
+        };
+        let old = Cache {
+            schema: CACHE_SCHEMA,
+            host: host.clone(),
+            configuration: fresh
+                .cache
+                .configuration
+                .replace(";startup=turin9r45-32-thp-v1", ""),
+            winners: vec![Winner {
+                context: context.clone(),
+                kernel: "avx512".into(),
+                timestamp: unix_secs(),
+                base: "avx512".into(),
+                candidate: "avx2".into(),
+                samples: vec![sample(100); 3],
+            }],
+        };
+        assert_ne!(old.configuration, fresh.cache.configuration);
+        fs::write(&fresh.path, serde_json::to_vec(&old).unwrap()).unwrap();
+        let mut upgraded = Tuner::for_identity(&cfg, host, &identity);
+        assert_eq!(upgraded.cache.configuration, fresh.cache.configuration);
+        assert_eq!(upgraded.cache.winners.len(), 1);
+        let mut state = snapshot();
+        state.threads = 32;
+        state.backing_bytes = context.backing[0];
+        state.kernel = CpuKernel::Avx2;
+        assert_eq!(
+            upgraded.tick(1, &[state], true, true).kernel,
+            Some(CpuKernel::Avx512)
+        );
+        let _ = fs::remove_file(&fresh.path);
+    }
+
+    #[test]
+    fn experimental_turin_startup_requires_full_count_host_and_supported_path() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let mut host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R45".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            stepping: Some(1),
+        };
+        let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
+        assert!(turin_stream_startup(&cfg, &host, &identity, &paths));
+        assert!(!turin_stream_startup(&cfg, &host, &identity, &paths[..1]));
+        cfg.threads = 24;
+        assert!(turin_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 24;
+        assert!(!turin_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.cpu_auto_threads_cap = 32;
+        host.runtime_environment = "wsl2".into();
+        assert!(!turin_stream_startup(&cfg, &host, &identity, &paths));
+    }
+
+    #[test]
+    fn turin_startup_requires_actual_full_thp_context() {
+        for backing in [
+            [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0],
+            [0, 0, 31 * CPU_LANE_MEMORY_BYTES, CPU_LANE_MEMORY_BYTES, 0],
+            [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0],
+        ] {
+            let mut t = three_path_tuner();
+            t.turin_startup = true;
             t.startup = Some(CpuKernel::Avx512256Stream);
             let mut s = snapshot();
             s.threads = 32;
