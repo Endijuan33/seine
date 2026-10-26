@@ -91,8 +91,11 @@ fn candidates_for(
 /// Zen 4 (family 19h with AVX-512) and Zen 5 (family 1Ah) use the AVX-512 path.
 /// Zen 3 (family 19h without AVX-512) and Zen 2 (family 17h, model 30h and up)
 /// use the AVX2 path: native EPYC 7443P +48% and EPYC 7R32 +67% over AVX2.
-/// Zen 1/Zen+ (17h below 30h) is unmeasured. Callers always intersect with
-/// runtime-detected kernels, so ISA support is never assumed.
+/// Zen 1/Zen+ (17h below 30h) is unmeasured, and so is the AVX2 path outside
+/// Linux. Callers always intersect with runtime-detected kernels, so ISA
+/// support is never assumed.
+const AVX2_STREAM_OS: bool = cfg!(any(target_os = "linux", test));
+
 fn cohort_stream_kernel(
     identity: &crate::runtime_identity::CpuIdentity,
     supported: &[CpuKernel],
@@ -104,9 +107,12 @@ fn cohort_stream_kernel(
         Some(0x19 | 0x1a) if supported.contains(&CpuKernel::Avx512256Stream) => {
             Some(CpuKernel::Avx512256Stream)
         }
-        Some(0x19) if supported.contains(&CpuKernel::Avx2Stream) => Some(CpuKernel::Avx2Stream),
+        Some(0x19) if AVX2_STREAM_OS && supported.contains(&CpuKernel::Avx2Stream) => {
+            Some(CpuKernel::Avx2Stream)
+        }
         Some(0x17)
-            if identity.model.is_some_and(|m| m >= 0x30)
+            if AVX2_STREAM_OS
+                && identity.model.is_some_and(|m| m >= 0x30)
                 && supported.contains(&CpuKernel::Avx2Stream) =>
         {
             Some(CpuKernel::Avx2Stream)
