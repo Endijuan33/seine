@@ -4219,3 +4219,33 @@ cleanup were verified. Evidence: workspace
 contains raw reports, comparisons, exact source identities and
 `independent-verification.json`. No release or public performance headline
 follows from these rejected candidates.
+
+## 2026-10-26: Windows ordinary-page ring/depth neighbors retain the default
+
+The same neighborhood was measured independently on native Windows Server 2025,
+EPYC 9R14 / m7a.8xlarge, 32 physical cores and 128 GiB RAM. A standard account
+used 32 workers and 64 GiB of ordinary VirtualAlloc pages, explicitly without
+MEM_LARGE_PAGES. Resident working-set and private-byte observations were checked
+before every measurement. Frozen native MSVC research revision `6f956af` has
+binary SHA-256
+`87bc84be855a325ea962f74be4f3ee2a60f7a2a73e0b0af9732bb34094e83ed3`.
+
+Two interleaved 20-second screen pairs per candidate exclude allocation and a
+five-second warmup. Relative to ring 8 / depth 2:
+
+| Candidate | Paired difference | Paired bootstrap 95% interval |
+|---|---:|---:|
+| Ring 4 / depth 2 | -2.520% | [-3.155%, -1.882%] |
+| Ring 16 / depth 2 | -4.985% | [-5.556%, -4.410%] |
+| Ring 8 / depth 1 | -1.102% | [-1.569%, -0.632%] |
+
+Both screen pairs were slower in every comparison. The predeclared runner
+stopped these candidates before confirmation; keep the current Windows default.
+These are exact-host, short kernel comparisons, not cross-platform scaling or
+long-run user-throughput claims. All **7,957 timed hashes** independently matched
+libargon2 and all 36 native full-size RustCrypto parity checks passed before
+measurement. The rental was promptly terminated with disk/security-group cleanup
+verified. Raw reports, memory observations, source identities and verification
+receipts are retained in workspace
+`benchmark-evidence/longhorn-20261025/native-windows-amd-ring-grid/ring-grid/campaign/`.
+No public headline or release follows from these rejected candidates.
