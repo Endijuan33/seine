@@ -4524,7 +4524,7 @@ support is checked separately. The startup hint requires32workers/fullTHP.
 Saved prior winners seed productive comparison of only the newly available path.
 Efficiency and manual configuration retain their existing policies. Candidate-set
 fingerprints distinguish the new path while strict host/context/age/proof checks
-preserve usable prior winners. Local checks:113 adaptive tests passed5ignored;
+preserve usable prior winners. Local checks:115 adaptive tests passed5ignored;
 eight kernel tests including dirty reuse, guards and all-path parity passed.
 The integrated complete loop equals the measured research algorithm after
 constant-branch resolution; this does not assert identical assembly.
@@ -4533,3 +4533,14 @@ Public positive-result evidence: `experiments/turin-fences-20261026/`.
 Full local campaign including the rejected interaction:
 `native-linux-amd-zen5-demand-depth/ring-publication/campaign/`.
 Kernel throughput excludes startup/warmup/teardown; no energy or fee claim.
+
+The cached-upgrade path initially exposed the generic2% switching margin, which
+would hide this1% gain from existing cached users. For the old64/3streaming vs
+new64/3demand pair only, retain two fresh A/B/A cycles but require >=30s and
+>=1024hashes per sample, <=1% baseline drift and a gain exceeding the existing
+three-sample hash-quantization allowance. Other pairs retain the2% margin and5%
+drift limit. Longer user-requested windows remain honored. Cache proof uses the
+same pair-specific rule. Tests exercise a1% productive promotion, two-cycle
+requirement, saved-winner restoration, low-count/short-window refusal, quantized
+ties and drift. No extra native hash run is required for this policy-only change;
+the hash loop and independently verified native captures are unchanged.

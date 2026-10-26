@@ -327,6 +327,9 @@ impl Cache {
     fn winner(&self, context: &Context, now: u64, paths: &[CpuKernel]) -> Option<CpuKernel> {
         self.winners.iter().rev().find_map(|winner| {
             let kernel = winner.kernel.parse::<CpuKernel>().ok()?;
+            let base = winner.base.parse::<CpuKernel>().ok()?;
+            let candidate = winner.candidate.parse::<CpuKernel>().ok()?;
+            let compare = |a, b, c| comparison_for(base, candidate, a, b, c);
             (winner.context == *context
                 && winner.timestamp <= now
                 && now - winner.timestamp < CPU_AUTOTUNE_RECORD_MAX_AGE_SECS
@@ -334,18 +337,20 @@ impl Cache {
                 && winner.samples.iter().all(|s| s.secs > 0 && s.hashes > 0)
                 && if winner.kernel == winner.base {
                     match winner.samples.as_slice() {
-                        [a, b, c] => comparison(*a, *b, *c) == Comparison::NoConfirmedGain,
+                        [a, b, c] => compare(*a, *b, *c) == Comparison::NoConfirmedGain,
                         [a, b, c, d, e, f] => {
-                            improves(*a, *b, *c)
-                                && comparison(*d, *e, *f) == Comparison::NoConfirmedGain
+                            compare(*a, *b, *c) == Comparison::Gain
+                                && compare(*d, *e, *f) == Comparison::NoConfirmedGain
                         }
                         _ => false,
                     }
                 } else {
                     winner.kernel == winner.candidate
                         && winner.samples.len() == 6
-                        && improves(winner.samples[0], winner.samples[1], winner.samples[2])
-                        && improves(winner.samples[3], winner.samples[4], winner.samples[5])
+                        && compare(winner.samples[0], winner.samples[1], winner.samples[2])
+                            == Comparison::Gain
+                        && compare(winner.samples[3], winner.samples[4], winner.samples[5])
+                            == Comparison::Gain
                 })
             .then_some(kernel)
         })
@@ -386,25 +391,67 @@ fn rates(samples: &[Sample], base: CpuKernel, candidate: CpuKernel) -> String {
         .join(" / ")
 }
 
+#[cfg(test)]
 fn improves(before: Sample, candidate: Sample, after: Sample) -> bool {
     comparison(before, candidate, after) == Comparison::Gain
 }
 
+fn demand_fence_pair(base: CpuKernel, candidate: CpuKernel) -> bool {
+    matches!(
+        (base, candidate),
+        (CpuKernel::Avx512256Stream, CpuKernel::Avx512256StreamR64D3)
+            | (CpuKernel::Avx512256StreamR64D3, CpuKernel::Avx512256Stream)
+    )
+}
+
+fn comparison_for(
+    base: CpuKernel,
+    path: CpuKernel,
+    before: Sample,
+    candidate: Sample,
+    after: Sample,
+) -> Comparison {
+    if demand_fence_pair(base, path) {
+        // Native gain is about 1%, below the generic 2% switching margin.
+        // Require longer, well-resolved samples and tighter baseline stability;
+        // both fresh A/B/A cycles still have to win before promotion/caching.
+        if [before, candidate, after]
+            .iter()
+            .any(|s| s.secs < 30 || s.hashes < 1024)
+        {
+            return Comparison::Inconclusive;
+        }
+        comparison_with_limits(before, candidate, after, 0.0, 0.01)
+    } else {
+        comparison(before, candidate, after)
+    }
+}
+
 fn comparison(before: Sample, candidate: Sample, after: Sample) -> Comparison {
+    comparison_with_limits(before, candidate, after, 0.02, MAX_DRIFT)
+}
+
+fn comparison_with_limits(
+    before: Sample,
+    candidate: Sample,
+    after: Sample,
+    margin: f64,
+    max_drift: f64,
+) -> Comparison {
     if [before, candidate, after]
         .iter()
         .any(|s| s.secs == 0 || s.hashes == 0)
     {
         return Comparison::Inconclusive;
     }
-    if (after.hps() / before.hps() - 1.0).abs() > MAX_DRIFT {
+    if (after.hps() / before.hps() - 1.0).abs() > max_drift {
         return Comparison::Inconclusive;
     }
     let baseline =
         (before.hashes as f64 + after.hashes as f64) / (before.secs as f64 + after.secs as f64);
     let quantization =
         1.0 / before.secs as f64 + 1.0 / candidate.secs as f64 + 1.0 / after.secs as f64;
-    if candidate.hps() > baseline * 1.02 + quantization {
+    if candidate.hps() > baseline * (1.0 + margin) + quantization {
         Comparison::Gain
     } else {
         Comparison::NoConfirmedGain
@@ -1000,7 +1047,10 @@ impl Tuner {
         };
         let short =
             self.short_trials || (self.genoa_short_trials && genoa_short_context(&trial.context));
-        if !sample_ready(sample, self.window_secs, short) {
+        let fence_pair = demand_fence_pair(trial.base, trial.candidate);
+        if !sample_ready(sample, self.window_secs, short && !fence_pair)
+            || (fence_pair && sample.hashes < 1024)
+        {
             return Action {
                 hold_counts: true,
                 ..Action::default()
@@ -1009,12 +1059,23 @@ impl Tuner {
         trial.window = None;
         trial.samples.push(sample);
         if trial.samples.len() == 3
-            && !improves(trial.samples[0], trial.samples[1], trial.samples[2])
+            && comparison_for(
+                trial.base,
+                trial.candidate,
+                trial.samples[0],
+                trial.samples[1],
+                trial.samples[2],
+            ) != Comparison::Gain
         {
             // Reject an inconclusive/noisy candidate without spending a second cycle.
             let trial = self.trial.take().unwrap();
-            let stable = comparison(trial.samples[0], trial.samples[1], trial.samples[2])
-                == Comparison::NoConfirmedGain;
+            let stable = comparison_for(
+                trial.base,
+                trial.candidate,
+                trial.samples[0],
+                trial.samples[1],
+                trial.samples[2],
+            ) == Comparison::NoConfirmedGain;
             let measured = rates(&trial.samples, trial.base, trial.candidate);
             if stable {
                 let base = trial.base;
@@ -1037,7 +1098,13 @@ impl Tuner {
         }
         if trial.samples.len() == 6 {
             let trial = self.trial.take().unwrap();
-            let outcome = comparison(trial.samples[3], trial.samples[4], trial.samples[5]);
+            let outcome = comparison_for(
+                trial.base,
+                trial.candidate,
+                trial.samples[3],
+                trial.samples[4],
+                trial.samples[5],
+            );
             let measured = rates(&trial.samples, trial.base, trial.candidate);
             let promoted = outcome == Comparison::Gain;
             let conclusive = outcome != Comparison::Inconclusive;
@@ -1319,6 +1386,86 @@ mod tests {
                 secs: 30
             }
         ));
+    }
+
+    #[test]
+    fn demand_fence_small_gain_requires_resolved_stable_samples() {
+        let base = CpuKernel::Avx512256Stream;
+        let candidate = CpuKernel::Avx512256StreamR64D3;
+        let a = Sample {
+            hashes: 1500,
+            secs: 30,
+        };
+        let b = Sample {
+            hashes: 1515,
+            secs: 30,
+        };
+        assert_eq!(comparison(a, b, a), Comparison::NoConfirmedGain);
+        assert_eq!(comparison_for(base, candidate, a, b, a), Comparison::Gain);
+        assert_eq!(
+            comparison_for(base, candidate, a, Sample { hashes: 1501, ..a }, a),
+            Comparison::NoConfirmedGain
+        );
+        assert_eq!(
+            comparison_for(base, candidate, a, b, Sample { hashes: 1530, ..a }),
+            Comparison::Inconclusive
+        );
+        assert_eq!(
+            comparison_for(
+                base,
+                candidate,
+                Sample {
+                    hashes: 500,
+                    secs: 10
+                },
+                b,
+                a
+            ),
+            Comparison::Inconclusive
+        );
+    }
+
+    #[test]
+    fn demand_fence_one_percent_promotes_after_two_cycles_and_survives_cache() {
+        if candidates().len() < 2 {
+            return;
+        }
+        let mut t = tuner();
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512256Stream;
+        t.candidates = vec![s.kernel, CpuKernel::Avx512256StreamR64D3];
+        t.short_trials = true;
+        let challenger = CpuKernel::Avx512256StreamR64D3;
+        let mut now = 0;
+        assert!(t.tick(now, &[s], true, true).hold_counts);
+        for (index, rate) in [100, 101, 100, 100, 101, 100].into_iter().enumerate() {
+            now += 1;
+            s.kernel_ready = false;
+            assert!(t.tick(now, &[s], true, true).hold_counts);
+            assert!(t.trial.as_ref().unwrap().window.is_none());
+            s.kernel_ready = true;
+            t.tick(now, &[s], true, true);
+            now += 30;
+            s.hashes += rate * 30;
+            let action = t.tick(now, &[s], true, true);
+            if let Some(kernel) = action.kernel {
+                s.kernel = kernel;
+                s.kernel_generation += 1;
+            }
+            if index < 5 {
+                assert!(t.cache.winners.is_empty());
+            }
+        }
+        assert_eq!(s.kernel, challenger);
+        assert_eq!(t.cache.winners.len(), 1);
+        let context = Context::from_snapshots(&[s]);
+        assert_eq!(
+            t.cache.winner(&context, unix_secs(), &t.candidates),
+            Some(challenger)
+        );
+        assert!(!t.tick(now + 1, &[s], true, true).hold_counts);
+        assert!(!t.tick(now + 2, &[s], true, true).hold_counts);
+        let _ = fs::remove_file(&t.path);
     }
 
     #[test]
