@@ -704,7 +704,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = BenchKind::Backend)]
     bench_kind: BenchKind,
 
-    /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, neon, neon-sha3).
+    /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, neon, neon-sha3).
     /// Requires --bench, CPU-only backends, fixed --threads, and no CPU autotuning.
     #[arg(long, requires_all = ["bench", "threads"])]
     bench_cpu_kernel: Option<blocknet_pow_kernel::CpuKernel>,
@@ -1148,6 +1148,12 @@ impl Config {
                 cli.cpu_memory_reserve_percent, auto_threads_cap,
             ));
         }
+        startup_notices.extend(underused_threads_notice(
+            cli.threads,
+            cpu_backend_instances,
+            cpu_autotune_threads,
+            auto_threads_cap,
+        ));
         let cpu_autotune_config_path = cli
             .cpu_autotune_config
             .clone()
@@ -2871,6 +2877,23 @@ fn auto_cpu_memory_bytes(
         .saturating_sub(reserve)
 }
 
+// Telemetry shows large fleets pinned far below capacity (for example
+// --threads 3 on 16-core hosts with free RAM for 11 workers).
+fn underused_threads_notice(
+    threads: Option<usize>,
+    cpu_backend_instances: usize,
+    cpu_autotune_threads: bool,
+    auto_threads_cap: usize,
+) -> Option<String> {
+    let threads = threads?;
+    (cpu_backend_instances > 0 && !cpu_autotune_threads && threads.saturating_mul(2) <= auto_threads_cap)
+        .then(|| {
+            format!(
+                "--threads {threads} uses under half of the {auto_threads_cap} CPU workers this machine's cores and free RAM allow; omit --threads to size and tune workers automatically for more hashrate"
+            )
+        })
+}
+
 fn distribute_auto_cpu_threads(total_lanes_cap: usize, cpu_backend_instances: usize) -> usize {
     let lanes = total_lanes_cap.max(1);
     let instances = cpu_backend_instances.max(1);
@@ -4403,6 +4426,16 @@ HugePages_Rsvd:          0
         };
         assert_eq!(auto_cpu_memory_bytes(constrained, 0, 5), 0);
         assert_eq!(auto_cpu_memory_bytes(constrained, 20 * gib, 0), 0);
+    }
+
+    #[test]
+    fn underused_explicit_threads_get_a_sizing_hint() {
+        assert!(underused_threads_notice(Some(3), 1, false, 11)
+            .is_some_and(|n| n.contains("--threads 3") && n.contains("11 CPU workers")));
+        assert!(underused_threads_notice(Some(6), 1, false, 11).is_none());
+        assert!(underused_threads_notice(None, 1, false, 11).is_none());
+        assert!(underused_threads_notice(Some(3), 1, true, 11).is_none());
+        assert!(underused_threads_notice(Some(3), 0, false, 11).is_none());
     }
 
     #[test]

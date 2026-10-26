@@ -65,49 +65,81 @@ fn candidates_for(
     .into_iter()
     .filter(|k| supported.contains(k))
     .collect();
-    // Genoa 9R14 VM: +2.85% cold / +7.99% cached productive mining;
-    // Turin and Ryzen also have repeated wins. See genoa-streaming-20261025.
-    // Identity limits automatic experiments; the independent ISA/OS support
-    // check remains mandatory. Turin needs a measured win per worker
-    // count/backing; validated Ryzen also starts on it (`startup_kernel_for`).
-    if identity.vendor.as_deref() == Some("AuthenticAMD")
-        && matches!(
-            (identity.family, identity.model),
-            (Some(0x19), Some(0x11)) | (Some(0x1a), Some(0x02 | 0x44))
-        )
-        && supported.contains(&CpuKernel::Avx512256Stream)
-    {
-        if identity.model == Some(0x02) {
+    // Streaming wins at high worker counts on every measured Zen 4/Zen 5 host:
+    // Genoa 9R14 +2.85% cold / +7.99% cached productive mining, Turin 9R45
+    // +19.9-29.8%, Ryzen 9950X3D +38-46%. Gate by microarchitecture rather than
+    // exact model so other Zen 4/5 parts (Raphael, Turin Dense, masked cloud
+    // CPUIDs) are eligible. The independent ISA/OS support check remains
+    // mandatory, and repeated-win trials can still replace it.
+    if let Some(stream) = cohort_stream_kernel(identity, supported) {
+        if stream == CpuKernel::Avx512256Stream && identity.model == Some(0x02) {
             // Turin: test the measured high-concurrency challenger before AVX2.
             // Ordering changes discovery cost, never the repeated-win gate.
             let before_avx2 = paths
                 .iter()
                 .position(|k| *k == CpuKernel::Avx2)
                 .unwrap_or(paths.len());
-            paths.insert(before_avx2, CpuKernel::Avx512256Stream);
+            paths.insert(before_avx2, stream);
         } else {
-            paths.push(CpuKernel::Avx512256Stream);
+            paths.push(stream);
         }
     }
     paths
 }
 
-// Validated desktop Zen 5 (Ryzen 9950X3D, family 1Ah, model 44h): native
-// fixed-kernel runs measured streaming 38-46% faster than every uniform kernel
-// at 8 and 16 workers, but live A/B/A trials on a busy desktop rarely clear the
-// baseline-drift gate. Start such contexts on streaming. The other candidates
-// still get the usual two comparisons against it. Lower counts are unmeasured.
+/// The streaming kernel for an AMD microarchitecture cohort, if validated.
+/// Zen 4 (family 19h with AVX-512) and Zen 5 (family 1Ah) use the AVX-512 path.
+/// Zen 3 (family 19h without AVX-512) uses the AVX2 path. Callers always
+/// intersect with runtime-detected kernels, so ISA support is never assumed.
+fn cohort_stream_kernel(
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> Option<CpuKernel> {
+    if identity.vendor.as_deref() != Some("AuthenticAMD") {
+        return None;
+    }
+    match identity.family {
+        Some(0x19 | 0x1a) if supported.contains(&CpuKernel::Avx512256Stream) => {
+            Some(CpuKernel::Avx512256Stream)
+        }
+        Some(0x19) if supported.contains(&CpuKernel::Avx2Stream) => Some(CpuKernel::Avx2Stream),
+        _ => None,
+    }
+}
+
+// Native fixed-kernel runs measured streaming 38-46% faster than every uniform
+// kernel on Ryzen 9950X3D at 8 and 16 workers, and live A/B/A trials on a busy
+// desktop rarely clear the baseline-drift gate. Genoa and Turin show the same
+// direction at full counts. Start Zen 4/5 contexts on streaming; the other
+// candidates still get the usual two comparisons against it. Lower counts are
+// unmeasured.
 const STARTUP_STREAM_MIN_WORKERS: usize = 8;
 
 fn startup_kernel_for(
     identity: &crate::runtime_identity::CpuIdentity,
     candidates: &[CpuKernel],
 ) -> Option<CpuKernel> {
-    (identity.vendor.as_deref() == Some("AuthenticAMD")
-        && identity.family == Some(0x1a)
-        && identity.model == Some(0x44)
-        && candidates.contains(&CpuKernel::Avx512256Stream))
-    .then_some(CpuKernel::Avx512256Stream)
+    cohort_stream_kernel(identity, candidates)
+}
+
+/// Kernel for fixed worker counts (explicit `--threads`), which run no trials.
+/// Uses the same cohort default the adaptive path starts from.
+pub(super) fn static_kernel_for(workers: usize) -> Option<CpuKernel> {
+    static_kernel_for_identity(
+        &crate::runtime_identity::cpu_identity(),
+        &supported_kernels(),
+        workers,
+    )
+}
+
+fn static_kernel_for_identity(
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+    workers: usize,
+) -> Option<CpuKernel> {
+    (workers >= STARTUP_STREAM_MIN_WORKERS)
+        .then(|| startup_kernel_for(identity, &candidates_for(identity, supported)))
+        .flatten()
 }
 
 // Host eligibility must not depend on the initial worker count: a cached count
@@ -1786,7 +1818,7 @@ mod tests {
             ..CpuIdentity::default()
         };
         for (identity, eligible, starts_streaming) in [
-            (turin.clone(), true, false),
+            (turin.clone(), true, true),
             (
                 CpuIdentity {
                     model: Some(0x44),
@@ -1802,7 +1834,7 @@ mod tests {
                     ..turin.clone()
                 },
                 true,
-                false,
+                true,
             ),
             (
                 CpuIdentity {
@@ -2355,34 +2387,107 @@ mod tests {
         };
         assert_eq!(candidates_for(&genoa, &supported), supported);
         assert_eq!(candidates_for(&genoa, &supported[..2]), supported[..2]);
-        assert_eq!(startup_kernel_for(&genoa, &supported), None);
+        assert_eq!(
+            startup_kernel_for(&genoa, &supported),
+            Some(CpuKernel::Avx512256Stream)
+        );
+        // Zen 4/5 parts beyond the measured models share the cohort policy:
+        // Raphael (19h/61h), other Genoa models, Turin Dense, masked cloud CPUIDs.
+        for model in [0x61, 0x10, 0x12] {
+            let zen4 = CpuIdentity {
+                family: Some(25),
+                model: Some(model),
+                ..turin.clone()
+            };
+            assert_eq!(candidates_for(&zen4, &supported), supported);
+        }
+        for model in [0x70, 0x11, 0x00] {
+            let zen5 = CpuIdentity {
+                model: Some(model),
+                ..turin.clone()
+            };
+            assert_eq!(candidates_for(&zen5, &supported), supported);
+        }
         for identity in [
             CpuIdentity {
                 vendor: Some("GenuineIntel".into()),
                 ..turin.clone()
             },
             CpuIdentity {
-                family: Some(25),
-                model: Some(0x10),
-                ..turin.clone()
-            },
-            CpuIdentity {
-                family: Some(25),
-                model: Some(0x12),
-                ..turin.clone()
-            },
-            CpuIdentity {
-                model: Some(0x70),
+                family: Some(0x17),
+                model: Some(0x31),
                 ..turin.clone()
             },
             CpuIdentity::default(),
         ] {
             assert_eq!(candidates_for(&identity, &supported), supported[..2]);
+            assert_eq!(startup_kernel_for(&identity, &supported[..2]), None);
         }
         assert_eq!(
             candidates_for(&turin, &[CpuKernel::Avx2]),
             [CpuKernel::Avx2]
         );
+    }
+
+    #[test]
+    fn fixed_counts_use_the_cohort_default_kernel() {
+        use crate::runtime_identity::CpuIdentity;
+        let all = [
+            CpuKernel::Avx512,
+            CpuKernel::Avx2,
+            CpuKernel::Avx512256Stream,
+        ];
+        let masked_zen5 = CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0),
+            stepping: None,
+        };
+        let raphael = CpuIdentity {
+            family: Some(0x19),
+            model: Some(0x61),
+            ..masked_zen5.clone()
+        };
+        for identity in [&masked_zen5, &raphael] {
+            assert_eq!(
+                static_kernel_for_identity(identity, &all, 192),
+                Some(CpuKernel::Avx512256Stream)
+            );
+            assert_eq!(
+                static_kernel_for_identity(identity, &all, 8),
+                Some(CpuKernel::Avx512256Stream)
+            );
+            assert_eq!(static_kernel_for_identity(identity, &all, 7), None);
+        }
+        // Zen 3 shares family 19h but has no AVX-512, so no streaming path.
+        let milan = CpuIdentity {
+            model: Some(0x01),
+            ..raphael.clone()
+        };
+        assert_eq!(static_kernel_for_identity(&milan, &all[..2], 48), None);
+        // Zen 3 uses the AVX2 streaming path once it is runtime-supported.
+        let avx2_only = [CpuKernel::Avx2, CpuKernel::Avx2Stream];
+        assert_eq!(
+            static_kernel_for_identity(&milan, &avx2_only, 12),
+            Some(CpuKernel::Avx2Stream)
+        );
+        assert_eq!(
+            candidates_for(&milan, &avx2_only),
+            [CpuKernel::Avx2, CpuKernel::Avx2Stream]
+        );
+        // Zen 2 (family 17h) is not yet validated natively.
+        let rome = CpuIdentity {
+            family: Some(0x17),
+            model: Some(0x31),
+            ..raphael.clone()
+        };
+        assert_eq!(static_kernel_for_identity(&rome, &avx2_only, 32), None);
+        assert_eq!(candidates_for(&rome, &avx2_only), [CpuKernel::Avx2]);
+        let intel = CpuIdentity {
+            vendor: Some("GenuineIntel".into()),
+            ..masked_zen5.clone()
+        };
+        assert_eq!(static_kernel_for_identity(&intel, &all, 64), None);
     }
 
     fn three_path_tuner() -> Tuner {
@@ -3684,7 +3789,7 @@ mod tests {
     }
 
     #[test]
-    fn streaming_startup_requires_validated_ryzen_identity_and_candidate() {
+    fn streaming_startup_requires_zen4_or_zen5_identity_and_candidate() {
         use crate::runtime_identity::CpuIdentity;
         let ryzen = CpuIdentity {
             vendor: Some("AuthenticAMD".into()),
@@ -3697,18 +3802,26 @@ mod tests {
             CpuKernel::Avx2,
             CpuKernel::Avx512256Stream,
         ];
-        assert_eq!(
-            startup_kernel_for(&ryzen, &all),
-            Some(CpuKernel::Avx512256Stream)
-        );
-        assert_eq!(startup_kernel_for(&ryzen, &all[..2]), None);
-        for other in [
+        for zen in [
+            ryzen.clone(),
             CpuIdentity {
                 model: Some(0x02),
                 ..ryzen.clone()
             },
             CpuIdentity {
                 family: Some(0x19),
+                ..ryzen.clone()
+            },
+        ] {
+            assert_eq!(
+                startup_kernel_for(&zen, &all),
+                Some(CpuKernel::Avx512256Stream)
+            );
+            assert_eq!(startup_kernel_for(&zen, &all[..2]), None);
+        }
+        for other in [
+            CpuIdentity {
+                family: Some(0x17),
                 ..ryzen.clone()
             },
             CpuIdentity {

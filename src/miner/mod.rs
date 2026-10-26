@@ -572,6 +572,18 @@ fn run_with_thread_control_inner(
                             tuning,
                         )
                     } else {
+                        // Fixed counts run no kernel trials; start from the cohort default.
+                        let kernel = adaptive_kernel::static_kernel_for(threads);
+                        if let Some(kernel) = kernel {
+                            info(
+                                "CPU",
+                                format!(
+                                    "{threads} fixed workers: using the {kernel} kernel \
+                                     validated for this CPU family"
+                                ),
+                            );
+                        }
+                        let tuning = CpuBackendTuning { kernel, ..tuning };
                         CpuBackend::with_tuning(threads, affinity, tuning)
                     });
                     cpu_memory_backends.push(Arc::clone(&backend));

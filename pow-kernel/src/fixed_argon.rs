@@ -37,6 +37,8 @@ const ISA_AVX512_256_STREAM_R64D3: u8 = 8;
 const ISA_AVX512_256_STREAM_R64D4: u8 = 9;
 #[allow(dead_code)]
 const ISA_AVX512_256_STREAM_R64D6: u8 = 10;
+#[allow(dead_code)]
+const ISA_AVX2_STREAM: u8 = 11;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -71,6 +73,7 @@ const fn isa_label(isa: u8) -> &'static str {
         ISA_AVX512_256_STREAM_R64D3 => "avx512-256-stream-r64d3",
         ISA_AVX512_256_STREAM_R64D4 => "avx512-256-stream-r64d4",
         ISA_AVX512_256_STREAM_R64D6 => "avx512-256-stream-r64d6",
+        ISA_AVX2_STREAM => "avx2-stream",
         _ => "scalar",
     }
 }
@@ -93,6 +96,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Avx512256StreamR64D3 => ISA_AVX512_256_STREAM_R64D3,
         CpuKernel::Avx512256StreamR64D4 => ISA_AVX512_256_STREAM_R64D4,
         CpuKernel::Avx512256StreamR64D6 => ISA_AVX512_256_STREAM_R64D6,
+        CpuKernel::Avx2Stream => ISA_AVX2_STREAM,
     }
 }
 
@@ -113,6 +117,7 @@ pub fn compiled_isa_variants() -> &'static [&'static str] {
             "avx512-256-stream-r64d3",
             "avx512-256-stream-r64d4",
             "avx512-256-stream-r64d6",
+            "avx2-stream",
         ]
     }
     #[cfg(target_arch = "aarch64")]
@@ -230,6 +235,8 @@ impl FixedArgon2id {
                 self.fill_streaming_ring::<64, 6, true>(memory_blocks)
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
+            #[cfg(target_arch = "x86_64")]
+            ISA_AVX2_STREAM => unsafe { self.fill_streaming_ring_avx2::<8, 7>(memory_blocks) },
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
             #[cfg(target_arch = "aarch64")]
             ISA_NEON_SHA3 => unsafe { self.fill_blocks_neon_sha3(memory_blocks) },
@@ -327,6 +334,83 @@ impl FixedArgon2id {
                 for vector in 0..32 {
                     let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
                     _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
+                }
+            }
+        }
+        _mm_mfence(); // Finalization consumes the final arena block.
+    }
+
+    // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512 (Zen 3):
+    // an 8-block cached ring, non-temporal arena stores and a seven-block
+    // whole-block prefetch while addresses are data independent. Same-core loads
+    // observe this core's earlier NT stores to the same address, so arena reads
+    // need no fence; a periodic SFENCE only bounds write-combining buffer
+    // occupancy. Native EPYC 7443P: +48% vs AVX2 at 12 workers. Dropping the
+    // prefetch gained 8.8% at 24 workers but lost 14.9% at 12, so it stays.
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2")]
+    unsafe fn fill_streaming_ring_avx2<const RING: usize, const DEPTH: usize>(
+        &self,
+        memory: &mut [PowBlock],
+    ) {
+        use std::arch::x86_64::{
+            __m256i, _mm256_load_si256, _mm256_stream_si256, _mm_mfence, _mm_sfence,
+        };
+        assert!(RING >= 2 && RING.is_power_of_two());
+        assert!((1..=16).contains(&DEPTH));
+        let mask = RING - 1;
+        let mut ring = Box::new([PowBlock::default(); RING]);
+        ring[0] = memory[0];
+        ring[1] = memory[1];
+        let arena = memory.as_mut_ptr();
+        let cache = ring.as_mut_ptr();
+        debug_assert_eq!(arena as usize % 64, 0);
+        debug_assert_eq!(cache as usize % 64, 0);
+        for slice in 0..SYNC_POINTS {
+            let first = if slice == 0 { 2 } else { 0 };
+            let di = slice < 2;
+            let base = slice * self.segment_length;
+            for block in first..self.segment_length {
+                let cur = base + block;
+                let prev = &*cache.add((cur - 1) & mask);
+                let reference = if di {
+                    self.data_independent_ref_indexes[cur]
+                } else {
+                    reference_index(cur - 1, prev.0[0])
+                };
+                debug_assert!(reference < cur - 1);
+                // A distance of exactly RING aliases the output slot: use the arena.
+                // Same-core loads observe this core's earlier NT stores to the same
+                // address, so arena reads need no fence (full-size parity verified).
+                let reference_ptr = if cur - reference < RING {
+                    cache.add(reference & mask)
+                } else {
+                    arena.add(reference)
+                };
+                let dst = cache.add(cur & mask);
+                debug_assert_ne!(dst, reference_ptr);
+                if di {
+                    if block + DEPTH < self.segment_length {
+                        let ahead = self.data_independent_ref_indexes[cur + DEPTH];
+                        if ahead < cur && cur - ahead >= RING {
+                            prefetch_pow_block::<ISA_AVX2>(&*arena.add(ahead));
+                        }
+                    }
+                    compress_avx2_into(prev, &*reference_ptr, &mut *dst);
+                } else if block + 1 < self.segment_length {
+                    compress_avx2_into_mid_prefetch(prev, &*reference_ptr, &mut *dst, cur, arena);
+                } else {
+                    compress_avx2_into(prev, &*reference_ptr, &mut *dst);
+                }
+                let src = (*dst).0.as_ptr();
+                let output = (*arena.add(cur)).0.as_mut_ptr();
+                for vector in 0..32 {
+                    let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
+                    _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
+                }
+                if cur & 31 == 31 {
+                    // Bound write-combining buffer occupancy.
+                    _mm_sfence();
                 }
             }
         }
