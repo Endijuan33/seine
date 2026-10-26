@@ -21,8 +21,11 @@ use crate::config::{CpuAffinityMode, CpuPageMode};
 mod events;
 #[path = "cpu/kernel.rs"]
 mod kernel;
+#[path = "cpu/placement.rs"]
+mod placement;
 #[path = "cpu/sampling.rs"]
 mod sampling;
+pub(crate) use placement::{Placement, PlacementSampler};
 #[cfg(target_os = "linux")]
 #[path = "cpu/topology.rs"]
 mod topology;

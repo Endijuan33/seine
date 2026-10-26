@@ -1475,10 +1475,12 @@ mod tests {
             t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
             t.short_trials = true;
             if enabled {
-                t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
-                    recorder.clone(),
-                    &super::super::tests::test_config(),
-                ));
+                t.monitor = Some(
+                    super::super::adaptive_telemetry::Monitor::test_without_placement(
+                        recorder.clone(),
+                        &super::super::tests::test_config(),
+                    ),
+                );
             }
             let mut s = snapshot();
             s.kernel = CpuKernel::Avx512;
@@ -1550,10 +1552,12 @@ mod tests {
             let recorder = crate::hardware_telemetry::Recorder::test_recorder();
             let mut t = tuner();
             t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
-            t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
-                recorder.clone(),
-                &super::super::tests::test_config(),
-            ));
+            t.monitor = Some(
+                super::super::adaptive_telemetry::Monitor::test_without_placement(
+                    recorder.clone(),
+                    &super::super::tests::test_config(),
+                ),
+            );
             let mut s = snapshot();
             s.kernel = CpuKernel::Avx512;
             let mut now = 0;
@@ -1592,7 +1596,10 @@ mod tests {
         let recorder = crate::hardware_telemetry::Recorder::test_recorder();
         let mut cfg = super::super::tests::test_config();
         cfg.backend_specs.push(cfg.backend_specs[0].clone());
-        let mut monitor = super::super::adaptive_telemetry::Monitor::new(recorder.clone(), &cfg);
+        let mut monitor = super::super::adaptive_telemetry::Monitor::test_without_placement(
+            recorder.clone(),
+            &cfg,
+        );
         let mut snapshots = [snapshot(), snapshot()];
         for s in &mut snapshots {
             s.kernel = CpuKernel::Avx512;
@@ -1654,10 +1661,12 @@ mod tests {
             let recorder = crate::hardware_telemetry::Recorder::test_recorder();
             let mut t = tuner();
             t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
-            t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
-                recorder.clone(),
-                &super::super::tests::test_config(),
-            ));
+            t.monitor = Some(
+                super::super::adaptive_telemetry::Monitor::test_without_placement(
+                    recorder.clone(),
+                    &super::super::tests::test_config(),
+                ),
+            );
             let mut s = snapshot();
             s.kernel = CpuKernel::Avx512;
             let mut now = 0;
@@ -1693,10 +1702,12 @@ mod tests {
         let recorder = crate::hardware_telemetry::Recorder::test_recorder();
         let mut t = tuner();
         t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
-        t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
-            recorder.clone(),
-            &super::super::tests::test_config(),
-        ));
+        t.monitor = Some(
+            super::super::adaptive_telemetry::Monitor::test_without_placement(
+                recorder.clone(),
+                &super::super::tests::test_config(),
+            ),
+        );
         let mut s = snapshot();
         s.kernel = CpuKernel::Avx512;
         monitored_tick(&mut t, 0, s);

@@ -171,6 +171,7 @@ pub(crate) struct Recorder(
 );
 
 struct TrialRecorder {
+    active: AtomicBool,
     run_id: String,
     started: Instant,
     queue: Mutex<(u64, Vec<RecordedTrial>)>,
@@ -180,11 +181,27 @@ struct TrialRecorder {
 impl TrialRecorder {
     fn new(run_id: String) -> Self {
         Self {
+            active: AtomicBool::new(true),
             run_id,
             started: Instant::now(),
             queue: Mutex::new((0, Vec::new())),
             dropped: AtomicU64::new(0),
         }
+    }
+}
+
+struct TrialWorkerLifetime(Arc<TrialRecorder>);
+
+impl Drop for TrialWorkerLifetime {
+    fn drop(&mut self) {
+        self.0.active.store(false, Ordering::Release);
+        self.0
+            .queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .1
+            .clear();
+        self.0.dropped.store(0, Ordering::Relaxed);
     }
 }
 
@@ -197,6 +214,15 @@ struct Accumulated {
 }
 
 impl Recorder {
+    pub(crate) fn trials_enabled(&self) -> bool {
+        self.2.active.load(Ordering::Acquire)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_disable_trials(&self) {
+        self.2.active.store(false, Ordering::Release);
+    }
+
     /// Common run-relative clock for the staged runtime tuning hooks.
     #[allow(dead_code)]
     pub(crate) fn trial_elapsed_ms(&self) -> u64 {
@@ -207,6 +233,9 @@ impl Recorder {
     /// mining thread; FIFO overflow loses telemetry, never productive mining.
     #[allow(dead_code)]
     pub(crate) fn record_trial(&self, outcome: TrialOutcome) {
+        if !self.trials_enabled() {
+            return;
+        }
         if !outcome.validate() {
             self.2.dropped.fetch_add(1, Ordering::Relaxed);
             return;
@@ -215,6 +244,9 @@ impl Recorder {
             self.2.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         };
+        if !self.trials_enabled() {
+            return;
+        }
         if queue.1.len() == MAX_TRIALS || queue.0 == i64::MAX as u64 {
             self.2.dropped.fetch_add(1, Ordering::Relaxed);
             return;
@@ -428,6 +460,7 @@ fn start_with_context(
     let thread = thread::Builder::new()
         .name("hardware-telemetry".into())
         .spawn(move || {
+            let _trial_lifetime = TrialWorkerLifetime(Arc::clone(&samples.2));
             let Ok(client) = http_client() else {
                 return;
             };
@@ -615,6 +648,18 @@ mod tests {
         assert_eq!(second.run_id, first.run_id);
         assert_eq!(second.trials[0].trial_id, MAX_TRIALS as u64 + 1);
         assert_eq!(second.dropped_trials, 1);
+    }
+
+    #[test]
+    fn worker_exit_disables_trial_collection_and_discards_queued_evidence() {
+        let recorder = Recorder::test_recorder();
+        let lifetime = TrialWorkerLifetime(Arc::clone(&recorder.2));
+        recorder.record_trial(trial_fixture());
+        drop(lifetime);
+        assert!(!recorder.trials_enabled());
+        assert!(recorder.drain_tuning().is_none());
+        recorder.record_trial(trial_fixture());
+        assert!(recorder.drain_tuning().is_none());
     }
 
     #[test]

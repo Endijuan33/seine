@@ -271,3 +271,34 @@ alternative['report_id'] = uuid.uuid4().hex
 del trial['policy']['short_minimum_hashes']
 assert send(alternative) == 422
 print('PASS: schema 6 mixed short/full window rules and incomplete alternative rejection')
+
+# Optional artifact emitted by the real runtime Monitor test. Keep this boundary
+# check separate from the handwritten collector fixture and production data.
+if runtime_fixture := os.environ.get('TELEMETRY_TEST_TRIAL_FIXTURE'):
+    runtime = json.loads(Path(runtime_fixture).read_text())
+    before = analysis('tuning_report.sql')['qualified_trials']
+    for _ in range(5):
+        runtime['installation_id'] = uuid.uuid4().hex
+        runtime['report_id'] = uuid.uuid4().hex
+        assert send(runtime) == 204
+    result = analysis('tuning_report.sql')
+    assert result['qualified_trials'] == before + 5, result
+    hint, = result['ranked_hints']
+    assert hint['installations'] == 5
+    assert hint['confidence'] == 'observational_support'
+    assert hint['installations_with_resolved_gain'] == 5
+    assert abs(hint['median_ratio'] - 1.1) < 1e-9
+    assert hint['median_idle_ms'] is None
+    assert not hint['automatic_default_eligible']
+    for mutation in ('changed', 'unknown'):
+        invalid_context = json.loads(json.dumps(runtime))
+        invalid_context['installation_id'] = uuid.uuid4().hex
+        invalid_context['report_id'] = uuid.uuid4().hex
+        sample = invalid_context['tuning']['trials'][0]['outcome']['samples'][1]
+        if mutation == 'changed':
+            sample['changed'] = True
+        else:
+            sample['context']['resources']['placement_fingerprint'] = None
+        assert send(invalid_context) == 204
+        assert analysis('tuning_report.sql')['qualified_trials'] == before + 5
+    print('PASS: runtime Monitor output accepted, five-installation research hint, changed/unknown context excluded and unknown costs preserved')

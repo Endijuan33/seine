@@ -9,7 +9,7 @@ bounded observations and research priorities. There is no remote override path.
 | Capability | State | Practical limit |
 |---|---|---|
 | Schema 6, bounded FIFO/spooling, strict collector | Landed in `6efb85b`, alternative window rules in `d770a46` | Collector must deploy before schema-6 miners release. |
-| Productive CPU kernel trial producer | Landed in `334b827` | Coverage-only until measured CPU-mask/topology context is available. |
+| Productive CPU kernel trial producer | Landed in `334b827`; fresh context added | Complete stable Linux / single-group Windows observations can qualify; unsupported or incomplete topology remains unknown. |
 | Paired CPU-kernel cohort analysis | Landed; same-installation A/B/A, exact context, one installation per vote | Requires complete measured context and two resolved cycles for gain support. |
 | Worker-count and joint producers | Pending | Their records remain coverage-only; objective and confirmation policy need explicit validation. |
 | Switching/settling/no-job idle measurements | Typed contract exists; current producer leaves them unknown | Wall duration is available; it is not lost productive time. |
@@ -22,11 +22,12 @@ evidence of no gain; coverage-only records are not eligible benchmark comparison
 
 ## Next evidence gates
 
-1. **Measure context without disrupting mining.** Reuse a current, trustworthy
-   allowed-CPU/topology observation or collect it at a bounded cadence. Preserve
-   unknowns on failure. Include OS/native-vs-WSL, runtime ISA, exact CPU identity,
-   CPU/NUMA/L3 placement, page backing, resource limits, source/build and settings.
-   Never substitute desired settings or hash a whole configuration/host identity.
+1. **Validate context coverage on matching hosts.** Fresh allowed-mask/NUMA/core/L3
+   observations now cover supported Linux and single-group Windows. Keep unknowns
+   on incomplete topology, slow reads or unsupported hosts; record overhead before
+   broadening support. The digest measures topology inputs, not per-worker residency.
+   Keep OS/native-vs-WSL, runtime ISA, exact CPU identity, page backing, resource
+   limits, source/build and settings separate. See [validation](../docs/validation/trial-placement-20261026.md).
 2. **Complete producer coverage.** Add worker-count and joint trials with actual
    settings per window, unsuccessful and incomplete outcomes, cache invalidation
    context, and the full acceptance/confirmation rule. Encode throughput versus

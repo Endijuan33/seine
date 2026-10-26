@@ -11,9 +11,10 @@ automatic defaults.
 `Recorder::record_trial(TrialOutcome)` accepts completed, inconclusive and aborted
 CPU kernel, worker-count and joint trials. The productive CPU kernel producer
 landed in `334b827`; worker-count and joint producers remain pending. Kernel
-records currently lack measured allowed-CPU and placement context, so they count
-toward coverage but cannot qualify hardware hints. Collector deployment and miner
-release are separate from landing code. See [the roadmap](ROADMAP.md).
+records include fresh measured allowed-CPU and topology context on supported
+Linux and single-processor-group Windows hosts. Complete stable observations can
+qualify comparisons; unknown or changed context remains coverage-only. Collector
+deployment and miner release are separate from landing code. See [the roadmap](ROADMAP.md).
 
 Record actual baseline/candidate settings, before/after resource context, and
 each counted window's settings/context. Member slots are stable indices in this
@@ -27,7 +28,28 @@ Resources include allowed CPU count, available parallelism, effective memory lim
 available memory and an optional topology/placement fingerprint. Hash only allowed
 CPU, NUMA, L3 and affinity inputs: never hostnames, wallets, configuration values,
 paths or other identifiers. Unknowns remain null. The digest is pseudonymous
-topology evidence, not proof of an independently operated physical host.
+topology evidence, not proof of an independently operated physical host or actual
+per-worker CPU residency. Requested affinity and allocator-observed page backing
+remain separate fields.
+
+The provider reuses the existing Linux NUMA/core/L3 parser with stricter completeness
+requirements. Linux includes the controller thread's current allowed CPU and memory
+masks; Windows includes the process mask and physical-core/NUMA/L3 partitions, only
+on a single processor group. Masks are read before and after the topology read.
+Missing/inconsistent topology, unsupported OSes, multi-group Windows and masks over
+512 CPUs remain unknown. No startup cache or whole configuration is hashed.
+
+Metadata is observed at trial start and existing active controller ticks (normally
+once per second), including final acknowledgment and failure snapshots. Idle tuners
+perform no topology reads. An observed resource change, unknown observation after a
+known one, or a gap over three seconds marks all trial windows changed, including
+already counted windows and changes between windows. Restoring the original context
+does not erase that flag. Changes entirely between observations cannot be detected.
+A read taking over 25 ms is discarded and followed by 30 seconds of unknown context
+without further reads; the first slow OS read cannot be interrupted by this budget.
+The reporting worker's existing opt-out check disables probes and discards queued
+trials when it observes opt-out or exits. Costs and tuning decisions are unchanged.
+See [native validation and overhead limits](../docs/validation/trial-placement-20261026.md).
 
 Completed trials contain three or six ordered counted windows: baseline/candidate/
 baseline, optionally repeated. Each records hashes, elapsed milliseconds, arm,
@@ -67,8 +89,9 @@ records increment explicit omission counts.
 The reporting worker releases the queue lock before serialization, retaining at
 most 16 KiB of trial evidence inside the existing 32 KiB report limit. Earlier
 outcomes survive regardless of result; trimming increments omission counts.
-Those counts cannot reconstruct the missing outcomes. Trial recording performs
-no network or disk IO in mining control loops.
+Those counts cannot reconstruct the missing outcomes. Trial queue recording performs
+no network or disk IO. Placement observation reads bounded OS metadata on the
+tuning controller, never on a hashing worker.
 
 Trial-only final reports can precede the first regular upload. Failed delivery
 uses the single pending report, 24-hour expiry and persisted five-minute retry
