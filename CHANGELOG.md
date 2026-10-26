@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+- **Faster tuning on 32-core AMD EPYC 9R14 Linux systems with transparent huge pages.** Shorter comparisons spend less time on slower settings while preserving confirmed saved tuning.
+
 - **Improved CPU hashing on 32-core AMD EPYC 9R14 Windows systems using ordinary memory pages.** Saved tuning remains usable, and Seine continues comparing settings while mining.
 
 ## v0.2.27

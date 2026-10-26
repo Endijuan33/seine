@@ -4026,3 +4026,45 @@ Evidence: workspace `benchmark-evidence/longhorn-20261025/native-windows-amd-rin
 `windows-ring-build/` and `comparison-diagnostics/windows-ring-integration.json`.
 The rental terminated immediately after the pair; cleanup is verified in
 `windows-ring-prep/cleanup.json`.
+
+
+### Ring kernel plus shorter productive trials (research)
+
+The integrated ring run retained the new path, but spent two full sweeps comparing
+slower alternatives at 32 and 31 workers. Each 30-second challenger sample
+reduces useful output during convergence. Combine the previously promising
+short-window policy with the new ring kernel: ten seconds and at least 256 hashes
+per sample, retaining A/B/A drift checks and repeated promotion requirements.
+Only native Linux EPYC 9R14 / 128 GiB, 30–32 workers and full THP backing qualify.
+Explicit windows, efficiency settings and other hosts keep existing behavior.
+
+The pre-ring short-window cold pair improved useful throughput by 1.31%; the
+interaction with the faster ring kernel remains unmeasured. Exact-context
+confirmed winners from the preceding longer-window policy remain reusable,
+while adding the new kernel still requires comparing it against the prior winner.
+Frozen ring-only measurements continue untouched; this is a separate follow-up.
+
+## 2026-10-26: shorter Genoa samples confirmed with the improved ring kernel
+
+A predeclared, same-host 900-second cold pair compared frozen ring-only
+`3641add` with ring-plus-short-samples `1603e06` on native Linux EPYC 9R14,
+32 physical cores, 128 GiB and full transparent huge-page backing. Useful
+user throughput increased from 40.5200 to 41.8167 H/s (+3.2001%). Gross
+throughput was 41.4578 versus 42.7722 H/s. All 75,810 captured hashes matched
+independent libargon2 references; zero invalid, duplicate, stale or rejected
+hashes. This is a single engineering pair, not a steady-state headline or a
+confidence interval. It agrees with the earlier +1.31% pre-ring screen.
+
+The first completed thread comparison moved from 674.8 to 315.7 seconds.
+Short samples still encountered baseline drift and retained the incumbent;
+the drift gate and two-cycle promotion requirement remain unchanged. The
+policy is restricted to default sample settings, matched native Linux hosts,
+30–32 workers and full THP. Confirmed previous-policy winners remain usable.
+Combined Linux/Windows integration: 102 adaptive tests passed, five ignored.
+Evidence: `benchmark-evidence/longhorn-20261025/native-linux-amd-ring-short/`
+and `comparison-diagnostics/linux-ring-short-integration.json` in the workspace.
+
+The separate steady-state publication phase passed full-size kernel parity
+but failed before timed hashing because its configuration directory was on a
+read-only mount. That harness failure is retained separately and provides no
+performance result. The completed miner pair remains valid.
