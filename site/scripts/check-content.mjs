@@ -179,7 +179,9 @@ function checkTranslation(src, locale) {
     if (JSON.stringify(code(t.body)) !== JSON.stringify(code(src.body))) errors.push(tag('code blocks must match the source exactly'));
     if (headings(t.body).length !== headings(src.body).length) errors.push(tag('heading count differs from the source'));
     if (ctaCount(t.body) !== ctaCount(src.body)) errors.push(tag('<CTA> count differs from the source'));
-    const ext = (b) => links(b).filter((l) => !l.startsWith('/')).sort().join(' ');
+    // The pool's translated articles use /blog/<locale>/, not /<locale>/blog/.
+    const samePoolArticle = (url) => url.replace(`https://bntpool.com/blog/${locale.path}/`, 'https://bntpool.com/blog/');
+    const ext = (b) => links(b).filter((l) => !l.startsWith('/')).map(samePoolArticle).sort().join(' ');
     if (ext(t.body) !== ext(src.body)) errors.push(tag('external links must match the source'));
     if (/^# /m.test(stripCode(t.body))) errors.push(tag('the body has an H1'));
     const tErrs = []; checkLinks(t, locale.path, tErrs); errors.push(...tErrs.map(tag));
