@@ -237,13 +237,13 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
 
 ## 3. bntpool.com
 - Live pool parameters:
-  - **pool fee 2.5%**
+  - **pool fee 0%**
   - minimum payout **0.1 BNT**
   - **60 blocks** before payout
   - **PPLNS** with a **6h** window
   - Stratum port **3333**
   - Source: https://bntpool.com/api/info (live 2026-10-25 ~00:26 EDT)
-  - Note: the repo example config has `pool_fee_pct: 0`, but production is 2.5%. Always use the live value.
+  - Production and the example config use `pool_fee_pct: 0` (verified live 2026-10-25, 11:59 PM EDT). Always check the live value.
   - Source: `blocknet-pool@master:config.example.json:40` (checked 2026-10-25)
 - The pool fee is taken as `reward × pool_fee_pct / 100` per block.
   - Source: `blocknet-pool@master:crates/pool-runtime/src/config.rs:231-234` (checked 2026-10-25)
@@ -277,7 +277,7 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
   - Charged as time-sliced dev rounds to a hard-coded dev address, after a **10-minute** fee-free grace period.
   - Source: `src/dev_fee.rs`, `src/miner/mining_pool.rs`, `docs/guides/configuration.md`.
   - Solo/daemon mode uses the same tracker. If the daemon rejects the dev-fee reward address, the existing fallback disables the dev fee for that run.
-- **Pool fee transition:** the requested bntpool.com fee is **0%**, pending production configuration/deployment. Confirm the live `/api/info` value before describing it as active. With a 0% pool fee and the new Seine release, the combined fee is **2%**; older miners retain their own dev fee.
+- **Pool fee transition:** bntpool.com now charges **0%**, confirmed via live `/api/info` after deployment on 2026-10-25 at 11:59 PM EDT. With a 0% pool fee and the new Seine release, the combined fee is **2%**; older miners retain their own dev fee.
 - **Release archives:**
 
   | Platform | Archive | GPU support |
@@ -464,7 +464,7 @@ Added by this sheet from the evidence:
   - The code's initial reward is 72,325,093,035 atomic units = **723.25 BNT**, at 1e8 atomic units per BNT (`miner.go:18`, `cli.go:1010`).
   - The docs example is off by 10×. Do not quote it.
 - **Post-quantum rule vs official site.** Resolved 2026-10-25: the owner lifted the ban; see the post-quantum bullet above.
-- **Pool fee.** The repo example config says 0%. Production bntpool.com reports **2.5%** live.
+- **Pool fee.** Production bntpool.com and the example config both use **0%**, verified 2026-10-25 at 11:59 PM EDT.
 - **Huge pages.** README "+4–8%" vs guide "+4–6% (2 MiB) + further 2% (1 GiB)". These are consistent once combined; quote the guide's split.
 
 ---
