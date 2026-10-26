@@ -76,7 +76,7 @@ fixed-kernel speedups or measurements of fully converged throughput.
 | CPU | Generation | Instance | Threads | Kernel | H/s |
 |---|---|---|---:|---|---:|
 | AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming | 49.39 |
-| AMD EPYC 9R14 | Zen 4 Genoa | m7a.8xlarge | 32 | streaming ring 8 / depth 2 | 43.89 |
+| AMD EPYC 9R14 | Zen 4 Genoa | m7a.8xlarge | 32 | streaming ring 8 / depth 2 | 45.30 |
 | AMD EPYC 7R13 | Zen 3 Milan | c6a.8xlarge | 16 | AVX2 | 11.63 |
 | AMD EPYC 7R32 | Zen 2 Rome | c5a.8xlarge | 16 | AVX2 | 10.96 |
 | AMD EPYC 7571 | Zen 1 Naples | m5a.8xlarge | 16 | AVX2 | 9.38 |
@@ -91,11 +91,15 @@ fixed-kernel speedups or measurements of fully converged throughput.
 | AWS Graviton2 | Neoverse N1 | m6g.8xlarge | 30 | NEON | 18.63 |
 
 The EPYC 9R14 row uses 32 threads and full transparent huge-page backing. Three
-alternating 60-second confirmation pairs measured **43.89 H/s versus 38.02 H/s**
-for the previous streaming kernel: **+15.43%**, with a paired 95% bootstrap
-interval of +14.90% to +16.03%. Schema-15 kernel timing excludes allocation and
-teardown and includes completed in-flight hashes.
-[Genoa confirmation and raw reports](../experiments/genoa-ring-20261026/README.md).
+alternating 30-second confirmation pairs measured **45.30 H/s versus 44.18 H/s**
+with the previous fence policy: **+2.55%**, with a paired 95% bootstrap interval
+of +2.53% to +2.58%. All 11,870 timed hashes across screening and confirmation
+were independently verified. This fixed-kernel research driver excludes allocation,
+warmup and teardown and includes completed in-flight hashes; its confirmed kernel
+change ships in v0.2.32. Cold-start, pool throughput and energy results are separate.
+[Genoa confirmation, frozen source and raw reports](../experiments/genoa-fences-20261026/README.md).
+The earlier ring-size improvement remains documented in the
+[previous confirmation](../experiments/genoa-ring-20261026/README.md).
 
 Other rows use 32-vCPU AWS instances with explicit 2 MiB huge pages, swept
 across kernels and thread counts, with four timed runs at the winning setting.
