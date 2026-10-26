@@ -13,6 +13,7 @@ setpriv --reuid=bench --regid=bench --init-groups --reset-env -- env HOME=/home/
   "$ADDRESS" "$NAME" "$@" > "$R/mining.log" 2>&1
 {
   echo "accepted $(grep -cE 'SHARE +accepted' "$R/mining.log")"
-  echo "rejected $(grep -cE 'SHARE' "$R/mining.log" | xargs -I{} expr {} - "$(grep -cE 'SHARE +accepted' "$R/mining.log")")"
+  echo "submitted $(grep -cE 'SHARE +submitted' "$R/mining.log")"
+  echo "other-share-events $(grep -E 'SHARE' "$R/mining.log" | grep -cvE 'SHARE +(submitted|accepted)')"
   grep -m3 -iE 'kernel|fixed workers' "$R/mining.log" | cut -c1-160
 } | tee "$R/summary.txt"
