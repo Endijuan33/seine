@@ -4184,3 +4184,38 @@ Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
 `native-windows-amd-frontier/` and
 `comparison-diagnostics/windows-startup-frontier.json`. All captures, exact build
 identities and independent verification receipts are retained.
+
+## 2026-10-26: native Genoa ring/depth neighbors retain the current default
+
+On native Linux EPYC 9R14 / m7a.8xlarge, 32 physical cores and 128 GiB RAM,
+compare the existing ring 8 / depth 2 with three single-parameter neighbors.
+Every variant uses 32 workers and 64 GiB of measured THP backing; allocation
+and five-second warmup are excluded. Frozen research revision `58f007c` has
+binary SHA-256
+`83109fc321de9d0fb5011db3b34bfa47442aeee77a4a1016ed816a7405b49127`.
+The existing benchctl campaign uses two interleaved 20-second screen pairs,
+then three fresh 30-second confirmation pairs when the screen remains promising
+or unresolved. Every timed hash is retained.
+
+| Candidate | Screen vs 8/2 | Paired bootstrap 95% interval | Fresh confirmation |
+|---|---:|---:|---|
+| Ring 4 / depth 2 | -2.057% | [-2.193%, -1.920%] | Not run: both screen pairs slower |
+| Ring 16 / depth 2 | -8.364% | [-8.612%, -8.116%] | Not run: both screen pairs slower |
+| Ring 8 / depth 1 | -0.014% | [-0.177%, +0.150%] | -0.238%, interval [-0.340%, -0.148%]; all three pairs slower |
+
+The depth-1 screen was inconclusive, so it received fresh confirmation rather
+than being discarded for a missed significance threshold. Its confirmation
+supports keeping depth 2 on this exact host and backing. These short-run
+intervals describe the observed pairs, not all Genoa machines or Windows.
+Keep the existing Linux default; none of these candidates justifies a change.
+Deeper lookahead remains unmeasured at ring 8 and is a separate hypothesis.
+
+All **18,779 timed hashes** independently matched cached libargon2 reference
+outputs, including 235 newly computed references on the native M4 Max verifier.
+All 36 full-size RustCrypto parity checks passed before timing. The rental was
+terminated immediately after evidence collection; storage and security-group
+cleanup were verified. Evidence: workspace
+`benchmark-evidence/longhorn-20261025/native-linux-amd-ring-grid/ring-publication/campaign/`
+contains raw reports, comparisons, exact source identities and
+`independent-verification.json`. No release or public performance headline
+follows from these rejected candidates.
