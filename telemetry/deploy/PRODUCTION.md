@@ -61,7 +61,11 @@ prevent collector outages or miner failures from being reported.
 
 The [October 26 schema-6 rollout proposal](ROLLOUT-SCHEMA6-20261026.md) pins the
 reviewed target and records acceptance checks, exact collector-only commands and
-image rollback. It is prepared, not executed; deployment requires an explicit request.
+image rollback. The approved collector-only rollout completed October 26 at
+14:49 EDT on exact source `af236c276e01080ff15863d4e716dd13e07f3b9d`; see the
+[deployment receipt](../../docs/validation/collector-schema6-deployment-20261026.md)
+for image IDs, retained overrides and verification. Further deployments require
+an explicit request.
 
 For deployment, first review the intended commit and create a fresh recovery backup.
 Then fast-forward the checkout and rebuild only the collector:

@@ -1,6 +1,9 @@
 # Schema-6 collector rollout proposal — October 26, 2026
 
-**Prepared, not executed. Production deployment/restart needs an explicit request.**
+**Approved and executed October 26, 2026 at 14:49 EDT.** See the
+[deployment receipt](../../docs/validation/collector-schema6-deployment-20261026.md)
+for exact images, health checks and retained rollback state. These commands remain
+the reviewed runbook; future deployments/restarts need a new explicit request.
 No miner release is included. Deploy this collector before the next schema-6 miner
 release; the new binary accepts schemas 1–6 without a database migration.
 
