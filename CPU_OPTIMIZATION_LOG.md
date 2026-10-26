@@ -4587,3 +4587,33 @@ and the default-feature release build passed. Public evidence audit verifies
 all 13,302 captured hashes and all 40 artifact checksums. The new 0.33%
 synthetic A/B/A case exercises both promotion cycles and saved-cache proof;
 old periodic and demand-fence cache upgrades retain their confirmed winners.
+
+## 2026-10-26 Windows 30-worker frontier — condition unexercised
+
+The earlier native Windows EPYC 9R14 trace exposed slow initial AVX2/AVX-512
+trials after a count search reached 30 workers. Research candidate `34c20a9`
+extended the streaming-first initial sweep from 31–32 to 30–32 workers,
+retaining periodic exhaustive searches and compatible cached winners.
+
+A predeclared 900-second cold baseline/candidate pair on m7a.8xlarge,
+Windows Server 2025, 32 physical cores and ordinary pages compared frozen
+`f3c8175` against `34c20a9`. Both started with empty caches. All 62,447 captured
+hashes matched the independent libargon2 reference cache, with no invalid or
+duplicate hashes; 62,446 arrived inside the measurement windows. Observed gross
+rates were 34.66444 and 34.72000 H/s; observed user rates were 33.92444 and
+33.98222 H/s, including this window's fee work.
+
+**Inconclusive: neither run reached 30 workers.** Both retained 32 workers and
+probed 31. The +0.16% gross difference therefore does not demonstrate the
+proposed conditional gain, and the candidate remains unshipped. This also does
+not disprove the earlier 30-worker hypothesis. Preserve the candidate and
+raw logs rather than rerunning cold pairs until the desired condition appears.
+
+Next, screen shorter high-count kernel samples in the reliably exercised
+31–32-worker ordinary-page contexts. Keep the existing minimum hash count,
+A/B/A drift check, two-cycle promotion requirement and cached winners.
+Campaign evidence: `windows-frontier30-prep/series-plan.json`,
+`native-windows-amd-frontier30/`, and
+`comparison-diagnostics/windows-frontier30-result.json` under the October 25
+local benchmark evidence directory. These are discovery results, not sustained
+throughput or a confidence-qualified marketing claim.
