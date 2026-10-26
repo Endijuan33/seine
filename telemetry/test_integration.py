@@ -229,3 +229,25 @@ for mutate in (
     assert send(bad) == 422
 assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
 print('PASS: schema 5 recovered evidence, previous version, downgrade and private-field rejection')
+
+tuning = json.loads(Path(__file__).with_name('tuning-fixture.json').read_text())
+tuning['installation_id'] = uuid.uuid4().hex
+tuning['report_id'] = uuid.uuid4().hex
+assert send(tuning) == 204
+stored = json.loads(query(f"SELECT payload->'tuning' FROM telemetry_reports WHERE report_id='{tuning['report_id']}'"))
+assert stored['run_id'] == tuning['tuning']['run_id']
+assert stored['trials'][0]['outcome']['samples'][1]['hashes'] == 3090
+assert stored['trials'][0]['outcome']['policy']['quantization'] == 'three_window_hash'
+for mutate in (
+    lambda p: p.update(schema_version=5),
+    lambda p: p['tuning']['trials'][0]['outcome'].update(message='PRIVATE WALLET'),
+    lambda p: p['tuning']['trials'][0]['outcome']['samples'][0]['context']['resources'].update(placement_fingerprint='/home/private'),
+):
+    bad = json.loads(json.dumps(tuning))
+    bad['installation_id'] = uuid.uuid4().hex
+    bad['report_id'] = uuid.uuid4().hex
+    mutate(bad)
+    assert send(bad) == 422
+assert analysis('tuning_report.sql')['unique_trials'] == 1
+assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
+print('PASS: schema 6 paired trials, raw samples and policy persistence, strict rejection and analysis')

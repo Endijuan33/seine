@@ -45,13 +45,14 @@ def main():
         ('data_quality', REMOTE_SQL, Path(__file__).with_name('data_quality.sql').read_text()),
         ('telemetry', REMOTE_SQL, Path(__file__).with_suffix('.sql').read_text()),
         ('diagnostics', REMOTE_SQL, Path(__file__).with_name('diagnostics.sql').read_text()),
+        ('tuning', REMOTE_SQL, Path(__file__).with_name('tuning_report.sql').read_text()),
     ):
         try:
             result = remote(args.host, command, data)
             if result.returncode:
                 briefing[key] = {'status': 'error', 'detail': (result.stderr or result.stdout).strip()[:1000]}
                 failed = True
-            elif key in ('telemetry', 'data_quality', 'diagnostics'):
+            elif key in ('telemetry', 'data_quality', 'diagnostics', 'tuning'):
                 briefing[key] = json.loads(result.stdout)
             else:
                 briefing[key] = {'status': 'ok', 'detail': result.stdout.strip()}
@@ -101,6 +102,15 @@ def main():
         briefing['diagnostic_assessment'] = 'No diagnostic coverage yet; missing failure reports do not establish healthy miners.'
     elif diagnostics.get('status') == 'ok':
         briefing['diagnostic_assessment'] = 'Review issue clusters, including single-installation failures. No fleet threshold is exceeded.'
+    tuning = briefing.get('tuning', {})
+    briefing['tuning_assessment'] = (
+        'Paired-trial query failed; do not interpret missing hints as no gain.'
+        if tuning.get('status') == 'error' else
+        'Ranked paired-trial hints require matching native validation before shipping; no automatic defaults.'
+        if tuning.get('ranked_hints') else
+        'No paired-trial hints meet coverage yet. Runtime emission must be integrated and reach miners; '
+        'preserve inconclusive and aborted outcomes, and do not infer regressions from no-confirmed-gain.'
+    )
     print(json.dumps(briefing, indent=2))
     return int(failed)
 

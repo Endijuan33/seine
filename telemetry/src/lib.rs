@@ -1,7 +1,8 @@
 //! The upload allowlist, deliberately independent of miner config and logs.
 use serde::{Deserialize, Serialize};
+pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -20,6 +21,8 @@ pub struct Report {
     pub backends: Vec<BackendSample>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<Diagnostics>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tuning: Option<tuning::TuningReport>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -365,6 +368,17 @@ impl Report {
     pub fn validate(&self) -> bool {
         let h = &self.hardware;
         (1..=SCHEMA_VERSION).contains(&self.schema_version)
+            && self.tuning.as_ref().is_none_or(|t| {
+                self.schema_version >= 6
+                    && t.validate()
+                    && self.diagnostics.as_ref().is_some_and(|d| {
+                        t.trials.iter().all(|trial| {
+                            trial.outcome.finished_ms
+                                <= d.uptime_secs.saturating_mul(1000).saturating_add(999)
+                        })
+                    })
+                    && serde_json::to_vec(t).is_ok_and(|b| b.len() <= tuning::MAX_TUNING_BYTES)
+            })
             && valid_id(&self.installation_id)
             && valid_id(&self.report_id)
             && [

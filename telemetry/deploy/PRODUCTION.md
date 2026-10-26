@@ -37,11 +37,13 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://telemetry.seineminer.com/healt
 
 Expect HTTP 204. This public endpoint alone does not verify the database.
 
-Schema 5 miners require the upgraded collector; deploy it before the miner release.
-The upgraded collector still accepts schemas 1–4. Deploy updated `diagnostics.sql`,
-`alerts.py` and `agent_report.py` with it to expose recovered diagnostics and correct
-interrupted-release attribution. The collector must be rebuilt; scripts alone cannot
-accept schema 5. No database migration or pool/daemon restart is required.
+Schema 6 miners require the upgraded collector; deploy it before the miner release.
+The upgraded collector still accepts schemas 1–5. Deploy updated `tuning_report.sql`,
+`diagnostics.sql`, `alerts.py` and `agent_report.py` with it to expose paired research
+hints, recovered diagnostics and correct interrupted-release attribution. The collector must be rebuilt; scripts alone cannot
+accept schema 6. No database migration or pool/daemon restart is required.
+Paired-trial producer hooks need runtime integration too; collector upgrade alone
+does not produce fleet trial evidence. See [the contract](../TUNING.md).
 Old checkpoints with an unambiguous observed build mapping can be attributed now;
 missing release/evidence fields cannot be recovered from existing payloads.
 Existing records remain readable; missing cause details cannot be reconstructed. After this upgrade, the

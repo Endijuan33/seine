@@ -4,6 +4,11 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 6 adds [paired CPU trial evidence](TUNING.md), including inconclusive and
+aborted comparisons, bounded delivery and installation-weighted research hints.
+The producer hooks are staged; runtime integration is required before miners
+emit these trials. Missing trials do not imply no gain.
+
 ## Miner preferences and collection
 
 Telemetry is enabled by default when a collector URL is configured, for both
@@ -39,8 +44,8 @@ distributed binaries. Release archives include `PRIVACY.md`. The website workflo
 also publishes changes made only to that policy file.
 
 Regular reports start after five minutes and continue hourly. Runs ending with
-diagnostics can send an early final report. Requests have a five-second timeout
-and no redirects. One bounded diagnostic report can be retained for recovery;
+diagnostics or paired trials can send an early final report. Requests have a five-second timeout
+and no redirects. One bounded evidence report can be retained for recovery;
 see reliability reporting below. HTTP is allowed only for loopback testing.
 CPU-only builds need no database or collector dependencies.
 
@@ -65,7 +70,7 @@ The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
 
 The [reliability fixture](reliability-fixture.json) demonstrates schema 5; the
 [diagnostic fixture](diagnostics-fixture.json) retains schema-4 compatibility coverage.
-The collector continues accepting schemas 1–4. Deploy it before schema 5 miners.
+The current schema-6 collector accepts schemas 1–5. Deploy it before schema-6 miners.
 The recorder starts after configuration parsing, before address resolution,
 backend initialization and tuning. UI warnings/errors identify their original
 call site through `track_caller`; backend error and quarantine paths also report
@@ -96,7 +101,8 @@ and one pending report (32 KiB maximum) from concurrent writers sharing a data
 directory. The latest diagnostic report replaces older pending diagnostics.
 Pending reports preserve their report ID on replay and expire when checked after
 24 hours. They are retried on a later cycle/launch, with a persisted five-minute
-cooldown. Normal performance-only reports are not spooled. Opt-out is checked
+cooldown. Paired-trial evidence also uses this bounded pending report; ordinary
+rate-only reports are not spooled. Opt-out is checked
 before every upload, including replays; it clears pending state when available.
 Disk/network work stays in the reporting thread, outside mining control loops.
 The thread checkpoints the current run phase, elapsed time, build and release every five seconds,
