@@ -90,5 +90,11 @@
   "suggestPrompt": "Diese Seite gibt es auch auf Deutsch.",
   "suggestAction": "Auf Deutsch lesen",
   "suggestKeepEnglish": "Auf Englisch bleiben",
-  "poolHelp": "Pool-Hashrate noch bei null?"
+  "poolHelp": "Pool-Hashrate noch bei null?",
+  "browseTopics": "Nach Thema stöbern",
+  "topicGettingStarted": "Erste Schritte",
+  "topicHardware": "Hardware & Optimierung",
+  "topicTroubleshooting": "Fehlerbehebung",
+  "topicRewards": "Belohnungen & Auszahlungen",
+  "topicBlocknet": "Über Blocknet"
 }

@@ -90,5 +90,11 @@
   "suggestPrompt": "Αυτή η σελίδα είναι διαθέσιμη στα ελληνικά.",
   "suggestAction": "Ανάγνωση στα ελληνικά",
   "suggestKeepEnglish": "Παραμονή στα αγγλικά",
-  "poolHelp": "Το hashrate του pool παραμένει μηδενικό;"
+  "poolHelp": "Το hashrate του pool παραμένει μηδενικό;",
+  "browseTopics": "Περιήγηση ανά θέμα",
+  "topicGettingStarted": "Πρώτα βήματα",
+  "topicHardware": "Υλικό και ρυθμίσεις",
+  "topicTroubleshooting": "Αντιμετώπιση προβλημάτων",
+  "topicRewards": "Ανταμοιβές και πληρωμές",
+  "topicBlocknet": "Σχετικά με το Blocknet"
 }

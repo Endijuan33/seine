@@ -90,5 +90,11 @@
   "suggestPrompt": "This page is available in English.",
   "suggestAction": "Read in English",
   "suggestKeepEnglish": "Keep English",
-  "poolHelp": "Pool hashrate still zero?"
+  "poolHelp": "Pool hashrate still zero?",
+  "browseTopics": "Browse by topic",
+  "topicGettingStarted": "Getting started",
+  "topicHardware": "Hardware & tuning",
+  "topicTroubleshooting": "Troubleshooting",
+  "topicRewards": "Rewards & payouts",
+  "topicBlocknet": "About Blocknet"
 }

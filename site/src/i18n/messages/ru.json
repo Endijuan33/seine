@@ -90,5 +90,11 @@
   "suggestPrompt": "Эта страница доступна на русском языке.",
   "suggestAction": "Читать на русском",
   "suggestKeepEnglish": "Оставить на английском",
-  "poolHelp": "Хешрейт пула всё ещё нулевой?"
+  "poolHelp": "Хешрейт пула всё ещё нулевой?",
+  "browseTopics": "Выбрать тему",
+  "topicGettingStarted": "Начало работы",
+  "topicHardware": "Оборудование и настройка",
+  "topicTroubleshooting": "Решение проблем",
+  "topicRewards": "Награды и выплаты",
+  "topicBlocknet": "О Blocknet"
 }

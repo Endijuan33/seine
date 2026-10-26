@@ -90,5 +90,11 @@
   "suggestPrompt": "本页面提供简体中文版本。",
   "suggestAction": "阅读简体中文版",
   "suggestKeepEnglish": "继续使用英文",
-  "poolHelp": "矿池算力仍为零？"
+  "poolHelp": "矿池算力仍为零？",
+  "browseTopics": "按主题浏览",
+  "topicGettingStarted": "入门指南",
+  "topicHardware": "硬件与调优",
+  "topicTroubleshooting": "故障排查",
+  "topicRewards": "奖励与支付",
+  "topicBlocknet": "关于 Blocknet"
 }

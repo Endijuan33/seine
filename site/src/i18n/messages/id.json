@@ -90,5 +90,11 @@
   "suggestPrompt": "Halaman ini tersedia dalam Bahasa Indonesia.",
   "suggestAction": "Baca dalam Bahasa Indonesia",
   "suggestKeepEnglish": "Tetap dalam bahasa Inggris",
-  "poolHelp": "Hashrate pool masih nol?"
+  "poolHelp": "Hashrate pool masih nol?",
+  "browseTopics": "Jelajahi menurut topik",
+  "topicGettingStarted": "Mulai menambang",
+  "topicHardware": "Perangkat keras & penyetelan",
+  "topicTroubleshooting": "Pemecahan masalah",
+  "topicRewards": "Imbalan & pembayaran",
+  "topicBlocknet": "Tentang Blocknet"
 }

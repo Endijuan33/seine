@@ -8,6 +8,7 @@ import Warning from '../../../components/mdx/Warning.astro';
 import { LOCALES, langParam, localeDef, localizePath } from '../../../i18n/locales';
 import { useTranslations } from '../../../i18n/ui';
 import Base from '../../../layouts/Base.astro';
+import { topicFor } from '../../../lib/blog-topics';
 import { getPosts, type Post } from '../../../lib/blog';
 import { ORGANIZATION, SITE_URL, breadcrumbList, formatDate, isoDate } from '../../../lib/site';
 
@@ -32,6 +33,7 @@ const lang = localeDef(locale).htmlLang;
 const { Content } = await render(post.entry);
 const home = localizePath('/', locale);
 const blog = localizePath('/blog/', locale);
+const topic = topicFor(post.slug);
 
 const schema: unknown[] = [
     {
@@ -58,7 +60,7 @@ if (post.faq.length) {
   </Fragment>
 <main class="wrap">
   <header class="page-head">
-    <nav class="crumbs" aria-label={t('breadcrumb')}><a href={home}>seine</a> / <a href={blog}>{t('navBlog')}</a></nav>
+    <nav class="crumbs" aria-label={t('breadcrumb')}><a href={home}>seine</a> / <a href={blog}>{t('navBlog')}</a> / <a href={`${blog}#${topic.id}`}>{t(topic.key)}</a></nav>
     <h1>{post.title}</h1>
     <div class="meta">
       <time datetime={isoDate(post.date)}>{formatDate(post.date, lang)}</time>

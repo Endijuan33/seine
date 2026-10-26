@@ -115,3 +115,13 @@ and locale, and JSON-LD that matches the visible page (`Organization`, `WebSite`
 an FAQ). Also `sitemap.xml` with alternates and `lastmod`, an RSS feed per locale, `robots.txt`,
 `llms.txt`, responsive AVIF/WebP images, and self-hosted fonts (Google Fonts is blocked in
 mainland China). The Pages preview host (`*.pages.dev`) sends `X-Robots-Tag: noindex`.
+
+## Topic navigation
+
+`src/lib/blog-topics.ts` assigns each published source slug to one topic. Add new
+articles there; an unassigned article fails the build. Translations share the
+assignment and translate topic names in the interface catalogs. Indexes render
+every article in static HTML, newest first within each topic, with native fragment
+links and article breadcrumbs back to the topic. Rewards links lead to the
+matching bntpool.com language; the pool links back to hardware guides. No extra
+category pages or sitemap URLs are created.

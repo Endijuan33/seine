@@ -90,5 +90,11 @@
   "suggestPrompt": "Ця сторінка доступна українською мовою.",
   "suggestAction": "Читати українською",
   "suggestKeepEnglish": "Залишити англійською",
-  "poolHelp": "Хешрейт пулу досі нульовий?"
+  "poolHelp": "Хешрейт пулу досі нульовий?",
+  "browseTopics": "Вибрати тему",
+  "topicGettingStarted": "Початок роботи",
+  "topicHardware": "Обладнання та налаштування",
+  "topicTroubleshooting": "Усунення несправностей",
+  "topicRewards": "Винагороди та виплати",
+  "topicBlocknet": "Про Blocknet"
 }

@@ -90,5 +90,11 @@
   "suggestPrompt": "Questa pagina è disponibile in italiano.",
   "suggestAction": "Leggi in italiano",
   "suggestKeepEnglish": "Resta in inglese",
-  "poolHelp": "Hashrate del pool ancora a zero?"
+  "poolHelp": "Hashrate del pool ancora a zero?",
+  "browseTopics": "Esplora per argomento",
+  "topicGettingStarted": "Primi passi",
+  "topicHardware": "Hardware e ottimizzazione",
+  "topicTroubleshooting": "Risoluzione dei problemi",
+  "topicRewards": "Ricompense e pagamenti",
+  "topicBlocknet": "Informazioni su Blocknet"
 }

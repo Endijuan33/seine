@@ -90,5 +90,11 @@
   "suggestPrompt": "หน้านี้มีให้อ่านเป็นภาษาไทย",
   "suggestAction": "อ่านเป็นภาษาไทย",
   "suggestKeepEnglish": "ใช้ภาษาอังกฤษต่อ",
-  "poolHelp": "อัตราแฮชของพูลยังเป็นศูนย์อยู่หรือไม่?"
+  "poolHelp": "อัตราแฮชของพูลยังเป็นศูนย์อยู่หรือไม่?",
+  "browseTopics": "เลือกตามหัวข้อ",
+  "topicGettingStarted": "เริ่มต้นใช้งาน",
+  "topicHardware": "ฮาร์ดแวร์และการปรับแต่ง",
+  "topicTroubleshooting": "การแก้ไขปัญหา",
+  "topicRewards": "รางวัลและการจ่ายเงิน",
+  "topicBlocknet": "เกี่ยวกับ Blocknet"
 }

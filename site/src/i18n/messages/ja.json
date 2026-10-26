@@ -90,5 +90,11 @@
   "suggestPrompt": "このページは日本語でもご覧いただけます。",
   "suggestAction": "日本語で読む",
   "suggestKeepEnglish": "英語のまま表示",
-  "poolHelp": "プールのハッシュレートがまだゼロですか？"
+  "poolHelp": "プールのハッシュレートがまだゼロですか？",
+  "browseTopics": "トピックから探す",
+  "topicGettingStarted": "はじめに",
+  "topicHardware": "ハードウェアと調整",
+  "topicTroubleshooting": "トラブルシューティング",
+  "topicRewards": "報酬と支払い",
+  "topicBlocknet": "Blocknetについて"
 }

@@ -15,11 +15,11 @@
 .posts li:last-child { border-bottom: 1px solid var(--rule); }
 .posts a { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 32px; align-items: center; padding: 28px 0; text-decoration: none; }
 .posts a:not(:has(img)) { grid-template-columns: 1fr; }
-.posts h2 { margin: 6px 0 8px; font-size: 1.5rem; }
+.posts h3 { margin: 6px 0 8px; font-size: 1.5rem; }
 .posts p { margin: 0; color: var(--ink-2); }
 .posts time { font: 13px/1 var(--mono); color: var(--ink-3); }
 .posts img { border: 1px solid var(--rule); border-radius: var(--radius); }
-.posts a:hover h2 { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.posts a:hover h3 { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
 @media (max-width: 640px) { .posts a { grid-template-columns: 1fr; } .posts img { display: none; } } /* the card repeats the title */
 
 /* article */
@@ -63,3 +63,16 @@
 .cta-copy span { font-size: 0.98rem; color: var(--ink-2); }
 .prose .cta-card a.btn { color: var(--paper); text-decoration: none; }
 @media (max-width: 640px) { .cta-card { grid-template-columns: 48px minmax(0, 1fr); align-items: start; } .cta-card .btn { grid-column: 1 / -1; justify-self: start; } }
+
+/* Topic jumps keep every article visible and usable without JavaScript. */
+.topic-nav { margin: -12px 0 40px; }
+.topic-nav p { margin: 0 0 12px; color: var(--ink-3); font-size: .9rem; }
+.topic-nav ul { display: flex; flex-wrap: wrap; gap: 8px 24px; list-style: none; padding: 0; margin: 0 0 12px; }
+.topic-nav a { display: inline-block; padding-block: 8px; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.topic-nav a:hover { color: var(--ink); }
+.topic-nav .topic-sibling { color: var(--ink-3); font-size: .9rem; }
+.topic-section { padding-block: 0; }
+.topic-section > h2 { margin: 0 0 18px; font-size: 1.6rem; scroll-margin-top: 90px; }
+.topic-section > h2:target { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.topic-section .posts { padding-bottom: 56px; }
+.crumbs { line-height: 1.6; }

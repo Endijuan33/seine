@@ -90,5 +90,11 @@
   "suggestPrompt": "Trang này có bản tiếng Việt.",
   "suggestAction": "Đọc bằng tiếng Việt",
   "suggestKeepEnglish": "Giữ tiếng Anh",
-  "poolHelp": "Hashrate của pool vẫn bằng không?"
+  "poolHelp": "Hashrate của pool vẫn bằng không?",
+  "browseTopics": "Duyệt theo chủ đề",
+  "topicGettingStarted": "Bắt đầu",
+  "topicHardware": "Phần cứng và tinh chỉnh",
+  "topicTroubleshooting": "Khắc phục sự cố",
+  "topicRewards": "Phần thưởng và thanh toán",
+  "topicBlocknet": "Về Blocknet"
 }

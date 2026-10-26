@@ -90,5 +90,11 @@
   "suggestPrompt": "Ta strona jest dostępna po polsku.",
   "suggestAction": "Czytaj po polsku",
   "suggestKeepEnglish": "Zostań przy angielskim",
-  "poolHelp": "Hashrate puli nadal zerowy?"
+  "poolHelp": "Hashrate puli nadal zerowy?",
+  "browseTopics": "Przeglądaj według tematu",
+  "topicGettingStarted": "Pierwsze kroki",
+  "topicHardware": "Sprzęt i optymalizacja",
+  "topicTroubleshooting": "Rozwiązywanie problemów",
+  "topicRewards": "Nagrody i wypłaty",
+  "topicBlocknet": "O Blocknet"
 }

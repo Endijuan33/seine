@@ -113,6 +113,7 @@ const scriptVars = {
       </div>
       <div class="dl-foot">
         {downloadGuides.map((post) => <a href={post.path}>{post.title}</a>)}
+          <a href={localizePath('/blog/', locale) + '#troubleshooting'}>{t('topicTroubleshooting')}</a>
       </div>
     </div>
   </section>
@@ -128,6 +129,7 @@ const scriptVars = {
         </ol>
         <div class="dl-foot">
           {setupGuides.map((post) => <a href={post.path}>{post.title}</a>)}
+          <a href={localizePath('/blog/', locale) + '#getting-started'}>{t('topicGettingStarted')}</a>
         </div>
       </div>
       <div class="shot">
@@ -151,6 +153,7 @@ const scriptVars = {
       </div>
       <div class="dl-foot">
         {performanceGuides.map((post) => <a href={post.path}>{post.title}</a>)}
+          <a href={localizePath('/blog/', locale) + '#hardware'}>{t('topicHardware')}</a>
       </div>
       <div class="perf-foot">
         <a href={`${REPO}/blob/master/docs/PERFORMANCE.md`}>{t('perfAll')}</a> ·

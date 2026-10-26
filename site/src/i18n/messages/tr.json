@@ -90,5 +90,11 @@
   "suggestPrompt": "Bu sayfa Türkçe olarak da mevcut.",
   "suggestAction": "Türkçe oku",
   "suggestKeepEnglish": "İngilizce kalsın",
-  "poolHelp": "Havuz hashrate’i hâlâ sıfır mı?"
+  "poolHelp": "Havuz hashrate’i hâlâ sıfır mı?",
+  "browseTopics": "Konuya göre göz at",
+  "topicGettingStarted": "Başlangıç",
+  "topicHardware": "Donanım ve ayarlar",
+  "topicTroubleshooting": "Sorun giderme",
+  "topicRewards": "Ödüller ve ödemeler",
+  "topicBlocknet": "Blocknet hakkında"
 }

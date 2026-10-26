@@ -90,5 +90,11 @@
   "suggestPrompt": "Cette page est disponible en français.",
   "suggestAction": "Lire en français",
   "suggestKeepEnglish": "Rester en anglais",
-  "poolHelp": "Le hashrate du pool reste nul ?"
+  "poolHelp": "Le hashrate du pool reste nul ?",
+  "browseTopics": "Parcourir par sujet",
+  "topicGettingStarted": "Premiers pas",
+  "topicHardware": "Matériel et réglages",
+  "topicTroubleshooting": "Dépannage",
+  "topicRewards": "Récompenses et paiements",
+  "topicBlocknet": "À propos de Blocknet"
 }

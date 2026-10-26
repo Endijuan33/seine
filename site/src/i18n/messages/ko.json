@@ -90,5 +90,11 @@
   "suggestPrompt": "이 페이지는 한국어로도 제공됩니다.",
   "suggestAction": "한국어로 보기",
   "suggestKeepEnglish": "영어로 계속 보기",
-  "poolHelp": "풀 해시레이트가 아직 0인가요?"
+  "poolHelp": "풀 해시레이트가 아직 0인가요?",
+  "browseTopics": "주제별로 보기",
+  "topicGettingStarted": "시작하기",
+  "topicHardware": "하드웨어 및 튜닝",
+  "topicTroubleshooting": "문제 해결",
+  "topicRewards": "보상 및 지급",
+  "topicBlocknet": "Blocknet 소개"
 }

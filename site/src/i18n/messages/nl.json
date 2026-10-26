@@ -90,5 +90,11 @@
   "suggestPrompt": "Deze pagina is beschikbaar in het Nederlands.",
   "suggestAction": "Lezen in het Nederlands",
   "suggestKeepEnglish": "Engels houden",
-  "poolHelp": "Poolhashrate nog steeds nul?"
+  "poolHelp": "Poolhashrate nog steeds nul?",
+  "browseTopics": "Bladeren op onderwerp",
+  "topicGettingStarted": "Aan de slag",
+  "topicHardware": "Hardware en afstemming",
+  "topicTroubleshooting": "Problemen oplossen",
+  "topicRewards": "Beloningen en uitbetalingen",
+  "topicBlocknet": "Over Blocknet"
 }
