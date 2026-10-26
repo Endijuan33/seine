@@ -19,10 +19,12 @@ pub enum CpuKernel {
     Avx512256StreamR64D3,
     /// Streaming stores with 64 cached blocks, depth four and demand fences.
     Avx512256StreamR64D4,
+    /// Streaming stores with 64 cached blocks, depth six and demand fences.
+    Avx512256StreamR64D6,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Scalar,
         Self::Avx2,
         Self::Avx512,
@@ -33,6 +35,7 @@ impl CpuKernel {
         Self::Avx512256StreamR8D2,
         Self::Avx512256StreamR64D3,
         Self::Avx512256StreamR64D4,
+        Self::Avx512256StreamR64D6,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -47,6 +50,7 @@ impl CpuKernel {
             Self::Avx512256StreamR8D2 => "avx512-256-stream-r8d2",
             Self::Avx512256StreamR64D3 => "avx512-256-stream-r64d3",
             Self::Avx512256StreamR64D4 => "avx512-256-stream-r64d4",
+            Self::Avx512256StreamR64D6 => "avx512-256-stream-r64d6",
         }
     }
 
@@ -65,7 +69,8 @@ impl CpuKernel {
             | Self::Avx512256Stream
             | Self::Avx512256StreamR8D2
             | Self::Avx512256StreamR64D3
-            | Self::Avx512256StreamR64D4 => {
+            | Self::Avx512256StreamR64D4
+            | Self::Avx512256StreamR64D6 => {
                 std::arch::is_x86_feature_detected!("avx2")
                     && std::arch::is_x86_feature_detected!("avx512f")
                     && std::arch::is_x86_feature_detected!("avx512vl")
@@ -101,7 +106,7 @@ impl std::str::FromStr for CpuKernel {
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
             .ok_or_else(|| {
-                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, neon, or neon-sha3"
+                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, neon, or neon-sha3"
                     .to_string()
             })
     }

@@ -4617,3 +4617,54 @@ Campaign evidence: `windows-frontier30-prep/series-plan.json`,
 `comparison-diagnostics/windows-frontier30-result.json` under the October 25
 local benchmark evidence directory. These are discovery results, not sustained
 throughput or a confidence-qualified marketing claim.
+
+## 2026-10-26 Turin prefetch depth six — small conditional gain
+
+Native Linux EPYC 9R45 / m8a.8xlarge, 32 physical cores, 128 GiB RAM,
+32 full-THP 2 GiB arenas and OS scheduling. Frozen D4 baseline `2bcb02c`
+versus D5/D6 research candidate `c28a2b8`. The existing benchctl campaign
+used two alternating 20-second screen pairs and three fresh alternating
+30-second confirmation pairs for unresolved or promising screens.
+
+- **Depth five inconclusive:** screen -0.31238%, interval
+  [-0.76734%, +0.14467%]; confirmation 49.85944 → 49.82618 H/s,
+  -0.06686%, interval [-0.52537%, +0.22032%], two of three pairs faster.
+  The runner labeled this rejected because its confirmation lower bound did
+  not exceed zero. That is not evidence of a regression. Preserve the result
+  and all 13,166 verified hashes; do not promote or rerun without a new reason.
+- **Depth six accepted in this context:** screen -0.41978%, interval
+  [-0.90873%, +0.07158%], advanced under the predeclared unresolved-screen
+  rule. Fresh confirmation **49.53885 → 49.63379 H/s**, **+0.19166%**,
+  interval **[+0.12560%, +0.26755%]**, all three pairs faster.
+  Preserve the initial negative point estimate alongside confirmation.
+
+All **26,285 timed hashes** independently match libargon2, including 13,119
+for D6; 24 native full-size RustCrypto parity/dirty-reuse/guard checks passed.
+The integrated complete loop matches the tested algorithm after constant-branch
+resolution. This does not establish identical machine code. Allocation, five
+seconds of warmup and teardown are excluded; this is kernel throughput, with
+no whole-miner, fee, energy or cross-host claim. Do not add gains or compare
+absolute rates across separate rentals.
+
+Integrate `avx512-256-stream-r64d6` for the same exact native Linux 9R45 host
+and full-THP/32-worker startup context. Preserve D4, D3 and periodic streaming
+as challengers. Compatible confirmed local caches retain their initial winner
+and initially compare only D6. To resolve the measured gain above the
+three-sample hash-count quantization allowance, D6 comparisons require at
+least 45 seconds and 2,048 hashes per sample, at most 1% baseline drift and
+two successful A/B/A cycles. Longer configured windows remain honored. Other
+Turin pairs keep their 30-second/1,024-hash policy; generic comparisons retain
+their existing 2% margin. Mining continues during these comparisons.
+
+Integration validation: 121 adaptive tests passed (five existing heavyweight
+tests ignored), all five kernel reference/compression tests passed, and the
+default-feature release build passed. Tests cover two-cycle small-gain
+promotion and cached proof, quantized ties, inadequate samples, drift, older
+confirmed-cache migration, ISA/OS/identity gates and actual memory backing.
+The enclosing joint thread/kernel trial budget accounts for D6's longer sample
+minimum, so the count search does not prematurely abort a valid kernel sweep.
+Public evidence and reproduction:
+[turin-depth6-20261026](experiments/turin-depth6-20261026/README.md).
+Local complete campaign, including inconclusive D5:
+`native-linux-amd-zen5-deeper-prefetch/ring-publication/campaign/`.
+Hold this with the other validated changes for the next combined release.

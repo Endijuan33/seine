@@ -184,6 +184,17 @@ fn turin_prefetch_startup(
         && turin_demand_startup(cfg, host, identity, supported)
 }
 
+// Native exact-host confirmation: depth six adds 0.19% over depth four.
+fn turin_depth6_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> bool {
+    supported.contains(&CpuKernel::Avx512256StreamR64D6)
+        && turin_prefetch_startup(cfg, host, identity, supported)
+}
+
 fn genoa_stream_context(context: &Context) -> bool {
     context.members.len() == 1
         && context.workers == [32]
@@ -413,9 +424,19 @@ fn turin_small_gain_pair(base: CpuKernel, candidate: CpuKernel) -> bool {
             CpuKernel::Avx512256Stream
                 | CpuKernel::Avx512256StreamR64D3
                 | CpuKernel::Avx512256StreamR64D4
+                | CpuKernel::Avx512256StreamR64D6
         )
     };
     base != candidate && measured_path(base) && measured_path(candidate)
+}
+
+fn turin_pair_resolution(base: CpuKernel, candidate: CpuKernel) -> (u64, u64) {
+    if [base, candidate].contains(&CpuKernel::Avx512256StreamR64D6) {
+        // Resolve the measured 0.19% gain above three-window hash quantization.
+        (45, 2048)
+    } else {
+        (30, 1024)
+    }
 }
 
 fn comparison_for(
@@ -429,9 +450,10 @@ fn comparison_for(
         // Native fence/prefetch gains are below the generic 2% switching margin.
         // Require longer, well-resolved samples and tighter baseline stability;
         // both fresh A/B/A cycles still have to win before promotion/caching.
+        let (seconds, hashes) = turin_pair_resolution(base, path);
         if [before, candidate, after]
             .iter()
-            .any(|s| s.secs < 30 || s.hashes < 1024)
+            .any(|s| s.secs < seconds || s.hashes < hashes)
         {
             return Comparison::Inconclusive;
         }
@@ -564,6 +586,10 @@ impl Tuner {
         if turin_prefetch {
             candidates.insert(0, CpuKernel::Avx512256StreamR64D4);
         }
+        let turin_depth6 = turin_depth6_startup(cfg, &host, identity, &supported);
+        if turin_depth6 {
+            candidates.insert(0, CpuKernel::Avx512256StreamR64D6);
+        }
         let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
         // Native ring/depth screen: retain the old streaming path as a challenger.
@@ -576,6 +602,8 @@ impl Tuner {
         }
         let startup = if ring_startup {
             Some(CpuKernel::Avx512256StreamR8D2)
+        } else if turin_depth6 {
+            Some(CpuKernel::Avx512256StreamR64D6)
         } else if turin_prefetch {
             Some(CpuKernel::Avx512256StreamR64D4)
         } else if turin_demand {
@@ -647,16 +675,30 @@ impl Tuner {
                         CpuKernel::Avx512256StreamR8D2
                             | CpuKernel::Avx512256StreamR64D3
                             | CpuKernel::Avx512256StreamR64D4
+                            | CpuKernel::Avx512256StreamR64D6
                     )
                 })
                 .collect();
             configuration_for(&prior_paths, false, false)
         });
+        let prior_depth6_configuration = turin_depth6.then(|| {
+            let paths: Vec<_> = candidates
+                .iter()
+                .copied()
+                .filter(|k| *k != CpuKernel::Avx512256StreamR64D6)
+                .collect();
+            configuration_for(&paths, genoa_short_trials, genoa_startup_frontier)
+        });
         let prior_prefetch_configuration = turin_prefetch.then(|| {
             let paths: Vec<_> = candidates
                 .iter()
                 .copied()
-                .filter(|k| *k != CpuKernel::Avx512256StreamR64D4)
+                .filter(|k| {
+                    !matches!(
+                        k,
+                        CpuKernel::Avx512256StreamR64D4 | CpuKernel::Avx512256StreamR64D6
+                    )
+                })
                 .collect();
             configuration_for(&paths, genoa_short_trials, genoa_startup_frontier)
         });
@@ -690,9 +732,12 @@ impl Tuner {
                     record.configuration = configuration.clone();
                     Some(record)
                 } else {
-                    if prior_prefetch_configuration
+                    if prior_depth6_configuration
                         .as_ref()
                         .is_some_and(|prior| record.compatible(&host, prior))
+                        || prior_prefetch_configuration
+                            .as_ref()
+                            .is_some_and(|prior| record.compatible(&host, prior))
                         || prior_configuration.as_ref().is_some_and(|prior| {
                             record.compatible(&host, prior)
                                 || (turin_demand
@@ -791,7 +836,14 @@ impl Tuner {
     pub(super) fn joint_budget_secs(&self) -> u64 {
         // Two A/B/A cycles per challenger, one retry cooldown and switch slack.
         // Outer count windows are budgeted separately by the count policy.
+        // A D6 incumbent can require longer samples against every challenger.
+        let minimum_window = if self.candidates.contains(&CpuKernel::Avx512256StreamR64D6) {
+            45
+        } else {
+            30
+        };
         self.window_secs
+            .max(minimum_window)
             .saturating_mul(6)
             .saturating_mul(self.candidates.len().saturating_sub(1) as u64)
             .saturating_add(RETRY_SECS)
@@ -1079,8 +1131,9 @@ impl Tuner {
         let short =
             self.short_trials || (self.genoa_short_trials && genoa_short_context(&trial.context));
         let fence_pair = turin_small_gain_pair(trial.base, trial.candidate);
+        let (pair_seconds, pair_hashes) = turin_pair_resolution(trial.base, trial.candidate);
         if !sample_ready(sample, self.window_secs, short && !fence_pair)
-            || (fence_pair && sample.hashes < 1024)
+            || (fence_pair && (sample.secs < pair_seconds || sample.hashes < pair_hashes))
         {
             return Action {
                 hold_counts: true,
@@ -1539,6 +1592,133 @@ mod tests {
         );
         assert!(!t.tick(now + 1, &[s], true, true).hold_counts);
         assert!(!t.tick(now + 2, &[s], true, true).hold_counts);
+        let _ = fs::remove_file(&t.path);
+    }
+
+    #[test]
+    fn depth6_small_gain_rejects_unresolved_samples_and_baseline_drift() {
+        let a = CpuKernel::Avx512256StreamR64D4;
+        let b = CpuKernel::Avx512256StreamR64D6;
+        let before = Sample {
+            hashes: 2250,
+            secs: 45,
+        };
+        let candidate = Sample {
+            hashes: 2254,
+            secs: 45,
+        };
+        assert_eq!(
+            comparison_for(a, b, before, candidate, before),
+            Comparison::Gain
+        );
+        assert_eq!(
+            comparison_for(
+                a,
+                b,
+                before,
+                Sample {
+                    hashes: 2253,
+                    secs: 45
+                },
+                before
+            ),
+            Comparison::NoConfirmedGain
+        );
+        assert_eq!(
+            comparison_for(
+                a,
+                b,
+                before,
+                candidate,
+                Sample {
+                    hashes: 2275,
+                    secs: 45
+                }
+            ),
+            Comparison::Inconclusive
+        );
+        for unresolved in [
+            Sample {
+                hashes: 2250,
+                secs: 44,
+            },
+            Sample {
+                hashes: 2047,
+                secs: 45,
+            },
+        ] {
+            assert_eq!(
+                comparison_for(a, b, unresolved, candidate, before),
+                Comparison::Inconclusive
+            );
+        }
+        assert_eq!(
+            turin_pair_resolution(a, CpuKernel::Avx512256StreamR64D3),
+            (30, 1024)
+        );
+    }
+
+    #[test]
+    fn depth6_small_gain_promotes_after_two_cycles_and_survives_cache() {
+        if candidates().len() < 2 {
+            return;
+        }
+        let mut t = tuner();
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512256StreamR64D4;
+        t.candidates = vec![s.kernel, CpuKernel::Avx512256StreamR64D6];
+        t.short_trials = true;
+        let challenger = CpuKernel::Avx512256StreamR64D6;
+        let mut now = 0;
+        assert!(t.tick(now, &[s], true, true).hold_counts);
+        for (index, rate) in [2250, 2254, 2250, 2250, 2254, 2250].into_iter().enumerate() {
+            now += 1;
+            s.kernel_ready = false;
+            assert!(t.tick(now, &[s], true, true).hold_counts);
+            assert!(t.trial.as_ref().unwrap().window.is_none());
+            s.kernel_ready = true;
+            t.tick(now, &[s], true, true);
+            now += 45;
+            s.hashes += rate;
+            let action = t.tick(now, &[s], true, true);
+            if let Some(kernel) = action.kernel {
+                s.kernel = kernel;
+                s.kernel_generation += 1;
+            }
+            if index < 5 {
+                assert!(t.cache.winners.is_empty());
+            }
+        }
+        assert_eq!(s.kernel, challenger);
+        assert_eq!(t.cache.winners.len(), 1);
+        let context = Context::from_snapshots(&[s]);
+        assert_eq!(
+            t.cache.winner(&context, unix_secs(), &t.candidates),
+            Some(challenger)
+        );
+        assert!(!t.tick(now + 1, &[s], true, true).hold_counts);
+        assert!(!t.tick(now + 2, &[s], true, true).hold_counts);
+        let _ = fs::remove_file(&t.path);
+    }
+
+    #[test]
+    fn joint_budget_covers_depth6_sweep_and_a_retry() {
+        let mut t = tuner();
+        t.window_secs = 30;
+        t.candidates = vec![
+            CpuKernel::Avx512256StreamR64D6,
+            CpuKernel::Avx512256StreamR64D4,
+            CpuKernel::Avx512256StreamR64D3,
+            CpuKernel::Avx512256Stream,
+            CpuKernel::Avx512,
+            CpuKernel::Avx2,
+        ];
+        // Three small-gain opponents need 45s windows; generic opponents
+        // still take 30s. Do not abort the count trial before these can finish.
+        let sweep = 3 * 6 * 45 + 2 * 6 * 30;
+        assert!(t.joint_budget_secs() >= sweep + RETRY_SECS + 120);
+        t.window_secs = 60;
+        assert!(t.joint_budget_secs() >= 5 * 6 * 60 + RETRY_SECS + 120);
         let _ = fs::remove_file(&t.path);
     }
 
@@ -2705,16 +2885,19 @@ mod tests {
             workers: vec![32],
             backing: vec![[0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]],
         };
-        for prior_demand in [false, true] {
-            let prior_kernel = if prior_demand {
-                CpuKernel::Avx512256StreamR64D3
-            } else {
-                CpuKernel::Avx512
-            };
+        for prior_kernel in [
+            CpuKernel::Avx512,
+            CpuKernel::Avx512256StreamR64D3,
+            CpuKernel::Avx512256StreamR64D4,
+        ] {
+            let prior_demand = prior_kernel != CpuKernel::Avx512;
             let mut configuration = fresh
                 .cache
                 .configuration
-                .replace("Avx512256StreamR64D4, ", "");
+                .replace("Avx512256StreamR64D6, ", "");
+            if prior_kernel != CpuKernel::Avx512256StreamR64D4 {
+                configuration = configuration.replace("Avx512256StreamR64D4, ", "");
+            }
             if !prior_demand {
                 configuration = configuration.replace("Avx512256StreamR64D3, ", "");
             }
@@ -2756,7 +2939,7 @@ mod tests {
                 upgraded.tick(1, &[state], true, true).kernel,
                 Some(prior_kernel)
             );
-            assert_eq!(upgraded.pending, [CpuKernel::Avx512256StreamR64D4]);
+            assert_eq!(upgraded.pending, [CpuKernel::Avx512256StreamR64D6]);
         }
         let _ = fs::remove_file(&fresh.path);
     }
@@ -2792,6 +2975,26 @@ mod tests {
             CpuKernel::Avx512256StreamR64D3,
             CpuKernel::Avx512256StreamR64D4,
         ];
+        let mut depth6_paths = prefetch_paths.to_vec();
+        depth6_paths.push(CpuKernel::Avx512256StreamR64D6);
+        assert!(turin_depth6_startup(&cfg, &host, &identity, &depth6_paths));
+        assert!(!turin_depth6_startup(
+            &cfg,
+            &host,
+            &identity,
+            &prefetch_paths
+        ));
+        let mut neighbor = identity.clone();
+        neighbor.model = Some(0x11);
+        assert!(!turin_depth6_startup(&cfg, &host, &neighbor, &depth6_paths));
+        let mut other_os = host.clone();
+        other_os.os = "windows".into();
+        assert!(!turin_depth6_startup(
+            &cfg,
+            &other_os,
+            &identity,
+            &depth6_paths
+        ));
         assert!(turin_prefetch_startup(
             &cfg,
             &host,
@@ -2842,7 +3045,7 @@ mod tests {
             let tuner = Tuner::for_identity(&cfg, host.clone(), &identity);
             assert!(tuner.candidates.contains(&CpuKernel::Avx512256StreamR64D3));
             assert!(tuner.candidates.contains(&CpuKernel::Avx512256StreamR64D4));
-            assert_eq!(tuner.startup, Some(CpuKernel::Avx512256StreamR64D4));
+            assert_eq!(tuner.startup, Some(CpuKernel::Avx512256StreamR64D6));
             let other = Tuner::for_identity(&cfg, host.clone(), &neighbor);
             assert!(!other.candidates.contains(&CpuKernel::Avx512256StreamR64D3));
         }
@@ -2905,6 +3108,34 @@ mod tests {
                 action.kernel,
                 (backing[2] == 32 * CPU_LANE_MEMORY_BYTES)
                     .then_some(CpuKernel::Avx512256StreamR64D4)
+            );
+            assert!(
+                t.cache.winners.is_empty(),
+                "a startup hint is not a confirmed winner"
+            );
+        }
+    }
+
+    #[test]
+    fn turin_depth6_startup_requires_actual_full_thp_context() {
+        for backing in [
+            [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0],
+            [0, 0, 31 * CPU_LANE_MEMORY_BYTES, CPU_LANE_MEMORY_BYTES, 0],
+            [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0],
+        ] {
+            let mut t = three_path_tuner();
+            t.turin_startup = true;
+            t.candidates.push(CpuKernel::Avx512256StreamR64D6);
+            t.startup = Some(CpuKernel::Avx512256StreamR64D6);
+            let mut s = snapshot();
+            s.threads = 32;
+            s.backing_bytes = backing;
+            s.kernel = CpuKernel::Avx512;
+            let action = t.tick(1, &[s], true, true);
+            assert_eq!(
+                action.kernel,
+                (backing[2] == 32 * CPU_LANE_MEMORY_BYTES)
+                    .then_some(CpuKernel::Avx512256StreamR64D6)
             );
             assert!(
                 t.cache.winners.is_empty(),
