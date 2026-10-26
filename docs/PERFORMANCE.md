@@ -49,8 +49,8 @@ choice for operators who prefer lower package power over peak throughput.
 
 ## Automatic AMD tuning
 
-The following improvements are merged on `master` after v0.2.24 and await the
-next release. These runs use automatic thread and kernel selection with the
+The following improvements shipped in v0.2.25. These runs use automatic thread
+and kernel selection with the
 balanced profile and prepared 2 MiB huge pages. Rates include discovery/startup
 and shutdown; cached restarts use each build's own previously learned settings.
 
