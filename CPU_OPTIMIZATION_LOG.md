@@ -4391,7 +4391,7 @@ Only the R8D2 platform predicate changes from Linux to Linux-or-Windows; the
 Linux specialization and implementation body are unchanged. Public raw evidence
 and reproduction instructions: `experiments/genoa-windows-fences-20261026/`.
 
-## 2026-10-26: Sapphire Rapids streaming startup (research, not landed)
+## 2026-10-26: Sapphire Rapids streaming startup validated on native Linux
 
 The completed native Linux m7i.8xlarge discovery triplet used official v0.2.31,
 Longhorn e2f4faf and NTMminer 1.2.2. All 59,967 captured hashes, including the
@@ -4414,8 +4414,26 @@ backend, enough resource capacity, and a throughput profile. The startup kernel
 requires runtime-supported instructions and actual full THP backing at 32
 workers. Existing caches and normal productive comparisons retain precedence;
 unsupported, neighboring, mixed-page and efficiency contexts keep their previous
-behavior. No new hash implementation is introduced. Native baseline/candidate
-measurement is pending; this branch must not ship without that result.
+behavior. No new hash implementation is introduced.
+
+A separately frozen, predeclared 600-second cold baseline/candidate pair on
+m7i.8xlarge measured **19.7683 -> 22.4400 useful H/s (+13.5149%)**. The baseline
+was official v0.2.32 (source-equivalent to parent e5f636d), and the candidate was
+2de1390. All **25,325 captured hashes** independently matched libargon2, with
+zero invalid or duplicate hashes. Both data directories started empty. The
+candidate cache confirms 32-worker/64-GiB and 31-worker/62-GiB full THP contexts
+selected the streaming path. This is one startup screen with no confidence
+interval; it does not establish sustained or long-run fee-adjusted throughput.
+
+The candidate still spends time productively checking AVX-512 and AVX2 and
+confirmed 32 workers at 531.5 seconds. Allocation delayed its initial mining
+until about 39 seconds; that remains a distinct optimization opportunity.
+Do not attribute all run-to-run variation to the policy. The native instance
+was terminated promptly, with root volume and security-group cleanup verified.
+All 108 adaptive regression tests passed (five full-size tests ignored).
+
+Full local evidence: `native-linux-intel-startup/` and
+`comparison-diagnostics/intel-startup-streaming.json` in the campaign directory.
 
 Evidence: local campaign `native-linux-intel-latest/series-summary.json` and
 `comparison-diagnostics/intel-latest-startup-decomposition.json`.

@@ -129,8 +129,8 @@ pub(super) fn full_count_cold_start(
         && memory_capacity >= 32
 }
 
-// Research policy: exact native Sapphire Rapids host from the discovery capture.
-// Keep isolated until the paired native startup experiment completes.
+// Native cold-start comparison validated this exact Sapphire Rapids context.
+// Keep neighboring hosts, manual settings and efficiency mode unchanged.
 pub(super) fn sapphire_full_count_cold_start(
     cfg: &Config,
     host: &CpuAutotuneHostFingerprint,

@@ -9,6 +9,10 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.34
+
+- Faster mining startup on Intel Xeon Platinum 8488C Linux systems with 32 logical CPUs, 128 GiB RAM and transparent huge pages. Seine starts from validated worker and kernel settings while continuing to tune automatically.
+
 ## v0.2.33
 
 - Faster CPU hashing on 32-core AMD EPYC 9R14 Windows systems using ordinary memory pages.

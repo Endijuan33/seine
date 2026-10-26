@@ -128,8 +128,8 @@ fn genoa_stream_startup(
         )
 }
 
-// Research only: enable the existing streaming path on the exact Linux 8488C
-// context whose cold trace omitted it. Native comparison precedes landing.
+// Native comparison validates the existing streaming path on this exact host.
+// Actual full THP backing is checked separately before applying the startup hint.
 fn sapphire_stream_startup(
     cfg: &Config,
     host: &CpuAutotuneHostFingerprint,
