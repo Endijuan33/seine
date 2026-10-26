@@ -4,13 +4,13 @@ Use this objective when continuing Seine performance work in a future session.
 Read the repository's `AGENTS.md` first, then inspect the active campaign's
 handoff, evidence and live jobs before choosing the next experiment. This is a
 reusable objective, not a claim that the work is complete or authorization to
-release, deploy or spend money.
+release, deploy or spend money beyond explicit campaign authorization.
 
 Short goal to paste from the workspace root:
 
 > Read and pursue `seine/docs/COMPETITOR_PERFORMANCE_GOAL.md`. Resume from current campaign evidence and live jobs; preserve existing budget limits and authorization.
 
-The campaign begun on October 25, 2026 has an approved **$80 cumulative cap**,
+The campaign begun on October 25, 2026 has an approved **$120 cumulative cap**,
 including all spending so far. Its evidence and budget ledger are under the
 workspace's `benchmark-evidence/longhorn-20261025/`; those local records are not
 part of this repository. The cap belongs to that campaign, not each new session.
@@ -56,6 +56,6 @@ Freeze binaries within each comparison. Preserve exact revisions, commands, hard
 
 Keep the full platform coverage matrix and competitor inventory current, but prioritize work that can change the next implementation decision. Avoid repeated status checks, inventory refreshes, documentation churn or infrastructure work without a concrete need.
 
-Independently verify correctness before landing changes and verify published throughput claims. Update README/site evidence when a confirmed result materially changes them. Push finished work without accumulating unlanded improvements; releases and deployments still require explicit authorization.
+Independently verify correctness before landing changes and verify published throughput claims. Update README/site evidence when a confirmed result materially changes them. Push finished work without accumulating unlanded improvements. For this campaign, the user has authorized creating and publishing new releases for validated gains. Never mention competitors in release notes: describe Seine improvements and supported hardware only. Production deployments still require explicit authorization.
 
 Remain within the explicitly approved cumulative budget for the active campaign, including spending already incurred. Reusing this goal does not authorize a new rental budget: obtain fresh authorization for a new campaign or a higher cap. Terminate rentals promptly and preserve all existing isolation and host-restoration requirements. Report remaining gaps and unavailable platforms honestly. Do not declare completion while required coverage or reproducible performance deficits remain unresolved.

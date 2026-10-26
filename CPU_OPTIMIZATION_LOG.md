@@ -3907,3 +3907,84 @@ another long Windows confirmation is not required to make this decision. The
 startup choice remains limited to the measured host/backing contexts, preserves
 confirmed caches and explicit settings, and can lose to productive autotuning.
 Release and deployment remain separate actions.
+
+
+## 2026-10-26 — Eight-block streaming ring with depth-two prefetch (candidate)
+
+A predeclared native Linux EPYC 9R14 fixed-kernel A/B/A screen used 32 workers,
+64 GiB of measured THP backing, 30-second warmup and 60-second measured windows.
+The existing ring64/depth3 path measured 38.9393 and 39.0133 H/s around the
+ring8/depth2 candidate at 44.6165 H/s: +14.47% over the bracket mean, with 0.19%
+baseline drift. Allocation/warmup were excluded and completed in-flight hashes
+were included in elapsed time. All fifteen full-size parity/dirty-reuse/guard
+checks passed, as did the first independent reference hash on every worker.
+Timed-loop hashes were not individually captured or independently verified;
+this is a kernel screen, not a public pool-throughput claim.
+
+The integration candidate exposes `avx512-256-stream-r8d2` as a distinct kernel
+identity, preserving the old path for comparisons and making the selected
+parameters visible in existing logs, caches and telemetry. Automatic eligibility
+is limited to the existing native Linux EPYC 9R14 32-core / 128 GiB host gate.
+The initial hint requires one 32-worker backend with full THP backing; confirmed
+local results retain precedence and productive comparisons can replace the hint.
+Windows and other hosts retain their existing automatic candidates. Manual
+benchmark selection remains runtime ISA-guarded.
+
+The first integration workspace run passed 600 tests (10 hardware tests ignored).
+Additional targeted tests passed for host/backing policy and both ring variants
+across segment boundaries, guard blocks, dirty reuse and kernel switches.
+An integrated native miner comparison with full captured-hash verification is
+still pending before landing. The separate shorter-trial candidate is excluded.
+Raw screen and frozen research build: workspace
+`benchmark-evidence/longhorn-20261025/native-linux-amd-ring-screen/` and
+`ring-experiment/build.json`.
+
+
+### Preserve the known winner when adding the ring candidate
+
+Review found that expanding the kernel list would invalidate a previously
+confirmed 31-worker cache and restart that context on the baseline AVX-512 path.
+A regression test reproduced the loss before the fix. The integration now
+recognizes only the exact preceding candidate-list policy on the same host and
+settings, restores its valid context-specific winner as a seed, and compares
+only the newly added ring kernel. This seed cannot certify the new candidate;
+normal repeated comparisons must finish before saving the expanded policy.
+Existing schema, age, backing, worker-count and comparison-proof checks apply.
+Invalid settings and stale evidence are rejected by regression tests.
+
+The targeted adaptive suite passes 98 tests (5 hardware tests ignored). The
+native cold comparison continues with frozen `3641add`: it has no prior cache,
+so this upgrade-only fix does not require replacing its binaries or restarting
+its measurements. Final source and the measured artifact remain distinguished
+in the campaign receipts.
+
+
+### Integrated native miner result and landing
+
+A predeclared fresh 900-second candidate/baseline pair on one native Linux
+EPYC 9R14 host completed with the frozen binaries `3641add` and `9ac37d5`.
+The candidate delivered 40.3533 useful user H/s versus 34.9067 H/s for baseline,
+a 15.60% improvement. Gross captured rates were 41.2900 and 35.6889 H/s.
+These launch-anchored rates include productive tuning and the observed current
+fee schedule; they are not isolated steady-state speeds or earnings estimates.
+All 37,164 candidate and 32,120 baseline captured hashes independently matched
+libargon2, with zero invalid hashes, duplicates, stale or rejected work. The
+26 new reference values were computed separately on the Mac; no reference cache
+or claimed output was exposed to either timed miner.
+
+The native fixed-kernel bracket and integrated miner pair both support landing
+the scoped Linux improvement. A single cold pair has no publication confidence
+interval; README/site steady-state headline values remain unchanged. Final
+source includes the separately tested warm-cache upgrade fix (`76225cd`), which
+does not change these cache-free measurements. The full integration suite passed
+600 tests (10 hardware tests ignored), with additional boundary/host tests and
+98 adaptive tests after the upgrade fix. Edited Rust files pass pinned formatting.
+
+The first attempt retained a verified baseline but never launched its candidate
+because the controller passed an unsupported binary directory. That failed
+attempt and its cost remain separate; the successful fresh pair uses the actual
+parser-validated directory and both measurements from the same replacement host.
+Evidence: workspace `benchmark-evidence/longhorn-20261025/native-linux-amd-ring-retry/`
+(`series-summary.json` / `.csv` and per-case full verification), with cleanup
+verified in `amd-ring-retry-prep/cleanup.json`. The separate Windows ring and
+shorter-window interaction candidates remain research until their own results.

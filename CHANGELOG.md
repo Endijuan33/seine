@@ -4,8 +4,14 @@ Short release notes for miners deciding whether to upgrade. Lead with the bigges
 user benefit, name the hardware for measured gains, and include required upgrade
 steps. Keep test results and implementation details in the engineering docs.
 Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
+Never mention competitors in release notes; describe Seine improvements and
+supported hardware only.
 
 ## Unreleased
+
+## v0.2.27
+
+- **Faster CPU mining on 32-core AMD EPYC 9R14 Linux systems with transparent huge pages.** Seine starts from the improved hashing path, preserves confirmed local tuning, and continues checking for faster settings.
 
 - **Faster mining startup on 32-core AMD EPYC 9R14 systems:** Linux and Windows start from validated worker and kernel settings while continuing to tune. Linux also initializes supported huge-page memory faster.
 
@@ -13,7 +19,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 - **More useful failure reports:** optional telemetry preserves specific memory and pool connection failure reasons, Windows code locations, and the last observed stage of interrupted runs.
 
-**For self-hosted telemetry collectors:** update the collector before installing miners built from this version; see the [deployment guide](telemetry/deploy/PRODUCTION.md).
+**For self-hosted telemetry collectors:** update the collector before upgrading miners to this version. The official collector is already updated; see the [deployment guide](telemetry/deploy/PRODUCTION.md).
 
 - **Clearer tuning startup:** CPU and NVIDIA messages explain when saved tuning is reused and why tuning runs again.
 

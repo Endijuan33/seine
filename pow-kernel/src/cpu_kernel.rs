@@ -13,10 +13,12 @@ pub enum CpuKernel {
     /// Runtime-guarded NEON path using SHA3 XOR/rotate and 64-byte prefetch coverage.
     /// Automatically compared with baseline NEON on hosts with SHA3 support.
     NeonSha3,
+    /// Streaming stores with eight cached blocks and two-block prefetch lookahead.
+    Avx512256StreamR8D2,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Scalar,
         Self::Avx2,
         Self::Avx512,
@@ -24,6 +26,7 @@ impl CpuKernel {
         Self::Neon,
         Self::Avx512256Stream,
         Self::NeonSha3,
+        Self::Avx512256StreamR8D2,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -35,6 +38,7 @@ impl CpuKernel {
             Self::Neon => "neon",
             Self::Avx512256Stream => "avx512-256-stream",
             Self::NeonSha3 => "neon-sha3",
+            Self::Avx512256StreamR8D2 => "avx512-256-stream-r8d2",
         }
     }
 
@@ -49,7 +53,7 @@ impl CpuKernel {
                     && std::arch::is_x86_feature_detected!("avx512vl")
             }
             #[cfg(target_arch = "x86_64")]
-            Self::Avx512256 | Self::Avx512256Stream => {
+            Self::Avx512256 | Self::Avx512256Stream | Self::Avx512256StreamR8D2 => {
                 std::arch::is_x86_feature_detected!("avx2")
                     && std::arch::is_x86_feature_detected!("avx512f")
                     && std::arch::is_x86_feature_detected!("avx512vl")
@@ -85,7 +89,7 @@ impl std::str::FromStr for CpuKernel {
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
             .ok_or_else(|| {
-                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, neon, or neon-sha3"
+                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, neon, or neon-sha3"
                     .to_string()
             })
     }

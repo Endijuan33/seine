@@ -337,6 +337,8 @@ pub(super) struct Action {
 
 pub(super) struct Tuner {
     cache: Cache,
+    // An exact prior policy may seed mining, but cannot certify a new candidate.
+    startup_cache: Option<Cache>,
     path: std::path::PathBuf,
     trial: Option<Trial>,
     checked: Option<Context>,
@@ -373,16 +375,27 @@ impl Tuner {
     ) -> Self {
         // Native hardware tests must exercise the shipping identity and ISA
         // gates. Only synthetic fixtures opt into an identity-neutral tuner.
-        let candidates = candidates_for(identity, &supported_kernels());
+        let supported = supported_kernels();
+        let mut candidates = candidates_for(identity, &supported);
         let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
-        let startup = if genoa_startup || windows_genoa_startup {
+        // Native ring/depth screen: retain the old streaming path as a challenger.
+        // Only this measured host gets the new automatic candidate; the startup
+        // action still checks the exact 32-worker/full-THP context.
+        let ring_startup = genoa_startup && supported.contains(&CpuKernel::Avx512256StreamR8D2);
+        if ring_startup {
+            candidates.insert(0, CpuKernel::Avx512256StreamR8D2);
+        }
+        let startup = if ring_startup {
+            Some(CpuKernel::Avx512256StreamR8D2)
+        } else if genoa_startup || windows_genoa_startup {
             Some(CpuKernel::Avx512256Stream)
         } else {
             startup_kernel_for(identity, &candidates)
         };
         let short_trials = short_trials_for(identity, &candidates, cfg.cpu_autotune_secs);
-        let mut configuration = format!(
+        let configuration_for = |paths: &[CpuKernel]| {
+            let mut configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
             cfg.cpu_profile,
             cfg.cpu_page_mode,
@@ -395,24 +408,48 @@ impl Tuner {
             cfg.cpu_hash_batch_size,
             cfg.cpu_control_check_interval_hashes,
             cfg.cpu_hash_flush_interval,
-            candidates,
+            paths,
         );
-        if short_trials {
-            configuration.push_str(";sample_policy=turin-10s-256-v1");
-        }
-        if genoa_startup {
-            configuration.push_str(";startup=genoa-32-thp-v1");
-        }
-        if windows_genoa_startup {
-            configuration.push_str(";startup=genoa-windows-32-regular-v1");
-        }
+            if short_trials {
+                configuration.push_str(";sample_policy=turin-10s-256-v1");
+            }
+            if genoa_startup {
+                configuration.push_str(";startup=genoa-32-thp-v1");
+            }
+            if windows_genoa_startup {
+                configuration.push_str(";startup=genoa-windows-32-regular-v1");
+            }
+            configuration
+        };
+        let configuration = configuration_for(&candidates);
+        let prior_configuration = ring_startup.then(|| {
+            let prior_paths: Vec<_> = candidates
+                .iter()
+                .copied()
+                .filter(|k| *k != CpuKernel::Avx512256StreamR8D2)
+                .collect();
+            configuration_for(&prior_paths)
+        });
         let mut name = cfg.cpu_autotune_config_path.as_os_str().to_owned();
         name.push(".kernels.json");
         let path = std::path::PathBuf::from(name);
+        let mut startup_cache = None;
         let cache = fs::read(&path)
             .ok()
             .and_then(|raw| serde_json::from_slice::<Cache>(&raw).ok())
-            .filter(|record| record.compatible(&host, &configuration))
+            .and_then(|record| {
+                if record.compatible(&host, &configuration) {
+                    Some(record)
+                } else {
+                    if prior_configuration
+                        .as_ref()
+                        .is_some_and(|prior| record.compatible(&host, prior))
+                    {
+                        startup_cache = Some(record);
+                    }
+                    None
+                }
+            })
             .unwrap_or(Cache {
                 schema: CACHE_SCHEMA,
                 host,
@@ -421,6 +458,7 @@ impl Tuner {
             });
         Self {
             cache,
+            startup_cache,
             path,
             trial: None,
             checked: None,
@@ -630,6 +668,34 @@ impl Tuner {
                     return Action {
                         hold_counts: true, kernel: Some(kernel), reset_scores: true, interrupted: false,
                         message: Some(format!("restoring confirmed {kernel} path for this worker count and memory backing")),
+                    };
+                }
+                // Adding a candidate does not invalidate the previously verified
+                // winner as a starting point. Only the new path needs a comparison;
+                // retain all host, settings, context, age and sample-proof checks.
+                let prior_paths: Vec<_> = self
+                    .candidates
+                    .iter()
+                    .copied()
+                    .filter(|k| *k != CpuKernel::Avx512256StreamR8D2)
+                    .collect();
+                if let Some(kernel) = self
+                    .startup_cache
+                    .as_ref()
+                    .and_then(|prior| prior.winner(&context, unix_secs(), &prior_paths))
+                {
+                    self.checked = Some(context);
+                    self.next_check = now;
+                    self.pending = vec![CpuKernel::Avx512256StreamR8D2];
+                    let switching = !snapshots.iter().all(|s| s.kernel == kernel);
+                    if switching {
+                        self.settling = Some(kernel);
+                        self.settle_started = now;
+                    }
+                    return Action {
+                        hold_counts: true, kernel: switching.then_some(kernel),
+                        reset_scores: switching, interrupted: false,
+                        message: Some(format!("starting from saved {kernel} path; comparing the newly available kernel while mining")),
                     };
                 }
                 if let Some(kernel) = self.startup.filter(|k| {
@@ -1409,6 +1475,166 @@ mod tests {
         assert_eq!(t.cache.winners[0].candidate, "avx2");
         assert!(t.pending.is_empty());
         let _ = fs::remove_file(&t.path);
+    }
+
+    #[test]
+    fn genoa_ring_startup_is_host_scoped_and_requires_measured_backing() {
+        if !CpuKernel::Avx512256StreamR8D2.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-genoa-ring-policy-{}.json",
+            std::process::id()
+        ));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        let mut exact = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&exact.path);
+        assert!(exact.candidates.contains(&CpuKernel::Avx512256Stream));
+        assert!(exact.candidates.contains(&CpuKernel::Avx512256StreamR8D2));
+        assert_eq!(exact.startup, Some(CpuKernel::Avx512256StreamR8D2));
+        let mut state = snapshot();
+        state.threads = 32;
+        state.kernel = CpuKernel::Avx512;
+        state.backing_bytes = [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0];
+        assert_eq!(
+            exact.tick(1, &[state], true, true).kernel,
+            Some(CpuKernel::Avx512256StreamR8D2)
+        );
+        for (os, environment, brand) in [
+            ("windows", "native", "AMD EPYC 9R14"),
+            ("linux", "wsl2", "AMD EPYC 9R14"),
+            ("linux", "native", "AMD EPYC 9355P"),
+        ] {
+            let mut other = host.clone();
+            other.os = os.into();
+            other.runtime_environment = environment.into();
+            other.cpu_brand = Some(brand.into());
+            let tuner = Tuner::for_identity(&cfg, other, &identity);
+            assert!(!tuner.candidates.contains(&CpuKernel::Avx512256StreamR8D2));
+            assert_ne!(tuner.startup, Some(CpuKernel::Avx512256StreamR8D2));
+        }
+        let mut fallback = Tuner::for_identity(&cfg, host, &identity);
+        state.backing_bytes = [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0];
+        assert_ne!(
+            fallback.tick(1, &[state], true, true).kernel,
+            Some(CpuKernel::Avx512256StreamR8D2)
+        );
+        let _ = fs::remove_file(&exact.path);
+    }
+
+    #[test]
+    fn ring_candidate_expansion_restores_prior_winner_before_new_trial() {
+        if !CpuKernel::Avx512256StreamR8D2.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 31;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-ring-upgrade-seed-{}.json",
+            std::process::id()
+        ));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        let fresh = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&fresh.path);
+        let context = Context {
+            members: vec![0],
+            workers: vec![31],
+            backing: vec![[0, 0, 31 * CPU_LANE_MEMORY_BYTES, 0, 0]],
+        };
+        let mut prior = Cache {
+            schema: CACHE_SCHEMA,
+            host: host.clone(),
+            configuration: fresh
+                .cache
+                .configuration
+                .replace("kernels=[Avx512256StreamR8D2, ", "kernels=["),
+            winners: vec![Winner {
+                context: context.clone(),
+                kernel: "avx512-256-stream".into(),
+                timestamp: unix_secs(),
+                base: "avx512-256-stream".into(),
+                candidate: "avx2".into(),
+                samples: vec![sample(100); 3],
+            }],
+        };
+        assert_ne!(prior.configuration, fresh.cache.configuration);
+        fs::write(&fresh.path, serde_json::to_vec(&prior).unwrap()).unwrap();
+        let mut upgraded = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let mut state = snapshot();
+        state.threads = 31;
+        state.backing_bytes = context.backing[0];
+        state.kernel = CpuKernel::Avx512;
+        let first = upgraded.tick(1, &[state], true, true);
+        assert_eq!(first.kernel, Some(CpuKernel::Avx512256Stream));
+        assert!(first.hold_counts && upgraded.cache.winners.is_empty());
+        state.kernel = CpuKernel::Avx512256Stream;
+        state.kernel_generation += 1;
+        upgraded.tick(2, &[state], true, true);
+        upgraded.tick(3, &[state], true, true);
+        assert_eq!(
+            upgraded.trial.as_ref().unwrap().candidate,
+            CpuKernel::Avx512256StreamR8D2
+        );
+        assert!(
+            upgraded.pending.is_empty(),
+            "do not repeat already confirmed old alternatives"
+        );
+        // A different setting or expired evidence cannot become an upgrade seed.
+        for stale in [false, true] {
+            prior.configuration = if stale {
+                fresh
+                    .cache
+                    .configuration
+                    .replace("kernels=[Avx512256StreamR8D2, ", "kernels=[")
+            } else {
+                "other-settings".into()
+            };
+            prior.winners[0].timestamp = if stale { 0 } else { unix_secs() };
+            fs::write(&fresh.path, serde_json::to_vec(&prior).unwrap()).unwrap();
+            let mut rejected = Tuner::for_identity(&cfg, host.clone(), &identity);
+            state.kernel = CpuKernel::Avx512;
+            assert_ne!(
+                rejected.tick(1, &[state], true, true).kernel,
+                Some(CpuKernel::Avx512256Stream)
+            );
+        }
+        let _ = fs::remove_file(&fresh.path);
     }
 
     #[test]
