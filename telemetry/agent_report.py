@@ -103,14 +103,28 @@ def main():
     elif diagnostics.get('status') == 'ok':
         briefing['diagnostic_assessment'] = 'Review issue clusters, including single-installation failures. No fleet threshold is exceeded.'
     tuning = briefing.get('tuning', {})
-    briefing['tuning_assessment'] = (
-        'Paired-trial query failed; do not interpret missing hints as no gain.'
-        if tuning.get('status') == 'error' else
-        'Ranked paired-trial hints require matching native validation before shipping; no automatic defaults.'
-        if tuning.get('ranked_hints') else
-        'No paired-trial hints meet coverage yet. Runtime emission must be integrated and reach miners; '
-        'preserve inconclusive and aborted outcomes, and do not infer regressions from no-confirmed-gain.'
-    )
+    if tuning.get('status') == 'error':
+        briefing['tuning_assessment'] = 'Paired-trial query failed; do not interpret missing hints as no gain.'
+    elif tuning.get('ranked_hints'):
+        supported = sum(h.get('confidence') == 'observational_support' for h in tuning['ranked_hints'])
+        briefing['tuning_assessment'] = (
+            f'{supported} ranked CPU-kernel cohorts have observational support; other hints have mixed or limited evidence. '
+            'All require matching native validation before shipping; confidence labels are not probabilities or '
+            'independent-host proof. No automatic defaults or remote overrides.'
+        )
+    elif tuning.get('unique_trials', 0):
+        briefing['tuning_assessment'] = (
+            'Paired trials are arriving, but no hints meet coverage. '
+            f"{tuning.get('coverage_only_trials', 0)} trials are coverage-only; "
+            f"{tuning.get('missing_context_trials', 0)} lack required initial context. "
+            'Worker-count/joint policy analysis remains staged. Unknown context and costs are not zero; '
+            'no-confirmed-gain is not a regression.'
+        )
+    else:
+        briefing['tuning_assessment'] = (
+            'No paired trials in this window; verify producer release adoption and collector compatibility. '
+            'Missing trials do not establish no gain.'
+        )
     print(json.dumps(briefing, indent=2))
     return int(failed)
 

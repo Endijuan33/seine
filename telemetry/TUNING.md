@@ -9,13 +9,16 @@ automatic defaults.
 
 `Recorder::trial_elapsed_ms()` supplies a common run-relative monotonic clock.
 `Recorder::record_trial(TrialOutcome)` accepts completed, inconclusive and aborted
-CPU kernel, worker-count and joint trials. These are staged hooks: runtime tuner
-integration is required before miners emit paired evidence. Missing trials from
-a release without those calls do not establish no gain.
+CPU kernel, worker-count and joint trials. The productive CPU kernel producer
+landed in `334b827`; worker-count and joint producers remain pending. Kernel
+records currently lack measured allowed-CPU and placement context, so they count
+toward coverage but cannot qualify hardware hints. Collector deployment and miner
+release are separate from landing code. See [the roadmap](ROADMAP.md).
 
 Record actual baseline/candidate settings, before/after resource context, and
-each counted window's settings/context. Member slots are stable session backend
-indices below 128, sorted and unique; include all members in a joint comparison.
+each counted window's settings/context. Member slots are stable indices in this
+process's CPU backend list (not the mixed CPU/GPU list), below 128, sorted and
+unique; include all members in a joint comparison.
 Settings include workers, public kernel identifier, requested affinity/page policy
 and allocator-observed backing by page type. Do not substitute desired settings
 or zero for an unknown observation.
@@ -93,14 +96,34 @@ labels may differ when the source fingerprint matches; versions/build revisions
 remain provenance. Repeated trials do not become extra hosts. Cost summaries
 also report how many costs were measured.
 
-At least five installations are needed for a ranked research hint. Hints include
-coverage, spread, quantization, drift, freshness and provenance. Cohorts with at
-least 60% resolved positive installation results rank first; no-confirmed-gain
-cohorts remain visible. Inconclusive, aborted, changed and otherwise unqualified
-trials remain in coverage rather than being presented as zero gain. Every hint
-has `automatic_default_eligible: false` and requires native validation, correctness
-checks and independently verified host evidence before shipping a default. The
-runtime does not download or depend on this analysis.
+At least five qualified installations are needed for a ranked research hint.
+CPU-kernel gains require a reported gain, acknowledged candidate settings and two
+A/B/A cycles, each above its own policy margin plus quantization. A strong first
+cycle cannot average away a failed
+confirmation. An installation contributes gain support only when a majority of
+all its observed trials in that context meet this rule, including aborted and
+inconclusive trials in the denominator. Raw positive ratios remain descriptive.
+
+`observational_support` requires a positive cohort median, support from at least
+60% of all observed installations in that context, and an acknowledged, resolved
+gain received within 48 hours. Otherwise the label is `mixed_or_limited_evidence`. These are
+explicit research-screening labels, not calibrated probabilities or confidence
+intervals. Percentiles describe spread; installations are not independently
+verified hosts. No-confirmed-gain cohorts remain visible and do not prove regression.
+
+Each hint includes `evidence_coverage` with all observed outcomes and their
+installation-weighted wall/idle/switching costs and measurement counts. Top-level
+cost summaries cover qualified comparisons only; the nested all-outcome costs
+also expose unsuccessful tuning effort. Unknown costs stay null. Coverage-only,
+missing initial context and staged trial-kind counts are explicit and can overlap.
+Worker-count/joint trials remain coverage-only until their producers and explicit
+throughput/efficiency objective contracts are validated.
+
+Hints prioritize experiments within exact hardware/context and baseline/candidate
+pairs. Sorting ratios across different baselines is not a highest-H/s comparison.
+Every hint has `automatic_default_eligible: false` and requires native validation,
+correctness checks and independently verified host evidence before shipping a
+default. The runtime does not download or depend on this analysis.
 
 ## Rollout
 

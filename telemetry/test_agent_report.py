@@ -36,7 +36,7 @@ class BriefingTests(unittest.TestCase):
         code, briefing = self.run_briefing({'status': 'ok'})
         self.assertEqual(code, 0)
         self.assertIn('No qualifying performance cohorts', briefing['assessment'])
-        self.assertIn('Runtime emission must be integrated', briefing['tuning_assessment'])
+        self.assertIn('verify producer release adoption', briefing['tuning_assessment'])
 
     def test_query_failure_keeps_successful_parts(self):
         code, briefing = self.run_briefing({'status': 'ok'}, query_failure=True)
@@ -49,6 +49,14 @@ class BriefingTests(unittest.TestCase):
         self.assertIn('query failed', failed['tuning_assessment'])
         _, ranked = self.run_briefing({'status': 'ok'}, tuning={'status': 'ok', 'ranked_hints': [{}]})
         self.assertIn('matching native validation', ranked['tuning_assessment'])
+
+    def test_arriving_coverage_only_trials_are_not_reported_as_missing_producer(self):
+        _, briefing = self.run_briefing({'status': 'ok'}, tuning={
+            'status': 'ok', 'unique_trials': 12, 'coverage_only_trials': 12,
+            'missing_context_trials': 12, 'ranked_hints': [],
+        })
+        self.assertIn('Paired trials are arriving', briefing['tuning_assessment'])
+        self.assertIn('12 lack required initial context', briefing['tuning_assessment'])
 
     def test_missing_diagnostics_are_not_healthy_miners(self):
         code, briefing = self.run_briefing({'status': 'ok'})

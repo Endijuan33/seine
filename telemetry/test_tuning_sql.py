@@ -58,6 +58,8 @@ class TuningSQLTests(unittest.TestCase):
         self.assertEqual(hint['median_wall_ms'], 190000)
         self.assertFalse(hint['automatic_default_eligible'])
         self.assertEqual(hint['status'], 'requires_native_validation')
+        self.assertEqual(hint['confidence'], 'observational_support')
+        self.assertEqual(hint['evidence_coverage']['observed_installations'], 5)
 
     def test_replays_do_not_add_trials_and_noisy_installation_has_one_vote(self):
         identities = self.seed()
@@ -193,6 +195,96 @@ class TuningSQLTests(unittest.TestCase):
         result = self.analysis()
         self.assertEqual(result['qualified_trials'], 5)
         self.assertEqual(result['ranked_hints'], [])
+
+    def test_failed_confirmation_cannot_hide_behind_positive_median(self):
+        for decision in ['gain', 'no_confirmed_gain']:
+            with self.subTest(decision=decision):
+                self.query('TRUNCATE telemetry_reports')
+                def split_cycles(p, _):
+                    t = p['tuning']['trials'][0]['outcome']
+                    t['samples'][1]['hashes'] = 3600  # First cycle +20%.
+                    t['samples'][4]['hashes'] = 3000  # Second cycle flat.
+                    t.update(decision=decision, applied='candidate' if decision == 'gain' else 'baseline')
+                    t['context_after'] = copy.deepcopy(t['context_before'])
+                    if decision == 'gain':
+                        t['context_after']['members'] = copy.deepcopy(t['candidate'])
+                self.seed(split_cycles)
+                hint, = self.analysis()['ranked_hints']
+                self.assertAlmostEqual(hint['median_ratio'], 1.1)
+                self.assertEqual(hint['installations_with_resolved_gain'], 0)
+                self.assertEqual(hint['confidence'], 'mixed_or_limited_evidence')
+        self.query('TRUNCATE telemetry_reports')
+        self.seed(lambda p, _: p['tuning']['trials'][0]['outcome'].update(
+            samples=p['tuning']['trials'][0]['outcome']['samples'][:3]))
+        hint, = self.analysis()['ranked_hints']
+        self.assertEqual(hint['installations_with_resolved_gain'], 0)
+        self.query('TRUNCATE telemetry_reports')
+        def unacknowledged(p, _):
+            t = p['tuning']['trials'][0]['outcome']
+            t['applied'] = 'baseline'
+            t['context_after'] = copy.deepcopy(t['context_before'])
+        self.seed(unacknowledged)
+        hint, = self.analysis()['ranked_hints']
+        self.assertEqual(hint['installations_with_resolved_gain'], 0)
+
+    def test_aborts_are_in_confidence_denominator_and_all_outcome_costs(self):
+        identities = self.seed()
+        aborted = self.fixture()
+        t = aborted['tuning']['trials'][0]['outcome']
+        t.update(decision='aborted', reason='execution_failure', samples=[], applied=None,
+                 finished_ms=t['started_ms'] + 1000000)
+        t['context_after']['members'] = []
+        t['cost'] = dict(idle_ms=9000, switching_ms=None)
+        # One healthy-looking installation with mostly failures is not a vote
+        # for a gain, even though only its successful trial has a ratio.
+        for trial_id in range(2, 5):
+            aborted['tuning']['trials'][0]['trial_id'] = trial_id
+            self.insert(aborted, identities[0])
+        hint, = self.analysis()['ranked_hints']
+        self.assertEqual(hint['installations_with_resolved_gain'], 4)
+        # Ten additional failed installations must not disappear from confidence.
+        for _ in range(10):
+            self.insert(aborted)
+        result = self.analysis()
+        hint, = result['ranked_hints']
+        coverage = hint['evidence_coverage']
+        self.assertEqual(coverage['observed_installations'], 15)
+        self.assertEqual(coverage['aborted_trials'], 13)
+        self.assertEqual(coverage['unqualified_trials'], 13)
+        self.assertEqual(coverage['median_wall_ms'], 1000000)
+        self.assertEqual(coverage['median_idle_ms'], 9000)
+        self.assertEqual(coverage['trials_with_switch_measurement'], 5)
+        self.assertEqual(hint['confidence'], 'mixed_or_limited_evidence')
+
+    def test_coverage_only_context_staged_kinds_and_stale_support_are_explicit(self):
+        self.seed(lambda p, _: p['tuning']['trials'][0]['outcome']['context_before']['resources'].update(
+            allowed_logical_cpus=None, placement_fingerprint=None))
+        result = self.analysis()
+        self.assertEqual(result['coverage_only_trials'], 5)
+        self.assertEqual(result['missing_context_trials'], 5)
+        self.assertEqual(result['ranked_hints'], [])
+        self.query('TRUNCATE telemetry_reports')
+        self.seed(lambda p, _: p['tuning']['trials'][0]['outcome'].update(kind='cpu_joint'))
+        result = self.analysis()
+        self.assertEqual(result['staged_kind_trials'], 5)
+        self.assertEqual(result['qualified_trials'], 0)
+        self.query('TRUNCATE telemetry_reports')
+        for _ in range(5):
+            self.insert(self.fixture(), hours=72)
+        hint, = self.analysis()['ranked_hints']
+        self.assertEqual(hint['installations_with_resolved_gain'], 5)
+        self.assertEqual(hint['confidence'], 'mixed_or_limited_evidence')
+        self.assertEqual(hint['freshness'], 'latest_qualified_trial_older_than_48h')
+        recent_loss = self.fixture()
+        t = recent_loss['tuning']['trials'][0]['outcome']
+        t.update(decision='no_confirmed_gain', applied='baseline')
+        t['context_after'] = copy.deepcopy(t['context_before'])
+        t['samples'][1]['hashes'] = 3000
+        t['samples'][4]['hashes'] = 3000
+        self.insert(recent_loss)
+        hint, = self.analysis()['ranked_hints']
+        self.assertEqual(hint['freshness'], 'latest_qualified_trial_within_48h')
+        self.assertEqual(hint['confidence'], 'mixed_or_limited_evidence')
 
 
 if __name__ == '__main__':
