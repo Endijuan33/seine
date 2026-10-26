@@ -4332,3 +4332,30 @@ Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
 `demand-fence-reference/` and `windows-demand-fence-build/`.
 Ring-size interaction experiments are separate and do not alter this frozen
 comparison or justify extrapolating its gain.
+
+
+### Demand-fence integration and ring-size follow-up
+
+The integrated Linux specialization, after substituting its compile-time fence
+policy and removing comments/whitespace, is identical to the complete native-
+tested research loop. Eight kernel tests passed, including runtime dispatch,
+reference vectors, dirty reuse and guards; 105 adaptive tests passed with five
+ignored. The default-feature release miner built successfully. Autotune selection,
+page policy and CPU topology code did not change.
+
+A separate native 9R14 rental then compared the same demand-fence binary at
+ring 4, 2 and 16 against ring 8, with depth 2 and the same 32 workers / 64 GiB
+THP backing. Two interleaved 20-second screen pairs per alternative measured:
+
+| Candidate | Paired difference | Paired bootstrap 95% interval |
+|---|---:|---:|
+| Ring 4 | -0.148% | [-0.180%, -0.117%] |
+| Ring 2 | -0.101% | [-0.169%, -0.032%] |
+| Ring 16 | -10.229% | [-10.603%, -9.853%] |
+
+Both pairs were slower in each screen; no confirmation was run. The small
+ring-2/ring-4 differences are limited to this short exact-host experiment.
+Keep ring 8. All **10,944 timed hashes** independently matched libargon2, with
+36 full-size RustCrypto checks before timing. The rental was terminated promptly
+and cleanup verified. Evidence:
+`benchmark-evidence/longhorn-20261025/native-linux-amd-demand-ring/ring-publication/campaign/`.

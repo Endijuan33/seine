@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.32
+
 - **Faster CPU hashing on 32-core AMD EPYC 9R14 Linux systems using transparent huge pages.**
 
 ## v0.2.31
