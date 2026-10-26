@@ -35,9 +35,43 @@ def darwin_available_memory(vm_stat):
     return pages * page_size
 
 
+def linux_cgroup_available_memory(available, membership=None, root=Path('/sys/fs/cgroup')):
+    """Respect v2 hard limits and reclaim thresholds, including ancestor scopes.
+
+    Host MemAvailable can be much larger than a tool/container's allowance.
+    Treat memory.high as an admission limit so reference workers do not spend
+    their run swapping under reclaim pressure. Never alter cgroup policy.
+    """
+    if membership is None:
+        membership = Path('/proc/self/cgroup').read_text()
+    unified = next((line[3:] for line in membership.splitlines() if line.startswith('0::')), None)
+    if unified is None:
+        return available
+    relative = Path(unified.lstrip('/'))
+    if '..' in relative.parts:
+        raise RuntimeError('Cannot resolve namespaced cgroup memory limits safely')
+    current = root / relative
+    if not (current / 'memory.current').exists():
+        raise RuntimeError('Cannot read current cgroup memory accounting')
+    while True:
+        usage_path = current / 'memory.current'
+        if usage_path.exists():
+            usage = int(usage_path.read_text())
+            for name in ['memory.high', 'memory.max']:
+                path = current / name
+                if path.exists():
+                    value = path.read_text().strip()
+                    if value != 'max':
+                        available = min(available, max(0, int(value) - usage))
+        if current == root:
+            return available
+        current = current.parent
+
+
 def admission_resources():
     if platform.system() == 'Linux':
         available = int(re.search(r'MemAvailable:\s+(\d+)', Path('/proc/meminfo').read_text())[1]) * 1024
+        available = linux_cgroup_available_memory(available)
         return available, len(os.sched_getaffinity(0))
     if platform.system() == 'Darwin':
         return darwin_available_memory(subprocess.check_output(['vm_stat'], text=True)), os.cpu_count() or 1
