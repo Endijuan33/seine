@@ -41,23 +41,43 @@ fn instances(cfg: &Config) -> usize {
         .count()
 }
 
-fn compatible(record: &CpuAutotuneRecord, cfg: &Config, host: &CpuAutotuneHostFingerprint) -> bool {
+fn seed_miss_reason(
+    record: &CpuAutotuneRecord,
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+) -> Option<&'static str> {
     // Schema 10 already has warmed scores. Old records remain useful as seeds.
-    (10..=CPU_AUTOTUNE_RECORD_SCHEMA_VERSION).contains(&record.schema_version)
-        && record.host_fingerprint == *host
-        && record.affinity == cpu_affinity_label(cfg.cpu_affinity)
-        && record.page_mode == cfg.cpu_page_mode.as_str()
-        && record.profile == cpu_profile_label(cfg.cpu_profile)
-        && record.cpu_instances == instances(cfg)
-        && record.selected_threads > 0
-        && record.measured_hps.is_finite()
-        && record.measured_hps >= 0.0
+    if !(10..=CPU_AUTOTUNE_RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
+        Some("cache format changed")
+    } else if let Some(reason) = cpu_autotune_host_change(&record.host_fingerprint, host) {
+        Some(reason)
+    } else if record.affinity != cpu_affinity_label(cfg.cpu_affinity)
+        || record.page_mode != cfg.cpu_page_mode.as_str()
+        || record.profile != cpu_profile_label(cfg.cpu_profile)
+        || record.cpu_instances != instances(cfg)
+    {
+        Some("tuning settings changed")
+    } else if record.selected_threads == 0
+        || !record.measured_hps.is_finite()
+        || record.measured_hps < 0.0
+    {
+        Some("saved tuning result is invalid")
+    } else {
+        None
+    }
 }
 
-fn read_seed(cfg: &Config) -> Option<CpuAutotuneRecord> {
-    let record: CpuAutotuneRecord =
-        serde_json::from_slice(&fs::read(&cfg.cpu_autotune_config_path).ok()?).ok()?;
-    compatible(&record, cfg, &cpu_autotune_host_fingerprint()).then_some(record)
+#[cfg(test)]
+fn compatible(record: &CpuAutotuneRecord, cfg: &Config, host: &CpuAutotuneHostFingerprint) -> bool {
+    seed_miss_reason(record, cfg, host).is_none()
+}
+
+fn read_seed(cfg: &Config) -> Result<CpuAutotuneRecord, &'static str> {
+    let record = read_cpu_autotune_cache(&cfg.cpu_autotune_config_path)?;
+    if let Some(reason) = seed_miss_reason(&record, cfg, &cpu_autotune_host_fingerprint()) {
+        return Err(reason);
+    }
+    Ok(record)
 }
 
 fn seed_threads(
@@ -151,7 +171,16 @@ fn prepare_with_resources(
         bail!("insufficient task/thread headroom for automatic CPU mining and its control/network threads; increase the process task limit or stop other tasks in this cgroup");
     }
     let available = available.min(max).min(slots);
-    let seed = read_seed(cfg);
+    let seed = match read_seed(cfg) {
+        Ok(record) => Some(record),
+        Err(reason) => {
+            info(
+                "MINER",
+                format!("cpu-autotune | {reason}; tuning while mining"),
+            );
+            None
+        }
+    };
     let threads = seed_threads(seed.as_ref(), min, max, available, memory_capacity);
     // Zero is intentional here. A parked CPU backend stays connected and can
     // recover when a whole arena plus the configured reserve fits again.
@@ -1024,7 +1053,7 @@ impl Controller {
                             .map(|b| b.enabled_lanes()).min().unwrap_or(0);
                         let mut policy = Policy::new(&cfg, current, min, max);
                         policy.observe_cap(0, available.min(slots));
-                        let mut record = read_seed(&cfg);
+                        let mut record = read_seed(&cfg).ok();
                         discard_cached_scores(&mut record);
                         let host = cpu_autotune_host_fingerprint();
                         let mut kernels = super::adaptive_kernel::Tuner::new(&cfg, host.clone());
@@ -2238,6 +2267,64 @@ mod tests {
         let mut other_host = r.host_fingerprint.clone();
         other_host.affinity_topology = "changed".into();
         assert!(!compatible(&r, &cfg, &other_host));
+    }
+
+    #[test]
+    fn autotune_seed_reports_cache_misses_without_changing_acceptance() {
+        let cfg = super::super::tests::test_config();
+        let original = record(&cfg, 12);
+        let host = original.host_fingerprint.clone();
+        assert_eq!(seed_miss_reason(&original, &cfg, &host), None);
+        for (field, value, reason) in [
+            (
+                "build_fingerprint",
+                serde_json::json!("new-build"),
+                "miner build changed",
+            ),
+            (
+                "cpu_brand",
+                serde_json::json!("new-cpu"),
+                "CPU or memory configuration changed",
+            ),
+            (
+                "total_memory_bytes",
+                serde_json::json!(1024),
+                "CPU or memory configuration changed",
+            ),
+            (
+                "kernel_version",
+                serde_json::json!("new-kernel"),
+                "operating system or runtime changed",
+            ),
+            (
+                "affinity_topology",
+                serde_json::json!("new-topology"),
+                "CPU affinity or topology changed",
+            ),
+        ] {
+            let mut saved = serde_json::to_value(&original).unwrap();
+            saved["host_fingerprint"][field] = value;
+            let saved = serde_json::from_value(saved).unwrap();
+            assert_eq!(seed_miss_reason(&saved, &cfg, &host), Some(reason));
+        }
+        let mut changed = original.clone();
+        changed.schema_version = 0;
+        assert_eq!(
+            seed_miss_reason(&changed, &cfg, &host),
+            Some("cache format changed")
+        );
+        changed = original.clone();
+        changed.selected_threads = 0;
+        assert_eq!(
+            seed_miss_reason(&changed, &cfg, &host),
+            Some("saved tuning result is invalid")
+        );
+        changed = original;
+        changed.profile = "other".into();
+        assert_eq!(
+            seed_miss_reason(&changed, &cfg, &host),
+            Some("tuning settings changed")
+        );
     }
 
     #[test]

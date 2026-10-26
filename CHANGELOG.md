@@ -7,6 +7,8 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## Unreleased
 
+- **Clearer tuning startup:** CPU and NVIDIA messages explain when saved tuning is reused and why tuning runs again.
+
 - **Peak hashrate by default:** CPU tuning targets the highest confirmed hashrate; choosing fewer workers at a lower rate is opt-in with `--cpu-profile efficiency`.
 - **More accurate CPU kernel benchmarks:** hashing speed is measured separately from memory setup and cleanup. Regenerate saved CPU kernel benchmark baselines before comparing runs.
 

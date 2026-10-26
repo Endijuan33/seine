@@ -1094,6 +1094,16 @@ fn maybe_autotune_cpu_threads(
     mode: RuntimeMode,
 ) -> Result<()> {
     if !cfg.cpu_autotune_threads {
+        if cfg
+            .backend_specs
+            .iter()
+            .any(|spec| spec.kind == BackendKind::Cpu)
+        {
+            info(
+                runtime_mode_tag(mode),
+                "cpu-autotune | disabled; using configured thread count",
+            );
+        }
         return Ok(());
     }
     if matches!(mode, RuntimeMode::Mining) {
@@ -1172,7 +1182,7 @@ fn maybe_autotune_cpu_threads(
     );
     info(
         tag,
-        "cpu-autotune | this only runs once — results are cached for future launches",
+        "cpu-autotune | results are cached for compatible future launches",
     );
 
     let candidate_count = max_threads.saturating_sub(min_threads).saturating_add(1);
@@ -1832,6 +1842,43 @@ fn apply_cpu_threads(cfg: &mut Config, threads: usize) {
     }
 }
 
+// Keep cache diagnostics free of host identifiers and filesystem contents.
+fn read_cpu_autotune_cache(path: &std::path::Path) -> Result<CpuAutotuneRecord, &'static str> {
+    let raw = fs::read(path).map_err(|err| {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            "no saved tuning result"
+        } else {
+            "saved tuning result could not be read"
+        }
+    })?;
+    serde_json::from_slice(&raw).map_err(|_| "saved tuning result is invalid")
+}
+
+fn cpu_autotune_host_change(
+    saved: &CpuAutotuneHostFingerprint,
+    current: &CpuAutotuneHostFingerprint,
+) -> Option<&'static str> {
+    if saved.build_fingerprint != current.build_fingerprint {
+        Some("miner build changed")
+    } else if saved.cpu_brand != current.cpu_brand
+        || saved.cpu_arch != current.cpu_arch
+        || saved.logical_cores != current.logical_cores
+        || saved.physical_cores != current.physical_cores
+        || saved.total_memory_bytes != current.total_memory_bytes
+    {
+        Some("CPU or memory configuration changed")
+    } else if saved.os != current.os
+        || saved.kernel_version != current.kernel_version
+        || saved.runtime_environment != current.runtime_environment
+    {
+        Some("operating system or runtime changed")
+    } else if saved.affinity_topology != current.affinity_topology {
+        Some("CPU affinity or topology changed")
+    } else {
+        None
+    }
+}
+
 fn load_cpu_autotune_record(
     cfg: &Config,
     tag: &str,
@@ -1840,36 +1887,23 @@ fn load_cpu_autotune_record(
     max_threads: usize,
     autotune_secs: u64,
 ) -> Option<CpuAutotuneRecord> {
-    let raw = match fs::read_to_string(&cfg.cpu_autotune_config_path) {
-        Ok(raw) => raw,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
-        Err(err) => {
-            warn(
-                tag,
-                format!(
-                    "cpu-autotune | failed reading {} ({err})",
-                    cfg.cpu_autotune_config_path.display()
-                ),
-            );
-            return None;
-        }
-    };
-
-    let record = match serde_json::from_str::<CpuAutotuneRecord>(&raw) {
+    let record = match read_cpu_autotune_cache(&cfg.cpu_autotune_config_path) {
         Ok(record) => record,
-        Err(err) => {
-            warn(
-                tag,
-                format!(
-                    "cpu-autotune | invalid config {} ({err})",
-                    cfg.cpu_autotune_config_path.display()
-                ),
-            );
+        Err(reason) => {
+            info(tag, format!("cpu-autotune | {reason}; running autotune"));
             return None;
         }
     };
 
-    if record.schema_version != CPU_AUTOTUNE_RECORD_SCHEMA_VERSION || record.mining_measurement {
+    let reason = if record.schema_version != CPU_AUTOTUNE_RECORD_SCHEMA_VERSION {
+        Some("cache format changed")
+    } else if record.mining_measurement {
+        Some("cached result is from live mining")
+    } else {
+        None
+    };
+    if let Some(reason) = reason {
+        info(tag, format!("cpu-autotune | {reason}; re-running autotune"));
         return None;
     }
 
@@ -1891,11 +1925,8 @@ fn load_cpu_autotune_record(
     }
 
     let current_host = cpu_autotune_host_fingerprint();
-    if record.host_fingerprint != current_host {
-        info(
-            tag,
-            "cpu-autotune | host fingerprint changed; re-running autotune",
-        );
+    if let Some(reason) = cpu_autotune_host_change(&record.host_fingerprint, &current_host) {
+        info(tag, format!("cpu-autotune | {reason}; re-running autotune"));
         return None;
     }
 
@@ -1907,6 +1938,10 @@ fn load_cpu_autotune_record(
         max_threads,
         autotune_secs,
     ) {
+        info(
+            tag,
+            "cpu-autotune | tuning settings changed; re-running autotune",
+        );
         return None;
     }
 
@@ -2095,10 +2130,7 @@ fn maybe_warn_linux_hugepages_setup(cfg: &Config, mode: RuntimeMode) {
             suggested_pages
         ),
     );
-    info(
-        tag,
-        "hugepages | docs: see docs/guides/linux-hugepages.md",
-    );
+    info(tag, "hugepages | docs: see docs/guides/linux-hugepages.md");
     info(
         tag,
         "hugepages | if allocation is partial, run: echo 3 | sudo tee /proc/sys/vm/drop_caches && echo 1 | sudo tee /proc/sys/vm/compact_memory",
