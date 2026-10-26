@@ -25,6 +25,7 @@ const groups: Record<string, readonly string[]> = {
   "getting-started": [
     "how-to-mine-blocknet",
     "mine-blocknet-on-windows",
+    "mine-blocknet-on-linux",
     "mine-blocknet-on-mac",
     "blocknet-wallet-for-mining",
     "how-crypto-mining-works"

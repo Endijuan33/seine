@@ -25,6 +25,7 @@
     "site/src/content/blog/mine-blocknet-nvidia-gpu/",
     "site/src/content/blog/antivirus-flags-crypto-miner/",
     "blocknet-pool/frontend/blog/miner-release.json",
-    "blocknet-pool/frontend/scripts/rewards-calculator.mjs"
+    "blocknet-pool/frontend/scripts/rewards-calculator.mjs",
+    "site/src/content/blog/mine-blocknet-on-linux/"
   ]
 }

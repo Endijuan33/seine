@@ -36,6 +36,7 @@ in their selected language; do not create parallel download or tuning articles.
 
 | Primary keyword cluster | URL | Search job | Supporting phrases |
 |---|---|---|---|
+| mine blocknet on linux, linux blocknet miner | `/blog/mine-blocknet-on-linux/` | Install the native Linux release: choose x86_64/ARM64, verify the archive, check glibc and NVIDIA runtime, extract and confirm first accepted shares | seine linux setup, glibc 2.39, Linux ARM64 CPU mining, Linux 下挖 Blocknet / Linux 下挖礦 |
 | how to mine blocknet | `/blog/how-to-mine-blocknet/` | Get a newcomer from zero to accepted shares on any OS, and set expectations for payouts and hashrate | blocknet mining guide, blocknet miner, mine Blocknet BNT, bntpool setup, Blocknet Argon2id miner, 如何挖 Blocknet |
 | what is blocknet | `/blog/what-is-blocknet/` | Explain what Blocknet is and does for someone new, then route to names, privacy and mining | Blocknet privacy coin, Blocknet cryptocurrency, Blocknet fair launch, Blocknet Faraday upgrade, Blocknet 是什么 |
 | blocknet privacy | `/blog/blocknet-privacy-features/` | Explain each layer of Blocknet's mandatory privacy and what it means when you pay | blocknet ring signatures, blocknet stealth address, blocknet ring size, Blocknet 隐私 |
@@ -105,3 +106,5 @@ The NVIDIA guide owns card selection, NVIDIA runtime diagnosis, accepted GPU-sha
 The hardware comparison guide also presents the dated RTX 5090 results with the original method and evidence, as part of its per-chip coverage. Its shared measurement section has 8.2% wording overlap with the NVIDIA guide; runtime setup, commands and troubleshooting remain in the NVIDIA guide, linked from the hardware article.
 
 The download-verification guide owns warning identification, archive integrity checks and detection reports. The Windows guide retains the normal installation flow and its brief checksum step; the NVIDIA guide owns runtime and device setup. Neither file integrity nor the software category is presented as an antivirus verdict. Both setup guides link to the new troubleshooting owner.
+
+Added 2026-10-26: the Linux guide owns native archive installation and first-run errors. The general guide remains the cross-platform overview; huge pages and server guides own detailed tuning, NUMA and headless operation. No URL is retargeted or redirected.
