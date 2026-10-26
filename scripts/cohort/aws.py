@@ -24,6 +24,10 @@ LEASES = CACHE / 'leases'
 PROFILE = os.environ.get('AWS_PROFILE', 'seine-bench')
 REGION = os.environ.get('AWS_REGION', 'us-east-1')
 AMI_PARAM = '/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id'
+# The benchmark SSO role may only create resources in its owned VPC, tagged with Project.
+VPC = os.environ.get('SEINE_AWS_VPC', 'vpc-011004097d89589bb')
+SUBNET = os.environ.get('SEINE_AWS_SUBNET', 'subnet-0175eae5171bc2a55')
+PROJECT = os.environ.get('SEINE_AWS_PROJECT', 'seine-avx2-validation')
 
 
 def aws(*args):
@@ -55,34 +59,39 @@ def cmd_up(args):
     subprocess.run(['systemd-run', '--user', f'--on-active={int(args.hours * 3600)}', f'--unit={unit}',
                     sys.executable, str(Path(__file__).resolve()), 'down', args.name],
                    check=True, capture_output=True)
-    aws('ec2', 'import-key-pair', '--key-name', args.name,
-        '--public-key-material', 'fileb://' + str(key.with_suffix('.pub')))
-    receipt['key_pair'] = args.name
-    save(receipt)
     my_ip = urllib.request.urlopen('https://checkip.amazonaws.com', timeout=10).read().decode().strip()
-    group = aws('ec2', 'create-security-group', '--group-name', args.name,
-                '--description', 'seine cohort benchmark (temporary)')['GroupId']
+    tags = [{'Key': 'Project', 'Value': PROJECT}, {'Key': 'Name', 'Value': args.name}]
+    group = aws('ec2', 'create-security-group', '--group-name', args.name, '--vpc-id', VPC,
+                '--description', 'seine cohort benchmark (temporary)', '--tag-specifications',
+                json.dumps([{'ResourceType': 'security-group', 'Tags': tags}]))['GroupId']
     receipt['security_group'] = group
     save(receipt)
     aws('ec2', 'authorize-security-group-ingress', '--group-id', group,
         '--protocol', 'tcp', '--port', '22', '--cidr', f'{my_ip}/32')
     ami = aws('ssm', 'get-parameter', '--name', AMI_PARAM)['Parameter']['Value']
     minutes = max(5, int(args.hours * 60) - 5)
-    # The cohort scripts run as root; cloud-init has installed the task key for ubuntu.
-    user_data = (f'#!/bin/bash\nshutdown -P +{minutes}\n'
-                 'install -m 600 /home/ubuntu/.ssh/authorized_keys /root/.ssh/authorized_keys\n')
+    # The SSO role cannot import key pairs; cloud-init installs the task key for
+    # ubuntu and (with disable_root false) for root, which the cohort scripts use.
+    user_data = ('#cloud-config\ndisable_root: false\nssh_authorized_keys:\n  - '
+                 + key.with_suffix('.pub').read_text().strip()
+                 + f'\nruncmd:\n  - [shutdown, -P, "+{minutes}"]\n')
     launch = ['ec2', 'run-instances', '--image-id', ami, '--instance-type', args.type,
-              '--key-name', args.name, '--security-group-ids', group,
+              '--security-group-ids', group, '--subnet-id', SUBNET,
+              '--metadata-options', 'HttpTokens=required',
               '--instance-initiated-shutdown-behavior', 'terminate',
               '--user-data', user_data,
               '--block-device-mappings', '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":16,"VolumeType":"gp3","DeleteOnTermination":true}}]',
-              '--tag-specifications', f'ResourceType=instance,Tags=[{{Key=Name,Value={args.name}}}]']
+              '--tag-specifications', json.dumps([{'ResourceType': r, 'Tags': tags} for r in ('instance', 'volume')])]
     if not args.on_demand:
         launch += ['--instance-market-options',
                    json.dumps({'MarketType': 'spot', 'SpotOptions': {
                        'SpotInstanceType': 'one-time', 'InstanceInterruptionBehavior': 'terminate',
                        **({'MaxPrice': str(args.max_price)} if args.max_price else {})}})]
-    instance = aws(*launch)['Instances'][0]['InstanceId']
+    try:
+        instance = aws(*launch)['Instances'][0]['InstanceId']
+    except SystemExit:
+        cmd_down(args)
+        raise
     receipt['instance_id'] = instance
     save(receipt)
     print(json.dumps({'name': args.name, 'instance_id': instance, 'delete_after_hours': args.hours}))

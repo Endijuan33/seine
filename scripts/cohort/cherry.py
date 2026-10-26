@@ -95,9 +95,13 @@ def cmd_up(args):
     subprocess.run(['systemd-run', '--user', f'--on-active={int(args.hours * 3600)}', f'--unit={unit}',
                     sys.executable, str(Path(__file__).resolve()), 'down', args.name], check=True,
                    capture_output=True)
-    _, server = call('POST', f'/projects/{project}/servers', {
-        'plan': args.plan, 'region': args.region, 'image': args.image, 'hostname': args.name,
-        'ssh_keys': [ssh_key['id']]})
+    try:
+        _, server = call('POST', f'/projects/{project}/servers', {
+            'plan': args.plan, 'region': args.region, 'image': args.image, 'hostname': args.name,
+            'ssh_keys': [ssh_key['id']]})
+    except SystemExit:
+        cmd_down(args)  # out of stock or rejected: remove the key and timer
+        raise
     receipt.update(server_id=server['id'], watchdog_unit=unit)
     path.write_text(json.dumps(receipt, indent=2))
     print(json.dumps({'name': args.name, 'server_id': server['id'], 'delete_after_hours': args.hours}))
