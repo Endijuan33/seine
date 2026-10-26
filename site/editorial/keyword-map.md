@@ -164,3 +164,11 @@ Windows setup owns installation; server setup owns Linux systemd; updating owns 
 | seine configuration file; saved mining settings; launch overrides | `/blog/configure-seine-miner/` | Choose the configuration file, edit persistent connection fields and distinguish them from runtime launch arguments |
 
 Updating owns binary replacement, Windows startup owns Task Scheduler, tuning owns performance decisions. This article owns configuration precedence and persistence. The pool guide owns address-transition accounting. No URL is retargeted.
+
+## Miner stops and wallet receipt (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| miner keeps stopping; Blocknet miner crash troubleshooting | `/blog/miner-keeps-stopping/` | Distinguish process exit, backend fault, startup failure and computer sleep using logs, then verify a targeted fix |
+
+Configuration owns saved settings; RAM and huge pages own resource setup; NVIDIA owns GPU installation. Pool tracking owns connection diagnosis. This guide owns the cross-stage stopping decision process. No existing URL is retargeted.

@@ -631,3 +631,7 @@ actual command output, capture provenance and failure-case checks.
 ## Configuration persistence (verified October 26, 2026)
 
 v0.2.36 reads `seine.config.json` under `--data-dir` (default `./seine-data`, relative to the working directory). Its saved schema contains connection fields, not every CLI option. Explicit connection flags override existing saved values without rewriting them; missing-file bootstrap writes the initial inputs. Preserve other fields when editing, including the generated `dev_fee_pool_worker`. Dashboard thread changes are session-only. See `research/configuration-and-address-2026-10-26.md` for source functions and pool destination semantics.
+
+## Stop diagnosis and wallet receipt (October 26, 2026)
+
+v0.2.37 prints handled fatal errors before exit; `--ui plain` selects logs while still running mining. A backend fault can be isolated while remaining active backends continue. OS termination, sleep and a live reconnecting process require distinct observations. Wallet node synchronization and wallet output scanning are separate progress checks; ordinary public address searches do not reproduce private wallet balances. Source references and verification limits: `research/miner-stops-and-wallet-receipt-2026-10-26.md`.

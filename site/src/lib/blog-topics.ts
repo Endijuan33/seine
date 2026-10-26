@@ -47,6 +47,7 @@ const groups: Record<string, readonly string[]> = {
     "argon2id-proof-of-work-explained"
   ],
   "troubleshooting": [
+    "miner-keeps-stopping",
     "antivirus-flags-crypto-miner",
     "seine-dashboard-explained"
   ],
