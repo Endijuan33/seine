@@ -2061,7 +2061,7 @@ impl MmapArena {
                 return Err(format!("regular mmap failed for {byte_len} bytes: {error}"));
             }
             if let Some(advice) = prefault_advice {
-                // Validated native 32-core EPYC 9R14 path: hint before faulting
+                // Validated native 32-core EPYC path: hint before faulting
                 // to avoid allocating 4 KiB pages only to collapse them afterward.
                 // Allocation and end-to-end evidence are in CPU_OPTIMIZATION_LOG.md.
                 let populated = unsafe {

@@ -4462,7 +4462,7 @@ win from 0.06% on one host. Automatic ring promotion is deferred: its extra
 productive search cost needs justification, and the existing streaming path is
 already nearly tied. The existing explicit ring option remains available.
 
-## 2026-10-26: Turin streaming startup and prefault order (research)
+## 2026-10-26: Turin streaming startup and prefault order validated
 
 The larger opportunity is avoiding cold-start discovery of the known 32-worker
 streaming path. This candidate seeds 32 workers and the existing streaming kernel
@@ -4471,9 +4471,30 @@ only on native Linux EPYC 9R45, family1Ah/model02h, 32physical/32logical cores,
 startup requires actual full THP backing. Confirmed count/kernel caches, resource
 limits and productive challenger comparisons retain precedence. Prior kernel
 cache records with identical candidates/settings remain compatible with the new
-startup marker. Efficiency and neighboring hardware retain existing behavior.
+startup marker. Efficiency retains its count/kernel policy; neighboring hardware retains its
+existing startup and allocation policy.
 
 The same exact host also uses the already-tested THP hint-before-prefault
 allocation path; unsupported advice falls back to the original allocator.
-No hash implementation or automatic ring eligibility changes. Native combined
-cold-start baseline/candidate evidence is required before landing or release.
+No hash implementation or automatic ring eligibility changes.
+
+The predeclared 600-second cold baseline/candidate pair on the same on-demand
+m8a.8xlarge completed: **42.3650 -> 47.7733 useful H/s (+12.7660%)**.
+The baseline was official v0.2.34 and candidate ce975fc. All **54,083 captured
+hashes** independently matched libargon2 with zero invalid/duplicate hashes.
+The candidate started 32 workers at launch, completed initialization at 2.7s
+and selected streaming at 3.7s. Its first share arrived at 3.543s versus 7.148s
+for the baseline. Saved winner records confirm full THP backing at 32, 31 and
+30 workers. Productive tuning briefly selected 31 and later returned to 32;
+this remains a starting hint, not a fixed worker count.
+
+This is one launch-anchored startup screen without a confidence interval,
+not sustained or long-run fee-adjusted throughput. It measures the combined
+count/kernel startup and allocation changes, not their individual contributions.
+The separate same-host miner discovery cases continue with their frozen binaries;
+no additional confirmation is required to integrate this scoped startup gain.
+Local evidence: `native-linux-amd-turin-startup/` and
+`comparison-diagnostics/turin-startup-streaming.json`. Regression checks:
+112 integrated adaptive tests, seven Turin-specific tests including saved-cache migration,
+and three prefault tests passed; the expensive local full-size test remained
+ignored, with full-size hash proof supplied by the native captured work.

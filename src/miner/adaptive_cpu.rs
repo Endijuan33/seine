@@ -159,7 +159,7 @@ pub(super) fn sapphire_full_count_cold_start(
         && memory_capacity >= 32
 }
 
-// Research: test known streaming startup and THP allocation on native Turin.
+// Native 9R45 cold pair: +12.77% with streaming startup and THP prefault order.
 // Keep neighboring hosts, manual settings and efficiency mode unchanged.
 pub(super) fn turin_full_count_cold_start(
     cfg: &Config,

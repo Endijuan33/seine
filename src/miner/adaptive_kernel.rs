@@ -146,7 +146,7 @@ fn sapphire_stream_startup(
         )
 }
 
-// Research: native Turin comparison must validate this exact startup context.
+// Native Turin cold-start comparison validates this exact startup context.
 // Actual full THP backing is checked separately before applying the startup hint.
 fn turin_stream_startup(
     cfg: &Config,
