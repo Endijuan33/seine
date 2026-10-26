@@ -1,14 +1,16 @@
 # seineminer.com blog fact sheet
 
-All facts checked 2026-10-25. Writers may state only what is listed here. Every bullet ends with its source.
+Initial research checked 2026-10-25; release, platform and pool facts rechecked 2026-10-26. Writers may state only what is listed here. Every bullet ends with its source.
+
+**Released behavior:** `release-facts.json` pins the reviewed public release. Source on `master` may be newer and must not be described as released. Historical benchmark versions and screenshots retain their original labels.
 
 **How to read the sources**
-- `repo@ref:path:line` points at a file in one of the Blocknet repos. Refs used:
+- `repo@ref:path:line` points at a file in one of the Blocknet repos. Original research snapshots (these are historical commit pins, not today's branch heads):
   - `blocknet-core@pool` is commit c646196 (2026-10-15), the production daemon branch.
   - `blocknet-core@upstream/master` is commit 514a8cf, the public `blocknetprivacy/core` master.
   - `blocknet@master` is commit 973e56e (2026-03-11).
   - `blocknet-pool@master` is commit 9bf4eb6.
-  - `seine@master` is commit d20f253 (2026-10-25), the v0.2.22 line.
+  - Original `seine@master` research used d20f253, the v0.2.22 line. The current reviewed release is `seine@v0.2.26` (`899ff7ea8bd547163ae48d636f569a0a8c7e25bb`).
   - Seine and blocknet-pool were read from `master` with `git show`, because their working checkouts sit on feature branches.
 - **"Live"** means fetched from a public endpoint on 2026-10-25 at about 00:26 EDT. Live values can change.
 - **"Derived"** means computed by this sheet from the cited code. The math is shown so it can be checked.
@@ -269,26 +271,28 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
 
 ## 4. seine (the miner)
 - Seine is the external miner for Blocknet. License BSD-3-Clause. Repo: github.com/zpalmtree/seine.
-  - Latest release **v0.2.22**, published 2026-10-24 20:21 EDT.
-  - Source: `seine@master:README.md:5-14`, `Cargo.toml:3`; `gh release list -R zpalmtree/seine` (checked 2026-10-25)
+  - Latest reviewed release **v0.2.26**, published 2026-10-25 17:30 EDT.
+  - Source: GitHub latest-release API and `seine@v0.2.26:Cargo.toml`; rechecked 2026-10-26. `release-facts.json` records the immutable source and release assets.
 - Name styling: the wordmark is always lowercase, `seine.` with a lime full stop. README prose capitalizes "Seine" at sentence start.
   - Source: `seine@master:docs/BRAND.md:43-44`, `README.md:24` (checked 2026-10-25)
+- **Released miner fee (v0.2.26):** 1% of mining time on bntpool.com and its subdomains; 2.5% on other pools and in solo mode. The pool calculator defaults to the reviewed release's bntpool.com rate and names the version.
+  - Source: `seine@v0.2.26:src/dev_fee.rs`, `dev_fee_percent_for_pool_url`, and `src/miner/mining_pool.rs`.
 - **Dev fee (current source, pending release):** flat **2% of mining time** on every pool and in solo mode. There is no pool-host discount. Older releases retain their previous rates.
   - Charged as time-sliced dev rounds to a hard-coded dev address, after a **10-minute** fee-free grace period.
   - Source: `src/dev_fee.rs`, `src/miner/mining_pool.rs`, `docs/guides/configuration.md`.
   - Solo/daemon mode uses the same tracker. If the daemon rejects the dev-fee reward address, the existing fallback disables the dev fee for that run.
-- **Pool fee transition:** bntpool.com now charges **0%**, confirmed via live `/api/info` after deployment on 2026-10-25 at 11:59 PM EDT. With a 0% pool fee and the new Seine release, the combined fee is **2%**; older miners retain their own dev fee.
+- **Pool fee transition:** bntpool.com now charges **0%**, confirmed via live `/api/info` after deployment on 2026-10-25 at 11:59 PM EDT. Rechecked 2026-10-26: `/api/info` still reports 0%. The released v0.2.26 miner uses 1% on bntpool.com; the pending 2% source policy must not be attributed to that release.
 - **Release archives:**
 
   | Platform | Archive | GPU support |
   |---|---|---|
   | Windows x86_64 | `seine-windows-x86_64.zip` | NVIDIA (drivers only, CUDA runtime bundled) |
-  | Linux x86_64 | `seine-linux-x86_64.tar.gz` | NVIDIA (driver + NVRTC) |
+  | Linux x86_64 | `seine-linux-x86_64.tar.gz` | NVIDIA (driver + NVRTC); glibc 2.39+ |
   | Linux ARM64 | `seine-linux-aarch64.tar.gz` | CPU only (glibc 2.39+) |
   | macOS Apple Silicon | `seine-macos-aarch64.tar.gz` | CPU (Metal experimental) |
   | macOS Intel | `seine-macos-x86_64.tar.gz` | CPU only |
 
-  - Source: `seine@master:README.md:39-45`, `.github/workflows/release.yml:13-31` (checked 2026-10-25)
+  - Source: `seine@v0.2.26:README.md`, `.github/workflows/release.yml`, `docs/guides/nvidia.md`; official Linux archives verified against release `SHA256SUMS.txt`, then inspected with `readelf --version-info` (both require GLIBC_2.39). Checked 2026-10-26.
 - There is no Windows ARM64 build (release matrix). The Windows zip bundles the CUDA 12.8.61 NVRTC DLLs, so no CUDA Toolkit is needed.
   - Source: `seine@master:docs/guides/nvidia.md:26-27` (checked 2026-10-25)
 - **CPU kernels:**
@@ -359,9 +363,9 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
 
 ## 5. Performance numbers (pre-Faraday Argon2id; H/s = completed hashes per second)
 
-**Headline "best per generation"** (use these names and numbers as presented), from `seine@master:docs/assets/charts/benchmarks.json:112-143` (checked 2026-10-25).
+**Historical "best per generation" snapshot** (superseded for current headline claims; retain for dated comparisons), from `seine@master:docs/assets/charts/benchmarks.json:112-143` (checked 2026-10-25).
 
-**Update 2026-10-25:** the owner approved **49.4 H/s for AMD EPYC · Zen 5 (EPYC 9R45, 32 threads)** for the site, from a new 32-thread run. It replaces the 44.7 H/s / 24-thread headline below on the site and in posts.
+**Earlier update 2026-10-25 (superseded by the 9355P result below):** the owner approved **49.4 H/s for AMD EPYC · Zen 5 (EPYC 9R45, 32 threads)** for the site, from a new 32-thread run. It replaced the 44.7 H/s / 24-thread headline below. The current site and introductory guides use 68.3 H/s on EPYC 9355P, with 64 mining threads, 192 GiB RAM and manually prepared 1 GiB pages; see the detailed measurement at the end of this sheet and `site/src/data/benchmarks.json`.
   - Source: AWS m8a.8xlarge, seine v0.2.22, avx512-256-stream kernel, 32 threads, 49.39 H/s mean of 4 runs, 2026-10-25 (in-progress AWS hardware campaign).
   - Evidence: `seine:experiments/readme-hardware-20261025/summary.json`, host "zen5-turin" (AMD EPYC 9R45, 32 cores, no SMT), in seine PR #59 (`codex/zen5-turin-result`), which also updates `benchmarks.json`, `PERFORMANCE.md` and the README. TODO: switch this to the master path once #59 merges.
 
@@ -444,7 +448,7 @@ From owner preferences for seine marketing:
 Added by this sheet from the evidence:
 - Distinguish the miner dev fee from the pool fee. Check live `/api/info` and the miner version before quoting a combined rate.
 - Don't write "no dev fee" or "no dev tax" about seine.
-  - The tagline "No premine. No dev tax." (`taglines.md:30`) is true of the **protocol** only. Seine charges 1% or 2.5%.
+  - The tagline "No premine. No dev tax." (`taglines.md:30`) is true of the **protocol** only. Released v0.2.26 charges 1% or 2.5%, depending on the pool; unreleased source uses 2%. See §4.
 - Don't write "ASIC-proof" or "botnet-proof". The code claims design intent only ("resist ASICs", "impractical", `pow.rs:1-4`). "Designed to resist ASICs" is the safe wording.
   - Faraday's planned lighter PoW (§0) undercuts memory-hardness messaging after ~Feb 2027.
 - Don't claim AMD GPU support, Windows ARM64 builds, or production Metal support (§4).
