@@ -116,8 +116,13 @@ The runner evaluates these independent categories:
   previously reported incidents in the affected categories.
 
 Opening and clearing require two observations at least four minutes apart;
-normal delivery occurs on the next five-minute tick. Repeats are suppressed
-for four hours. A gap longer than 15 minutes resets pending confirmation.
+normal delivery occurs on the next five-minute tick. Sample quality, reliability
+and performance incidents notify once when opened and once when cleared, with no
+periodic reminders while active. Counts and descriptions continue updating in
+state and reports. A new version/cohort or a confirmed recurrence after clearing
+can notify again. Infrastructure, ingestion and monitor outages retain four-hour
+reminders. Existing delivered incidents become quiet immediately without resetting
+state. A gap longer than 15 minutes resets pending confirmation.
 Clearing means the threshold cleared or its observations aged out, not that
 all affected miners demonstrably recovered. Missing diagnostic coverage is
 not evidence of healthy miners; inspect coverage with `agent_report.py`.
@@ -134,16 +139,15 @@ Notifications use Discord embed cards with the pool relay's blue informational,
 orange warning, red critical and green cleared colors. The incident key and
 Eastern timestamp appear in the footer. Known v0.2.24/v0.2.25 pool sampling gaps
 are informational and recommend v0.2.26 or later; other versions remain warnings.
-This changes presentation only: thresholds, confirmation, reminders and incident
-identities are preserved. Missing samples do not establish lost mining or earnings.
+Thresholds, confirmation and incident identities are preserved. Missing samples do not establish lost mining or earnings.
 
 Preview the real formatter's synthetic payloads locally (no Discord sends):
 
 ```sh
 python3 telemetry/showcase/serve.py --port 9081
 # http://localhost:9081/alerts.json
-# Select ?state=legacy|warning|reminder|cleared|critical|setup|old-state
-# Interrupted runs: ?state=unclean-upgrade|unclean-unknown|unclean-reminder|unclean-cleared
+# Select ?state=legacy|warning|reminder|cleared|critical|setup|old-state|quiet-lifecycle
+# Interrupted runs: ?state=unclean-upgrade|unclean-unknown|unclean-cleared
 ```
 
 The preview labels the current source revision. It shows actual webhook JSON,

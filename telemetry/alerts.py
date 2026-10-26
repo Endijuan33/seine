@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
 REPEAT_SECONDS = 4 * 3600
+# Fleet findings remain visible in reports; only collector outages need nudges.
+REMINDER_CATEGORIES = {'infrastructure', 'ingestion', 'monitor'}
 CONFIRM_SECONDS = 240
 MAX_SENDS = 10
 
@@ -146,8 +148,10 @@ def advance(state, active, known, now, send, persist):
         if present:
             if now - record['first_seen'] < CONFIRM_SECONDS:
                 continue
-            if record['last_sent'] is not None and now - record['last_sent'] < REPEAT_SECONDS:
-                continue
+            if record['last_sent'] is not None:
+                if (record['category'] not in REMINDER_CATEGORIES
+                        or now - record['last_sent'] < REPEAT_SECONDS):
+                    continue
             transition = 'FIRING' if record['last_sent'] is None else 'REMINDER'
         else:
             if record['last_sent'] is None:
