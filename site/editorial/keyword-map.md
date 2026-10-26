@@ -116,3 +116,11 @@ Added 2026-10-26: the Linux guide owns native archive installation and first-run
 | how much RAM to mine Blocknet; RAM per mining thread | `/blog/how-much-ram-to-mine-blocknet/` | Budget available memory, choose automatic or fixed CPU threads, and diagnose allocation/page-pool errors | 2 GiB per thread, seine memory reserve, container memory limit |
 
 The hardware article owns chip selection and measured hashrates; Argon2id owns algorithm mechanics; the huge-pages guide owns page configuration. This article owns the cross-platform memory budget and allocation decision process. Examples are arithmetic, not new benchmarks.
+
+## Miner updates (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job | Supporting phrases |
+|---|---|---|---|
+| update seine miner; update Blocknet miner | `/blog/update-seine-miner/` | Replace an existing installation while preserving its working directory, saved settings and launch options, then verify the replacement | seine update notification, seine-data, 更新 Blocknet 矿工软件 |
+
+Installation guides own first setup; the antivirus guide owns archive verification and warnings; the server guide owns service configuration. This guide owns maintaining an existing installation and diagnosing a changed configuration path after replacement. No URL is retargeted.

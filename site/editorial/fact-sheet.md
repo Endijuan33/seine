@@ -271,17 +271,17 @@ Initial research checked 2026-10-25; release, platform and pool facts rechecked 
 
 ## 4. seine (the miner)
 - Seine is the external miner for Blocknet. License BSD-3-Clause. Repo: github.com/zpalmtree/seine.
-  - Latest reviewed release **v0.2.26**, published 2026-10-25 17:30 EDT.
-  - Source: GitHub latest-release API and `seine@v0.2.26:Cargo.toml`; rechecked 2026-10-26. `release-facts.json` records the immutable source and release assets.
+  - Latest reviewed release **v0.2.36**, published October 26, 2026 at 11:34:54 AM EDT.
+  - Source: GitHub latest-release API and `seine@v0.2.36:Cargo.toml`; rechecked October 26, 2026. `release-facts.json` records the immutable source and release assets.
 - Name styling: the wordmark is always lowercase, `seine.` with a lime full stop. README prose capitalizes "Seine" at sentence start.
   - Source: `seine@master:docs/BRAND.md:43-44`, `README.md:24` (checked 2026-10-25)
-- **Released miner fee (v0.2.26):** 1% of mining time on bntpool.com and its subdomains; 2.5% on other pools and in solo mode. The pool calculator defaults to the reviewed release's bntpool.com rate and names the version.
+- **Historical released miner fee (v0.2.26):** 1% of mining time on bntpool.com and its subdomains; 2.5% on other pools and in solo mode. The current calculator now uses v0.2.36's 2% fee and names that version.
   - Source: `seine@v0.2.26:src/dev_fee.rs`, `dev_fee_percent_for_pool_url`, and `src/miner/mining_pool.rs`.
-- **Dev fee (current source, pending release):** flat **2% of mining time** on every pool and in solo mode. There is no pool-host discount. Older releases retain their previous rates.
+- **Released dev fee (v0.2.36):** flat **2% of mining time** on every pool and in solo mode. There is no pool-host discount. Older releases retain their previous rates.
   - Charged as time-sliced dev rounds to a hard-coded dev address, after a **10-minute** fee-free grace period.
   - Source: `src/dev_fee.rs`, `src/miner/mining_pool.rs`, `docs/guides/configuration.md`.
   - Solo/daemon mode uses the same tracker. If the daemon rejects the dev-fee reward address, the existing fallback disables the dev fee for that run.
-- **Pool fee transition:** bntpool.com now charges **0%**, confirmed via live `/api/info` after deployment on 2026-10-25 at 11:59 PM EDT. Rechecked 2026-10-26: `/api/info` still reports 0%. The released v0.2.26 miner uses 1% on bntpool.com; the pending 2% source policy must not be attributed to that release.
+- **Pool fee transition:** bntpool.com now charges **0%**, confirmed via live `/api/info` after deployment on 2026-10-25 at 11:59 PM EDT. Rechecked 2026-10-26: `/api/info` still reports 0%. The released v0.2.26 miner uses 1% on bntpool.com; v0.2.36 uses a flat 2%; retain v0.2.26 fee values only in version-labelled historical examples.
 - **Release archives:**
 
   | Platform | Archive | GPU support |
@@ -448,7 +448,7 @@ From owner preferences for seine marketing:
 Added by this sheet from the evidence:
 - Distinguish the miner dev fee from the pool fee. Check live `/api/info` and the miner version before quoting a combined rate.
 - Don't write "no dev fee" or "no dev tax" about seine.
-  - The tagline "No premine. No dev tax." (`taglines.md:30`) is true of the **protocol** only. Released v0.2.26 charges 1% or 2.5%, depending on the pool; unreleased source uses 2%. See §4.
+  - The tagline "No premine. No dev tax." (`taglines.md:30`) is true of the **protocol** only. Released v0.2.26 charges 1% or 2.5%, depending on the pool; v0.2.36 uses 2%. See §4.
 - Don't write "ASIC-proof" or "botnet-proof". The code claims design intent only ("resist ASICs", "impractical", `pow.rs:1-4`). "Designed to resist ASICs" is the safe wording.
   - Faraday's planned lighter PoW (§0) undercuts memory-hardness messaging after ~Feb 2027.
 - Don't claim AMD GPU support, Windows ARM64 builds, or production Metal support (§4).
@@ -570,3 +570,17 @@ actual command output, capture provenance and failure-case checks.
 - Pool submission acknowledgment, verification and payout eligibility are distinct.
   Assignment difficulty and template+nonce deduplication govern shares. Sources:
   sibling pool `frontend/blog/editorial/share-outcomes-2026-10-26.md`.
+
+## Miner updates and difficulty (October 26, 2026)
+
+- v0.2.36 configuration: default `./seine-data/seine.config.json` is relative to
+  the process working directory; `--data-dir` overrides the base. Saved fields
+  cover connection details; preserve launch flags separately. Sources:
+  `seine@v0.2.36:src/config.rs`, `src/user_config.rs`, `docs/guides/configuration.md`.
+- Update notices run at startup and every 12 hours; they announce releases and
+  do not replace the executable. Source: `src/update_check.rs`.
+- Current difficulty rules: 300-second block target, 60 solve intervals in LWMA,
+  recalculated per block. Source: `blocknet-core@c646196a:block.go`,
+  `expectedDifficultyFromParent` and `nextDifficultyLocked`. Target division:
+  `crypto-rs/src/pow.rs:blocknet_difficulty_to_target`.
+- Full evidence and publication notes: `research/update-and-difficulty-2026-10-26.md`.

@@ -6,6 +6,8 @@ export function validateManifest(facts) {
   if (facts.repository !== 'zpalmtree/seine' || !/^v\d+\.\d+\.\d+$/.test(facts.tag) ||
       !/^[a-f0-9]{40}$/.test(facts.commit) || !Number.isFinite(Date.parse(facts.publishedAt)) ||
       !Number.isFinite(Date.parse(facts.checkedAt))) throw new Error('Invalid release identity or verification date');
+  if (facts.feePolicy !== undefined && !['flat', 'pool-specific'].includes(facts.feePolicy)) throw new Error('Invalid fee policy');
+  if (facts.feePolicy === 'flat' && facts.bntpoolMinerFeePercent !== facts.otherPoolMinerFeePercent) throw new Error('Flat fee must match for every pool');
   for (const key of ['bntpoolMinerFeePercent', 'otherPoolMinerFeePercent']) {
     if (typeof facts[key] !== 'number' || !Number.isFinite(facts[key]) || facts[key] < 0 || facts[key] > 100) throw new Error(`Invalid ${key}`);
   }
@@ -28,7 +30,7 @@ export function compareRelease(facts, release, sources) {
   const standard = fees.match(/\bconst DEV_FEE_PERCENT:\s*f64\s*=\s*([\d.]+)/)?.[1];
   const pool = fees.match(/\bconst BNTPOOL_DEV_FEE_PERCENT:\s*f64\s*=\s*([\d.]+)/)?.[1];
   // A new fee policy needs explicit review rather than guessing a new default.
-  if (standard === undefined || pool === undefined || Number(standard) !== facts.otherPoolMinerFeePercent || Number(pool) !== facts.bntpoolMinerFeePercent) throw new Error('Reviewed fee policy does not match released code');
+  if (standard === undefined || Number(standard) !== facts.otherPoolMinerFeePercent || (facts.feePolicy === 'flat' ? pool !== undefined : pool === undefined || Number(pool) !== facts.bntpoolMinerFeePercent)) throw new Error('Reviewed fee policy does not match released code');
 }
 
 async function main() {
