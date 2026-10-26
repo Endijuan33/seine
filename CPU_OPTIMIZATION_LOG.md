@@ -2,6 +2,21 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-25 joint tuner interruption diagnostics
+
+The native Windows EPYC 9R14 comparison exposed an observability gap: an inner
+kernel trial could reject noisy baseline samples and cancel the enclosing
+thread-count comparison, but the second abort replaced the measured diagnostic
+with a generic outer cancellation. Preserve the inner message alongside the
+existing outer restoration message. Selection thresholds, retry delays, cache
+writes and count/kernel restoration are unchanged; this is not a speedup.
+
+A synthetic productive trial with baseline rates of 100 then 120 H/s and a
+200 H/s challenger verifies both the retained rejection rates and restoration
+of the original eight-worker AVX-512 configuration without caching a winner.
+All 75 active adaptive CPU/kernel tests passed (three existing ignored tests).
+The running native comparison uses frozen binaries and is unaffected.
+
 ## 2026-10-25 default CPU tuning objective — requested policy correction
 
 The default balanced profile allowed a smaller worker count at 99% of the

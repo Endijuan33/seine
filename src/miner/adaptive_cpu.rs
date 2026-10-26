@@ -502,7 +502,14 @@ impl Policy {
             )
         };
         if action.interrupted && self.joint.is_some() {
-            return self.cancel_joint(kernels, now, snapshots, cap, actual, allocation_limited);
+            let (mut cancelled, decision) =
+                self.cancel_joint(kernels, now, snapshots, cap, actual, allocation_limited);
+            // Cancellation aborts the already-finished inner trial again. Keep
+            // its measured rejection reason rather than losing it in that abort.
+            if action.message.is_some() {
+                cancelled.message = action.message;
+            }
+            return (cancelled, decision);
         }
         if matches!(self.phase, Phase::Probe { .. }) && !safety_change {
             let pending = kernels.retry_pending(now, snapshots);
@@ -2517,6 +2524,46 @@ mod tests {
         assert_eq!(d.as_ref().unwrap().threads, 8);
         assert!(d.unwrap().learned.is_none());
         assert!(p.joint.is_none());
+    }
+
+    #[test]
+    fn noisy_candidate_kernel_preserves_rates_when_outer_trial_is_cancelled() {
+        if !CpuKernel::Avx512.is_supported() || !CpuKernel::Avx2.is_supported() {
+            return;
+        }
+        let (mut p, mut kernels, mut s) = joint_fixture("noise-diagnostic", 8, 12);
+        let mut saw_challenger = false;
+        for now in 1..200 {
+            s.hashes += if s.kernel == CpuKernel::Avx512 {
+                saw_challenger = true;
+                200
+            } else if saw_challenger {
+                120
+            } else {
+                100
+            };
+            let (action, decision) = p.tick_joint(&mut kernels, now, &[s], 16, false);
+            if let Some(decision) = decision {
+                assert!(saw_challenger);
+                assert_eq!(decision.threads, 8);
+                assert!(decision.learned.is_none());
+                assert!(p.joint.is_none());
+                assert_eq!(action.kernel, Some(CpuKernel::Avx512));
+                let message = action.message.expect("keep the inner rejection diagnostic");
+                assert!(message.contains("baseline drifted"), "{message}");
+                assert!(message.contains("avx2 100.00"), "{message}");
+                assert!(message.contains("avx512 200.00"), "{message}");
+                assert!(message.contains("avx2 120.00"), "{message}");
+                return;
+            }
+            if let Some(kernel) = action.kernel {
+                if kernel != s.kernel {
+                    s.kernel_generation += 1;
+                }
+                s.kernel = kernel;
+            }
+        }
+        panic!("noisy comparison did not finish within the fixture budget");
     }
 
     #[test]
