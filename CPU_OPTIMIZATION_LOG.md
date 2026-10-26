@@ -4748,3 +4748,37 @@ Local campaign evidence: `comparison-diagnostics/linux-v36-comparison.json`,
 summary binds the exact executable, raw capture and independent reference cache
 hashes. This comparison does not replace the separately scoped README/site
 steady-throughput records.
+
+
+## 2026-10-26 Windows sample windows and kernel retry admission
+
+The separate 20-second/512-hash follow-up completed one fixed 660-second cold
+baseline/candidate pair on native Windows EPYC 9R14, 32 physical cores, 128 GiB
+RAM and ordinary pages. All **44,295 captured hashes** passed independent
+full-size reference-cache verification (zero invalid or duplicate hashes).
+Gross rates were **33.59242 → 33.51515 H/s** (-0.23003%); observed user-directed
+rates were **32.59242 → 32.55909 H/s** (-0.10227%). This is inconclusive speed
+evidence from one pair, not proof of a regression. The 20-second policy remains
+research-only; no unchanged rerun is scheduled to seek a favorable result.
+
+Comparisons shortened from 94.9–96.4 seconds to 64.8–65.4 seconds, but one of the
+three candidate comparisons drifted. After restoring the 32-worker baseline at
+179.8 seconds, the outer tuner reentered the uncertain 31-worker context at
+211.9 seconds and waited until its kernel retry at 479.8 seconds. Its first
+completed count decision arrived at 608.0 seconds versus 303.0 for control.
+The full trace and exact binary/capture hashes are retained in local campaign
+`comparison-diagnostics/windows-medium-trials-result.json`.
+
+The resulting scheduling fix checks an existing kernel retry deadline before
+applying a proposed count. During that cooldown it retains the baseline instead
+of changing worker count to wait for a comparison that cannot begin. Once the
+cooldown expires, normal fresh count/kernel measurements remain necessary; no
+uncertain sample becomes a learned winner. The retry key remains the existing
+stable CPU membership and per-backend count. This does not shorten sample windows
+or loosen drift/confirmation thresholds, and makes no measured speedup claim.
+
+The focused regression exercises upward and downward probes, baseline-rate
+drift, different CPU membership, absence of learned scores while deferred, and
+resumption after the original deadline. Existing pressure, allocation failure,
+membership and joint-search tests remain in the adaptive suite. The hash kernel
+is unchanged; native performance attribution for this scheduling fix is pending.

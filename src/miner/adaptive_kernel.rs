@@ -889,6 +889,23 @@ impl Tuner {
             && self.context_retry_pending(now, &Context::from_snapshots(snapshots))
     }
 
+    pub(super) fn retry_at_for_threads(
+        &self,
+        now: u64,
+        snapshots: &[CpuAdaptiveSnapshot],
+        threads: usize,
+    ) -> Option<u64> {
+        // Admission only: no prospective page backing is assumed. The existing
+        // retry key intentionally uses stable membership and worker counts.
+        let mut context = Context::from_snapshots(snapshots);
+        context.workers.fill(threads);
+        self.retries
+            .iter()
+            .filter(|(old, until)| now < *until && old.same_workers(&context))
+            .map(|(_, until)| *until)
+            .max()
+    }
+
     fn context_retry_pending(&self, now: u64, context: &Context) -> bool {
         self.retries
             .iter()

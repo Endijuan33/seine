@@ -725,6 +725,25 @@ impl Policy {
         };
         match (phase_before, self.phase) {
             (Phase::Baseline, Phase::Probe { base, .. }) => {
+                if self.joint.is_none() {
+                    if let Some(retry_at) =
+                        kernels.retry_at_for_threads(now, snapshots, self.current)
+                    {
+                        // Do not allocate/park workers at an unconfirmed count
+                        // just to wait for its kernel cooldown. Keep mining the
+                        // baseline, then retry with fresh count/kernel samples.
+                        let candidate = self.current;
+                        self.attempts = self.attempts.saturating_sub(1);
+                        self.reset(now, retry_at.saturating_sub(now));
+                        if candidate > base {
+                            self.next_up_probe = Some(candidate);
+                        }
+                        return (
+                            action,
+                            Some(self.change(base, "kernel retry deferred; retaining baseline")),
+                        );
+                    }
+                }
                 if let Some(joint) = self.joint.clone() {
                     // Second outer A/B/A: use the already-confirmed candidate
                     // kernel, then wait for acknowledgements before sampling.
@@ -2802,6 +2821,77 @@ mod tests {
             warmed: candidate,
         };
         (p, kernels, s)
+    }
+
+    #[test]
+    fn joint_admission_keeps_baseline_until_candidate_kernel_retry_is_due() {
+        if !CpuKernel::Avx512.is_supported() || !CpuKernel::Avx2.is_supported() {
+            return;
+        }
+        for (base, candidate) in [(8, 12), (12, 11)] {
+            let (mut p, mut kernels, mut s) = joint_fixture("retry-admission", base, candidate);
+            assert!(kernels.tick(0, &[s], true, true).hold_counts);
+            kernels.abort(1);
+            assert_eq!(kernels.retry_at_for_threads(2, &[s], candidate), Some(301));
+            assert_eq!(kernels.retry_at_for_threads(2, &[s], base), None);
+            let mut missing = s;
+            missing.running = false;
+            assert_eq!(
+                kernels.retry_at_for_threads(2, &[missing, s], candidate),
+                None
+            );
+            assert_eq!(kernels.retry_at_for_threads(301, &[s], candidate), None);
+
+            // Isolate outer admission from another baseline kernel search.
+            // Existing tests cover the inner search after a retry expires.
+            kernels.test_candidates(vec![CpuKernel::Avx2]);
+            p.joint = None;
+            p.reset(2, 0);
+            p.current = base;
+            p.up = candidate > base;
+            p.previous_cap = 16;
+            p.cap_observed = true;
+            p.headroom_since = 0;
+            p.recovery_pending = false;
+            s.threads = base;
+            s.warmed = base;
+            s.committed_bytes = base as u64 * CPU_LANE_MEMORY_BYTES;
+            s.resident_bytes = s.committed_bytes;
+            s.backing_bytes = [0, 0, 0, s.committed_bytes, 0];
+            let mut saw_deferral = false;
+            for now in 2..301 {
+                // A changed baseline rate may request earlier discovery. It
+                // must still not enter this candidate before its own cooldown.
+                s.hashes += if base == 8 && now >= 100 { 12 } else { 10 };
+                let (_, decision) = p.tick_joint(&mut kernels, now, &[s], 16, false);
+                if let Some(decision) = decision {
+                    assert_eq!(decision.threads, base);
+                    assert!(decision.learned.is_none());
+                    assert_eq!(decision.reason, "kernel retry deferred; retaining baseline");
+                    saw_deferral = true;
+                }
+                assert_eq!(p.current, base);
+                assert!(p.joint.is_none());
+                assert!(matches!(p.phase, Phase::Baseline));
+            }
+            assert!(saw_deferral);
+            assert_eq!(p.attempts, 0, "waiting is not an attempted comparison");
+            let mut resumed = false;
+            for now in 301..=332 {
+                s.hashes += if base == 8 { 12 } else { 10 };
+                if let (_, Some(decision)) = p.tick_joint(&mut kernels, now, &[s], 16, false) {
+                    assert_eq!(decision.threads, candidate);
+                    assert!(decision.learned.is_none());
+                    assert!(matches!(p.phase, Phase::Probe { .. }));
+                    resumed = true;
+                    break;
+                }
+            }
+            assert!(
+                resumed,
+                "cooldown must permit a fresh probe, not suppress it"
+            );
+        }
     }
 
     #[test]
