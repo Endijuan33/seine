@@ -3,6 +3,9 @@
 use super::*;
 use crate::backend::cpu::CpuAdaptiveSnapshot;
 use blocknet_pow_kernel::CpuKernel;
+use seine_telemetry::tuning::{
+    TrialArm, TrialDecision, TrialPolicy, TrialQuantization, TrialReason,
+};
 
 const RECHECK_SECS: u64 = 30 * 60;
 const RETRY_SECS: u64 = 5 * 60;
@@ -524,6 +527,7 @@ pub(super) struct Action {
 }
 
 pub(super) struct Tuner {
+    pub(super) monitor: Option<super::adaptive_telemetry::Monitor>,
     cache: Cache,
     // An exact prior policy may seed mining, but cannot certify a new candidate.
     startup_cache: Option<Cache>,
@@ -766,6 +770,7 @@ impl Tuner {
             checked: None,
             next_check: 0,
             retries: Vec::new(),
+            monitor: None,
             window_secs: cfg.cpu_autotune_secs.saturating_mul(5).clamp(30, 60),
             short_trials,
             genoa_short_trials,
@@ -891,6 +896,13 @@ impl Tuner {
     }
 
     pub(super) fn abort(&mut self, now: u64) -> Action {
+        self.abort_reason(now, TrialReason::ContextChanged)
+    }
+
+    fn abort_reason(&mut self, now: u64, reason: TrialReason) -> Action {
+        if let Some(monitor) = &mut self.monitor {
+            monitor.abort(now, reason);
+        }
         let trial = self.trial.take();
         let context = trial
             .as_ref()
@@ -946,7 +958,7 @@ impl Tuner {
                 };
             }
             if now.saturating_sub(self.settle_started) >= MAX_TRIAL_SECS {
-                return self.abort(now);
+                return self.abort_reason(now, TrialReason::TimeBudget);
             }
             return Action {
                 hold_counts: true,
@@ -954,8 +966,11 @@ impl Tuner {
             };
         }
         if let Some(trial) = &self.trial {
-            if context != trial.context || now.saturating_sub(trial.started) >= MAX_TRIAL_SECS {
+            if context != trial.context {
                 return self.abort(now);
+            }
+            if now.saturating_sub(trial.started) >= MAX_TRIAL_SECS {
+                return self.abort_reason(now, TrialReason::TimeBudget);
             }
         }
         if self.trial.is_none() {
@@ -1074,6 +1089,32 @@ impl Tuner {
                 return Action::default();
             }
             let candidate = self.pending.remove(0);
+            if let Some(monitor) = &mut self.monitor {
+                let fence = turin_small_gain_pair(base, candidate);
+                let (seconds, hashes) = turin_pair_resolution(base, candidate);
+                let short = !fence
+                    && (self.short_trials
+                        || (self.genoa_short_trials && genoa_short_context(&context)));
+                monitor.begin(
+                    now,
+                    base,
+                    candidate,
+                    TrialPolicy {
+                        revision: 1,
+                        minimum_sample_ms: if fence {
+                            self.window_secs.max(seconds)
+                        } else {
+                            self.window_secs
+                        } * 1000,
+                        minimum_hashes: if fence { hashes } else { 32 },
+                        short_sample_ms: short.then_some(10_000),
+                        short_minimum_hashes: short.then_some(256),
+                        maximum_baseline_drift_bps: if fence { 100 } else { 500 },
+                        required_gain_bps: if fence { 0 } else { 200 },
+                        quantization: TrialQuantization::ThreeWindowHash,
+                    },
+                );
+            }
             self.checked = Some(context.clone());
             self.trial = Some(Trial {
                 context,
@@ -1095,7 +1136,7 @@ impl Tuner {
         if !ready {
             let idle = trial.idle_since.get_or_insert(now);
             if now.saturating_sub(*idle) >= 3 {
-                return self.abort(now);
+                return self.abort_reason(now, TrialReason::MiningIdle);
             }
             return Action {
                 hold_counts: true,
@@ -1108,6 +1149,9 @@ impl Tuner {
             .all(|s| s.kernel == requested && s.kernel_ready)
         {
             trial.window = None;
+            if let Some(monitor) = &mut self.monitor {
+                monitor.discard_window();
+            }
             return Action {
                 hold_counts: true,
                 ..Action::default()
@@ -1116,6 +1160,9 @@ impl Tuner {
         let generations: Vec<_> = snapshots.iter().map(|s| s.kernel_generation).collect();
         let Some((start, first, observed_generations)) = &trial.window else {
             trial.window = Some((now, hashes, generations));
+            if let Some(monitor) = &mut self.monitor {
+                monitor.window(now);
+            }
             return Action {
                 hold_counts: true,
                 ..Action::default()
@@ -1141,6 +1188,9 @@ impl Tuner {
             };
         }
         trial.window = None;
+        if let Some(monitor) = &mut self.monitor {
+            monitor.sample(sample.hashes, sample.secs);
+        }
         trial.samples.push(sample);
         if trial.samples.len() == 3
             && comparison_for(
@@ -1161,6 +1211,22 @@ impl Tuner {
                 trial.samples[2],
             ) == Comparison::NoConfirmedGain;
             let measured = rates(&trial.samples, trial.base, trial.candidate);
+            if let Some(monitor) = &mut self.monitor {
+                monitor.finish(
+                    now,
+                    if stable {
+                        TrialDecision::NoConfirmedGain
+                    } else {
+                        TrialDecision::Inconclusive
+                    },
+                    if stable {
+                        TrialReason::Completed
+                    } else {
+                        TrialReason::BaselineDrift
+                    },
+                    TrialArm::Baseline,
+                );
+            }
             if stable {
                 let base = trial.base;
                 self.finish_comparison(trial, base, now);
@@ -1192,6 +1258,28 @@ impl Tuner {
             let measured = rates(&trial.samples, trial.base, trial.candidate);
             let promoted = outcome == Comparison::Gain;
             let conclusive = outcome != Comparison::Inconclusive;
+            if let Some(monitor) = &mut self.monitor {
+                monitor.finish(
+                    now,
+                    if promoted {
+                        TrialDecision::Gain
+                    } else if conclusive {
+                        TrialDecision::NoConfirmedGain
+                    } else {
+                        TrialDecision::Inconclusive
+                    },
+                    if conclusive {
+                        TrialReason::Completed
+                    } else {
+                        TrialReason::BaselineDrift
+                    },
+                    if promoted {
+                        TrialArm::Candidate
+                    } else {
+                        TrialArm::Baseline
+                    },
+                );
+            }
             let kernel = if promoted {
                 trial.candidate
             } else {
@@ -1361,6 +1449,284 @@ mod tests {
         // Independent of whether this test runner is the validated Ryzen.
         t.startup = None;
         t
+    }
+
+    fn monitored_tick(t: &mut Tuner, now: u64, s: CpuAdaptiveSnapshot) -> Action {
+        if let Some(monitor) = &mut t.monitor {
+            monitor.observe(
+                now,
+                &[s],
+                crate::config::CpuAutotuneResources {
+                    parallelism: 4,
+                    total_bytes: Some(8 * CPU_LANE_MEMORY_BYTES),
+                    available_bytes: Some(6 * CPU_LANE_MEMORY_BYTES),
+                },
+            );
+        }
+        t.tick(now, &[s], true, true)
+    }
+
+    #[test]
+    fn telemetry_preserves_decisions_and_emits_gain_only_after_switch_acknowledgement() {
+        let mut decisions = Vec::new();
+        for enabled in [false, true] {
+            let recorder = crate::hardware_telemetry::Recorder::test_recorder();
+            let mut t = tuner();
+            t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
+            t.short_trials = true;
+            if enabled {
+                t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
+                    recorder.clone(),
+                    &super::super::tests::test_config(),
+                ));
+            }
+            let mut s = snapshot();
+            s.kernel = CpuKernel::Avx512;
+            let mut now = 0;
+            let mut actions = Vec::new();
+            monitored_tick(&mut t, now, s);
+            for rate in [100, 120, 100, 100, 120, 100] {
+                now += 1;
+                s.kernel_ready = false;
+                monitored_tick(&mut t, now, s);
+                s.kernel_ready = true;
+                monitored_tick(&mut t, now, s);
+                now += 10;
+                s.hashes += rate * 10;
+                let action = monitored_tick(&mut t, now, s);
+                actions.push((
+                    action.kernel,
+                    action.hold_counts,
+                    action.interrupted,
+                    action.reset_scores,
+                ));
+                if let Some(kernel) = action.kernel {
+                    s.kernel = kernel;
+                    s.kernel_generation += 1;
+                }
+                assert!(recorder.test_tuning_report().is_none());
+            }
+            s.kernel_ready = false;
+            monitored_tick(&mut t, now + 1, s);
+            assert!(recorder.test_tuning_report().is_none());
+            s.kernel_ready = true;
+            monitored_tick(&mut t, now + 2, s);
+            if enabled {
+                let report = recorder.test_tuning_report().unwrap();
+                assert_eq!(report.dropped_trials, 0);
+                assert_eq!(report.trials.len(), 1);
+                let outcome = &report.trials[0].outcome;
+                assert!(outcome.validate());
+                assert_eq!(outcome.decision, TrialDecision::Gain);
+                assert_eq!(outcome.applied, Some(TrialArm::Candidate));
+                assert_eq!(outcome.context_after.members, outcome.candidate);
+                assert_eq!(outcome.samples.len(), 6);
+                assert!(outcome
+                    .samples
+                    .iter()
+                    .all(|s| !s.changed && s.elapsed_ms == 10_000));
+                assert_eq!(outcome.policy.short_sample_ms, Some(10_000));
+                assert_eq!(outcome.policy.short_minimum_hashes, Some(256));
+                assert_eq!(outcome.policy.minimum_sample_ms, 30_000);
+                assert_eq!(outcome.policy.minimum_hashes, 32);
+                assert_eq!(outcome.cost.idle_ms, None);
+                assert!(recorder.test_tuning_report().is_none());
+            } else {
+                assert!(recorder.test_tuning_report().is_none());
+            }
+            decisions.push(actions);
+            let _ = fs::remove_file(&t.path);
+        }
+        assert_eq!(decisions[0], decisions[1]);
+    }
+
+    #[test]
+    fn telemetry_does_not_report_unacknowledged_promotion_as_applied() {
+        for reason in [
+            TrialReason::ExecutionFailure,
+            TrialReason::TimeBudget,
+            TrialReason::UserInterrupted,
+        ] {
+            let recorder = crate::hardware_telemetry::Recorder::test_recorder();
+            let mut t = tuner();
+            t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
+            t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
+                recorder.clone(),
+                &super::super::tests::test_config(),
+            ));
+            let mut s = snapshot();
+            s.kernel = CpuKernel::Avx512;
+            let mut now = 0;
+            monitored_tick(&mut t, now, s);
+            for rate in [100, 120, 100, 100, 120, 100] {
+                now += 1;
+                monitored_tick(&mut t, now, s);
+                now += 30;
+                s.hashes += rate * 30;
+                let action = monitored_tick(&mut t, now, s);
+                if let Some(kernel) = action.kernel {
+                    s.kernel = kernel;
+                    s.kernel_generation += 1;
+                }
+            }
+            assert!(recorder.test_tuning_report().is_none());
+            // The final request has not reached the workers. The last observed
+            // configuration is still the final baseline measurement.
+            t.monitor.as_mut().unwrap().abort(now, reason);
+            let report = recorder.test_tuning_report().unwrap();
+            assert_eq!(report.dropped_trials, 0);
+            let outcome = &report.trials[0].outcome;
+            assert!(outcome.validate());
+            assert_eq!(outcome.samples.len(), 6);
+            assert_eq!(outcome.decision, TrialDecision::Aborted);
+            assert_eq!(outcome.reason, reason);
+            assert_eq!(outcome.applied, Some(TrialArm::Baseline));
+            t.monitor.as_mut().unwrap().abort(now + 1, reason);
+            assert!(recorder.test_tuning_report().is_none());
+            let _ = fs::remove_file(&t.path);
+        }
+    }
+
+    #[test]
+    fn telemetry_failure_observes_partially_switched_cpu_backends() {
+        let recorder = crate::hardware_telemetry::Recorder::test_recorder();
+        let mut cfg = super::super::tests::test_config();
+        cfg.backend_specs.push(cfg.backend_specs[0].clone());
+        let mut monitor = super::super::adaptive_telemetry::Monitor::new(recorder.clone(), &cfg);
+        let mut snapshots = [snapshot(), snapshot()];
+        for s in &mut snapshots {
+            s.kernel = CpuKernel::Avx512;
+        }
+        let resources = crate::config::CpuAutotuneResources {
+            parallelism: 4,
+            total_bytes: Some(8 * CPU_LANE_MEMORY_BYTES),
+            available_bytes: Some(6 * CPU_LANE_MEMORY_BYTES),
+        };
+        monitor.observe(0, &snapshots, resources);
+        monitor.begin(
+            0,
+            CpuKernel::Avx512,
+            CpuKernel::Avx2,
+            TrialPolicy {
+                revision: 1,
+                minimum_hashes: 32,
+                minimum_sample_ms: 30_000,
+                short_sample_ms: None,
+                short_minimum_hashes: None,
+                quantization: TrialQuantization::ThreeWindowHash,
+                maximum_baseline_drift_bps: 500,
+                required_gain_bps: 200,
+            },
+        );
+        snapshots[0].kernel = CpuKernel::Avx2;
+        snapshots[0].kernel_ready = false;
+        monitor.abort_observed(1, &snapshots, resources, TrialReason::ExecutionFailure);
+        let report = recorder.test_tuning_report().unwrap();
+        assert_eq!(report.dropped_trials, 0);
+        let outcome = &report.trials[0].outcome;
+        assert!(outcome.validate());
+        assert_eq!(outcome.applied, None);
+        assert_eq!(outcome.reason, TrialReason::ExecutionFailure);
+        assert_eq!(
+            outcome.context_after.members[0].kernel,
+            CpuKernel::Avx2.to_string()
+        );
+        assert_eq!(
+            outcome.context_after.members[1].kernel,
+            CpuKernel::Avx512.to_string()
+        );
+    }
+
+    #[test]
+    fn telemetry_keeps_negative_and_drifted_comparisons() {
+        for (rates, decision, reason) in [
+            (
+                [100, 90, 100],
+                TrialDecision::NoConfirmedGain,
+                TrialReason::Completed,
+            ),
+            (
+                [100, 110, 120],
+                TrialDecision::Inconclusive,
+                TrialReason::BaselineDrift,
+            ),
+        ] {
+            let recorder = crate::hardware_telemetry::Recorder::test_recorder();
+            let mut t = tuner();
+            t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
+            t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
+                recorder.clone(),
+                &super::super::tests::test_config(),
+            ));
+            let mut s = snapshot();
+            s.kernel = CpuKernel::Avx512;
+            let mut now = 0;
+            monitored_tick(&mut t, now, s);
+            for rate in rates {
+                now += 1;
+                monitored_tick(&mut t, now, s);
+                now += 30;
+                s.hashes += rate * 30;
+                let action = monitored_tick(&mut t, now, s);
+                if let Some(kernel) = action.kernel {
+                    s.kernel = kernel;
+                    s.kernel_generation += 1;
+                }
+            }
+            let report = recorder.test_tuning_report().unwrap();
+            assert_eq!(report.dropped_trials, 0);
+            let result = &report.trials[0].outcome;
+            assert!(result.validate());
+            assert_eq!(result.decision, decision);
+            assert_eq!(result.reason, reason);
+            assert_eq!(result.applied, Some(TrialArm::Baseline));
+            assert_eq!(
+                result.samples.iter().map(|s| s.hashes).collect::<Vec<_>>(),
+                rates.map(|r| r * 30)
+            );
+            let _ = fs::remove_file(&t.path);
+        }
+    }
+
+    #[test]
+    fn telemetry_preserves_partial_sample_when_last_backend_disappears() {
+        let recorder = crate::hardware_telemetry::Recorder::test_recorder();
+        let mut t = tuner();
+        t.candidates = vec![CpuKernel::Avx512, CpuKernel::Avx2];
+        t.monitor = Some(super::super::adaptive_telemetry::Monitor::new(
+            recorder.clone(),
+            &super::super::tests::test_config(),
+        ));
+        let mut s = snapshot();
+        s.kernel = CpuKernel::Avx512;
+        monitored_tick(&mut t, 0, s);
+        monitored_tick(&mut t, 1, s);
+        s.hashes = 77;
+        monitored_tick(&mut t, 4, s);
+        s.running = false;
+        monitored_tick(&mut t, 5, s);
+        t.monitor
+            .as_mut()
+            .unwrap()
+            .abort(5, TrialReason::ExecutionFailure);
+        let report = recorder.test_tuning_report().unwrap();
+        assert_eq!(report.dropped_trials, 0);
+        let result = &report.trials[0].outcome;
+        assert!(result.validate());
+        assert_eq!(result.decision, TrialDecision::Aborted);
+        assert_eq!(result.reason, TrialReason::ExecutionFailure);
+        assert_eq!(result.applied, None);
+        assert!(result.context_after.members.is_empty());
+        assert_eq!(result.samples.len(), 1);
+        assert_eq!(result.samples[0].hashes, 77);
+        assert_eq!(result.samples[0].elapsed_ms, 3000);
+        assert!(result.samples[0].changed);
+        t.monitor
+            .as_mut()
+            .unwrap()
+            .abort(6, TrialReason::UserInterrupted);
+        assert!(recorder.test_tuning_report().is_none());
+        let _ = fs::remove_file(&t.path);
     }
 
     #[test]

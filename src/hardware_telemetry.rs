@@ -243,6 +243,11 @@ impl Recorder {
         (!report.trials.is_empty() || report.dropped_trials > 0).then_some(report)
     }
 
+    #[cfg(test)]
+    pub(crate) fn test_tuning_report(&self) -> Option<TuningReport> {
+        self.drain_tuning()
+    }
+
     pub(crate) fn record(&self, instance: u64, settings: BackendSettings, hashes: u64) {
         // The miner never waits for a report to finish; contention loses telemetry only.
         let Ok(mut samples) = self.0.try_lock() else {

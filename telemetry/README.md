@@ -6,8 +6,11 @@ unchanged. A collector outage drops reports without stopping mining.
 
 Schema 6 adds [paired CPU trial evidence](TUNING.md), including inconclusive and
 aborted comparisons, bounded delivery and installation-weighted research hints.
-The producer hooks are staged; runtime integration is required before miners
-emit these trials. Missing trials do not imply no gain.
+The productive CPU kernel tuner emits these trials when telemetry is enabled.
+Worker-count and joint producers are still pending. Kernel records currently
+lack measured allowed-CPU masks and placement fingerprints, so analysis retains
+them as coverage evidence rather than qualified hardware hints. Missing trials
+do not imply no gain. See the [runtime validation scope](../docs/validation/runtime-kernel-trials-20261026.md).
 
 ## Miner preferences and collection
 

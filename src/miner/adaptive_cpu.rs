@@ -1171,6 +1171,7 @@ impl Controller {
         cfg: Config,
         backends: Vec<Arc<CpuBackend>>,
         tui: Option<TuiState>,
+        telemetry: Option<crate::hardware_telemetry::Recorder>,
     ) -> Result<Self> {
         let (stop, rx) = bounded(1);
         let handle = if backends.is_empty() {
@@ -1191,6 +1192,9 @@ impl Controller {
                         discard_cached_scores(&mut record);
                         let host = cpu_autotune_host_fingerprint();
                         let mut kernels = super::adaptive_kernel::Tuner::new(&cfg, host.clone());
+                        kernels.monitor = telemetry
+                            .filter(|_| backends.len() <= seine_telemetry::tuning::MAX_MEMBERS)
+                            .map(|recorder| super::adaptive_telemetry::Monitor::new(recorder, &cfg));
                         let started = Instant::now();
                         let mut failures = 0;
                         let mut pressure = MemoryPressure::default();
@@ -1198,6 +1202,12 @@ impl Controller {
                         loop {
                             match rx.recv_timeout(Duration::from_secs(1)) {
                                 Ok(()) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                                    if let Some(monitor) = &mut kernels.monitor {
+                                        let now = started.elapsed().as_secs();
+                                        let snapshots: Vec<_> = backends.iter().map(|b| b.adaptive_snapshot()).collect();
+                                        monitor.observe(now, &snapshots, crate::config::CpuAutotuneResources { parallelism: 0, total_bytes: None, available_bytes: None });
+                                        monitor.abort(now, seine_telemetry::tuning::TrialReason::UserInterrupted);
+                                    }
                                     break
                                 }
                                 Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
@@ -1208,6 +1218,11 @@ impl Controller {
                             let snapshots: Vec<_> =
                                 all_snapshots.iter().filter(|s| s.running).collect();
                             if snapshots.is_empty() {
+                                if let Some(monitor) = &mut kernels.monitor {
+                                    let now = started.elapsed().as_secs();
+                                    monitor.observe(now, &all_snapshots, crate::config::CpuAutotuneResources { parallelism: 0, total_bytes: None, available_bytes: None });
+                                    monitor.abort(now, seine_telemetry::tuning::TrialReason::ExecutionFailure);
+                                }
                                 break;
                             }
                             let slots = backends.iter().zip(&all_snapshots)
@@ -1217,10 +1232,11 @@ impl Controller {
                             let owned = snapshots.iter().map(|s| s.committed_bytes).sum();
                             let count_failures =
                                 snapshots.iter().map(|s| s.allocation_failures).sum();
-                            let (_, available) = cpu_autotune_capacity(&cfg, owned);
+                            let ((_, available), resources) = crate::config::cpu_autotune_capacity_snapshot(&cfg, owned);
                             let cap =
                                 pressure_backoff.cap(pressure.elevated(), available.min(slots), actual, max);
                             let now = started.elapsed().as_secs();
+                            if let Some(monitor) = &mut kernels.monitor { monitor.observe(now, &all_snapshots, resources); }
                             let (action, decision) = policy.tick_joint(
                                 &mut kernels, now, &all_snapshots, cap, count_failures > failures,
                             );
@@ -1228,6 +1244,10 @@ impl Controller {
                                 for (backend, snapshot) in backends.iter().zip(&all_snapshots) {
                                     if snapshot.running {
                                         if let Err(err) = backend.set_active_kernel(kernel) {
+                                            if let Some(monitor) = &mut kernels.monitor {
+                                                let observed: Vec<_> = backends.iter().map(|b| b.adaptive_snapshot()).collect();
+                                                monitor.abort_observed(started.elapsed().as_secs(), &observed, resources, seine_telemetry::tuning::TrialReason::ExecutionFailure);
+                                            }
                                             warn("MINER", format!("cpu-autotune | kernel switch failed: {err:#}"));
                                         }
                                     }
@@ -1559,7 +1579,7 @@ mod tests {
         ));
         backend.start().unwrap();
         let mut controller =
-            Controller::start(cfg.clone(), vec![Arc::clone(&backend)], None).unwrap();
+            Controller::start(cfg.clone(), vec![Arc::clone(&backend)], None, None).unwrap();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             backend
                 .assign_work(WorkAssignment {

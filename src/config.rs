@@ -2956,13 +2956,29 @@ pub(crate) fn cpu_autotune_worker_ceiling(cfg: &Config) -> usize {
 /// Total capacity is stable across temporary RAM use; available capacity includes
 /// only arenas this miner already owns, so they are not subtracted twice.
 pub(crate) fn cpu_autotune_capacity(cfg: &Config, owned_bytes: u64) -> (usize, usize) {
+    cpu_autotune_capacity_snapshot(cfg, owned_bytes).0
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CpuAutotuneResources {
+    pub parallelism: usize,
+    pub total_bytes: Option<u64>,
+    pub available_bytes: Option<u64>,
+}
+
+/// Reuse the sizing observation for telemetry; do not add another resource poll.
+pub(crate) fn cpu_autotune_capacity_snapshot(
+    cfg: &Config,
+    owned_bytes: u64,
+) -> ((usize, usize), CpuAutotuneResources) {
     let instances = cfg
         .backend_specs
         .iter()
         .filter(|s| s.kind == BackendKind::Cpu)
         .count()
         .max(1);
-    let cpu_cap = cpu_parallelism_cap(cfg.cpu_affinity) / instances;
+    let parallelism = cpu_parallelism_cap(cfg.cpu_affinity);
+    let cpu_cap = parallelism / instances;
     let gpu_reserve = if cfg
         .backend_specs
         .iter()
@@ -2972,7 +2988,13 @@ pub(crate) fn cpu_autotune_capacity(cfg: &Config, owned_bytes: u64) -> (usize, u
     } else {
         0
     };
-    match detect_memory_budget_bytes(cfg.cpu_page_mode) {
+    let budget = detect_memory_budget_bytes(cfg.cpu_page_mode);
+    let resources = CpuAutotuneResources {
+        parallelism,
+        total_bytes: budget.map(|b| b.effective_total),
+        available_bytes: budget.map(|b| b.effective_available),
+    };
+    let capacity = match budget {
         Some(budget) => cpu_capacity_from_budget(
             budget,
             owned_bytes,
@@ -2986,7 +3008,8 @@ pub(crate) fn cpu_autotune_capacity(cfg: &Config, owned_bytes: u64) -> (usize, u
             cpu_cap.max(1),
             (owned_bytes / CPU_LANE_MEMORY_BYTES) as usize / instances,
         ),
-    }
+    };
+    (capacity, resources)
 }
 
 fn cpu_capacity_from_budget(

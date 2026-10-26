@@ -1,5 +1,6 @@
 mod adaptive_cpu;
 mod adaptive_kernel;
+mod adaptive_telemetry;
 mod auth;
 mod backend_control;
 mod backend_executor;
@@ -522,7 +523,7 @@ fn run_with_thread_control_inner(
 
     crate::diagnostics::set_phase(seine_telemetry::RunPhase::InitializingBackends);
     let backend_executor = backend_executor::BackendExecutor::new();
-    if let Some(recorder) = telemetry {
+    if let Some(recorder) = telemetry.clone() {
         backend_executor.set_hardware_telemetry(recorder);
     }
     let daemon_client = if let Some(token) = cfg.token.clone() {
@@ -947,19 +948,23 @@ fn run_with_thread_control_inner(
         None
     };
 
-    let mut adaptive_controller =
-        match adaptive_cpu::Controller::start(cfg.clone(), adaptive_backends, tui_state.clone()) {
-            Ok(controller) => controller,
-            Err(err) => {
-                stop_backend_slots(
-                    &mut backends,
-                    &backend_executor,
-                    cfg.backend_control_timeout,
-                    "BACKEND",
-                );
-                return Err(err.context("starting CPU autotune controller"));
-            }
-        };
+    let mut adaptive_controller = match adaptive_cpu::Controller::start(
+        cfg.clone(),
+        adaptive_backends,
+        tui_state.clone(),
+        telemetry,
+    ) {
+        Ok(controller) => controller,
+        Err(err) => {
+            stop_backend_slots(
+                &mut backends,
+                &backend_executor,
+                cfg.backend_control_timeout,
+                "BACKEND",
+            );
+            return Err(err.context("starting CPU autotune controller"));
+        }
+    };
     crate::diagnostics::set_phase(seine_telemetry::RunPhase::Mining);
     let result = match cfg.mode {
         MiningMode::Daemon => {
