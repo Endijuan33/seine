@@ -140,3 +140,11 @@ Dashboard owns panel interpretation; RAM owns capacity planning; huge pages owns
 | benchmark Blocknet miner; seine benchmark | `/blog/benchmark-seine-miner/` | Run repeatable local measurements, save JSON reports and compare matched workloads | Blocknet mining, seine, bntpool |
 
 Hardware owns chip selection and measured rankings; autotuning owns runtime decisions; hashrate on bntpool owns units and pool estimation. This article owns the benchmark procedure and comparison record. No URL is retargeted.
+
+## CPU usage and mining fees (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job | Supporting phrases |
+|---|---|---|---|
+| miner not using 100% CPU; Blocknet CPU usage | `/blog/miner-cpu-usage/` | Interpret OS utilization alongside active mining threads, local work and jobs before changing settings | Blocknet mining, seine, bntpool |
+
+Autotuning owns the search algorithm, RAM owns capacity and benchmarks own repeatable testing. This guide owns the diagnostic sequence for a CPU-utilization observation. No URL is retargeted.

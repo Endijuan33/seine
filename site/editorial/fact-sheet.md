@@ -597,3 +597,17 @@ actual command output, capture provenance and failure-case checks.
   coinbase maturity rule also uses a depth of 60; a later payout transaction has
   its own receipt and spendability state. Five hours is target arithmetic only.
 - Full source pins and verification: `research/benchmarks-and-confirmations-2026-10-26.md`.
+
+## CPU utilization and separate fee stages (October 26, 2026)
+
+- OS CPU utilization, local device H/s and pool-estimated address hashrate are
+  separate observations. Active hashing threads differ from process threads;
+  each active CPU mining thread uses a 2 GiB arena. Low utilization alone does
+  not demonstrate a memory-bandwidth bottleneck or a need for more threads.
+- Public seine v0.2.36 documents 2% developer mining time across pools and solo,
+  with the first 10 minutes excluded. Scheduling rounds mean a short window
+  need not match 2% exactly. bntpool separately reported a 0% pool fee on this date.
+- For gross estimates, retained fractions multiply. Do not apply a miner-time
+  factor again when the input already reflects it; confirmed balances and
+  recorded payments must not have the same fees deducted a second time.
+- Full sources and boundaries: `research/cpu-usage-and-fees-2026-10-26.md`.
