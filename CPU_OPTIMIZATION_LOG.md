@@ -4390,3 +4390,32 @@ including explicit dispatch, dirty arena reuse and streaming boundary guards.
 Only the R8D2 platform predicate changes from Linux to Linux-or-Windows; the
 Linux specialization and implementation body are unchanged. Public raw evidence
 and reproduction instructions: `experiments/genoa-windows-fences-20261026/`.
+
+## 2026-10-26: Sapphire Rapids streaming startup (research, not landed)
+
+The completed native Linux m7i.8xlarge discovery triplet used official v0.2.31,
+Longhorn e2f4faf and NTMminer 1.2.2. All 59,967 captured hashes, including the
+120-second preflight, independently verified. In the 900-second cold window,
+Seine delivered 20.4967 useful H/s, Longhorn 16.1733 and NTMminer 26.0044.
+This is one discovery triplet, not a confidence-qualified superiority claim.
+The original rental was terminated immediately after capture.
+
+Seine started at 16 workers, reached 32 at 534 seconds, and tried only AVX-512
+and AVX2. A post-hoc 600–850-second diagnostic window measured 22.172 gross H/s
+for Seine, 25.652 for Longhorn and 26.084 for NTMminer. Previous fixed-kernel
+measurements reached 26.0 H/s on this instance class with streaming, but used
+explicit huge pages. These observations motivate a native experiment; they do
+not prove a new default on THP.
+
+This isolated candidate starts at 32 workers on the exact native Linux Intel
+Xeon Platinum 8488C host (GenuineIntel family 6/model 8Fh, 32 logical/16 physical
+cores, 120–130 GiB), only with automatic page mode and placement, one CPU
+backend, enough resource capacity, and a throughput profile. The startup kernel
+requires runtime-supported instructions and actual full THP backing at 32
+workers. Existing caches and normal productive comparisons retain precedence;
+unsupported, neighboring, mixed-page and efficiency contexts keep their previous
+behavior. No new hash implementation is introduced. Native baseline/candidate
+measurement is pending; this branch must not ship without that result.
+
+Evidence: local campaign `native-linux-intel-latest/series-summary.json` and
+`comparison-diagnostics/intel-latest-startup-decomposition.json`.

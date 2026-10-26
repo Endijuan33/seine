@@ -129,6 +129,36 @@ pub(super) fn full_count_cold_start(
         && memory_capacity >= 32
 }
 
+// Research policy: exact native Sapphire Rapids host from the discovery capture.
+// Keep isolated until the paired native startup experiment completes.
+pub(super) fn sapphire_full_count_cold_start(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    max: usize,
+    memory_capacity: usize,
+) -> bool {
+    identity.vendor.as_deref() == Some("GenuineIntel")
+        && identity.family == Some(6)
+        && identity.model == Some(0x8f)
+        && host.cpu_brand.as_deref() == Some("Intel(R) Xeon(R) Platinum 8488C")
+        && host.os == "linux"
+        && host.runtime_environment == "native"
+        && host.logical_cores == 32
+        && host.physical_cores == Some(16)
+        && (120 * 1024_u64.pow(3)..=130 * 1024_u64.pow(3)).contains(&host.total_memory_bytes)
+        && cfg.backend_specs.len() == 1
+        && instances(cfg) == 1
+        && cfg.backend_specs[0]
+            .cpu_affinity
+            .is_none_or(|affinity| affinity == crate::config::CpuAffinityMode::Auto)
+        && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
+        && cfg.cpu_page_mode == crate::config::CpuPageMode::Auto
+        && cfg.cpu_affinity == crate::config::CpuAffinityMode::Auto
+        && max == 32
+        && memory_capacity >= 32
+}
+
 fn initial_threads(
     record: Option<&CpuAutotuneRecord>,
     min: usize,
@@ -229,13 +259,19 @@ fn prepare_with_resources(
         }
     };
     let full_count = seed.is_none()
-        && full_count_cold_start(
+        && (full_count_cold_start(
             cfg,
             &cpu_autotune_host_fingerprint(),
             &crate::runtime_identity::cpu_identity(),
             max,
             memory_capacity,
-        );
+        ) || sapphire_full_count_cold_start(
+            cfg,
+            &cpu_autotune_host_fingerprint(),
+            &crate::runtime_identity::cpu_identity(),
+            max,
+            memory_capacity,
+        ));
     let threads = initial_threads(
         seed.as_ref(),
         min,
@@ -2361,6 +2397,91 @@ mod tests {
         cfg.backend_specs[0].cpu_affinity = None;
         cfg.backend_specs.push(cfg.backend_specs[0].clone());
         assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 32));
+    }
+
+    #[test]
+    fn sapphire_full_count_seed_requires_exact_native_host_and_configuration() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("Intel(R) Xeon(R) Platinum 8488C".into()),
+            logical_cores: 32,
+            physical_cores: Some(16),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("GenuineIntel".into()),
+            family: Some(6),
+            model: Some(0x8f),
+            stepping: Some(1),
+        };
+        assert!(sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
+        let mut windows = host.clone();
+        windows.os = "windows".into();
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &windows, &identity, 32, 32
+        ));
+        for (vendor, family, model) in [
+            ("AuthenticAMD", 6, 0x8f),
+            ("GenuineIntel", 7, 0x8f),
+            ("GenuineIntel", 6, 0x8e),
+        ] {
+            let mut other = identity.clone();
+            other.vendor = Some(vendor.into());
+            other.family = Some(family);
+            other.model = Some(model);
+            assert!(!sapphire_full_count_cold_start(&cfg, &host, &other, 32, 32));
+        }
+        for field in ["brand", "os", "runtime", "logical", "physical", "memory"] {
+            let mut other = host.clone();
+            match field {
+                "brand" => other.cpu_brand = Some("AMD EPYC 9354P".into()),
+                "os" => other.os = "macos".into(),
+                "runtime" => other.runtime_environment = "wsl2".into(),
+                "logical" => other.logical_cores = 64,
+                "physical" => other.physical_cores = Some(32),
+                "memory" => other.total_memory_bytes = 64 * 1024_u64.pow(3),
+                _ => unreachable!(),
+            }
+            assert!(
+                !sapphire_full_count_cold_start(&cfg, &other, &identity, 32, 32),
+                "{field}"
+            );
+        }
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 24, 32
+        ));
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 24
+        ));
+        cfg.cpu_profile = CpuPerformanceProfile::Efficiency;
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
+        cfg.cpu_profile = CpuPerformanceProfile::Throughput;
+        assert!(sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
+        cfg.cpu_page_mode = CpuPageMode::Regular;
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
+        cfg.cpu_page_mode = CpuPageMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = Some(crate::config::CpuAffinityMode::Off);
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.backend_specs.push(cfg.backend_specs[0].clone());
+        assert!(!sapphire_full_count_cold_start(
+            &cfg, &host, &identity, 32, 32
+        ));
     }
 
     #[test]

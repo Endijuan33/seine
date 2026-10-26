@@ -128,6 +128,24 @@ fn genoa_stream_startup(
         )
 }
 
+// Research only: enable the existing streaming path on the exact Linux 8488C
+// context whose cold trace omitted it. Native comparison precedes landing.
+fn sapphire_stream_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> bool {
+    supported.contains(&CpuKernel::Avx512256Stream)
+        && super::adaptive_cpu::sapphire_full_count_cold_start(
+            cfg,
+            host,
+            identity,
+            32,
+            cfg.cpu_auto_threads_cap,
+        )
+}
+
 fn genoa_stream_context(context: &Context) -> bool {
     context.members.len() == 1
         && context.workers == [32]
@@ -417,6 +435,7 @@ pub(super) struct Tuner {
     startup: Option<CpuKernel>,
     genoa_startup: bool,
     windows_genoa_startup: bool,
+    sapphire_startup: bool,
 }
 
 impl Tuner {
@@ -438,6 +457,10 @@ impl Tuner {
         // gates. Only synthetic fixtures opt into an identity-neutral tuner.
         let supported = supported_kernels();
         let mut candidates = candidates_for(identity, &supported);
+        let sapphire_startup = sapphire_stream_startup(cfg, &host, identity, &supported);
+        if sapphire_startup {
+            candidates.push(CpuKernel::Avx512256Stream);
+        }
         let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
         // Native ring/depth screen: retain the old streaming path as a challenger.
@@ -450,7 +473,7 @@ impl Tuner {
         }
         let startup = if ring_startup {
             Some(CpuKernel::Avx512256StreamR8D2)
-        } else if genoa_startup || windows_genoa_startup {
+        } else if genoa_startup || windows_genoa_startup || sapphire_startup {
             Some(CpuKernel::Avx512256Stream)
         } else {
             startup_kernel_for(identity, &candidates)
@@ -488,6 +511,9 @@ impl Tuner {
                 } else {
                     ";frontier_policy=genoa-thp31-32-stream-first-v1"
                 });
+            }
+            if sapphire_startup {
+                configuration.push_str(";startup=sapphire8488c-32-thp-v1");
             }
             if genoa_startup {
                 configuration.push_str(";startup=genoa-32-thp-v1");
@@ -568,6 +594,7 @@ impl Tuner {
             startup,
             genoa_startup,
             windows_genoa_startup,
+            sapphire_startup,
         }
     }
 
@@ -795,7 +822,7 @@ impl Tuner {
                 }
                 if let Some(kernel) = self.startup.filter(|k| {
                     self.candidates.contains(k)
-                        && if self.genoa_startup {
+                        && if self.genoa_startup || self.sapphire_startup {
                             genoa_stream_context(&context)
                         } else if self.windows_genoa_startup {
                             windows_genoa_stream_context(&context)
@@ -2224,6 +2251,72 @@ mod tests {
         cfg.cpu_auto_threads_cap = 32;
         host.runtime_environment = "wsl2".into();
         assert!(!genoa_stream_startup(&cfg, &host, &identity, &paths));
+    }
+
+    #[test]
+    fn experimental_sapphire_startup_requires_full_count_host_and_supported_path() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let mut host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("Intel(R) Xeon(R) Platinum 8488C".into()),
+            logical_cores: 32,
+            physical_cores: Some(16),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("GenuineIntel".into()),
+            family: Some(6),
+            model: Some(0x8f),
+            stepping: Some(1),
+        };
+        let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
+        assert!(sapphire_stream_startup(&cfg, &host, &identity, &paths));
+        assert!(!sapphire_stream_startup(
+            &cfg,
+            &host,
+            &identity,
+            &paths[..1]
+        ));
+        cfg.threads = 24;
+        assert!(sapphire_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 24;
+        assert!(!sapphire_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.cpu_auto_threads_cap = 32;
+        host.runtime_environment = "wsl2".into();
+        assert!(!sapphire_stream_startup(&cfg, &host, &identity, &paths));
+    }
+
+    #[test]
+    fn sapphire_startup_requires_actual_full_thp_context() {
+        for backing in [
+            [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0],
+            [0, 0, 31 * CPU_LANE_MEMORY_BYTES, CPU_LANE_MEMORY_BYTES, 0],
+            [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0],
+        ] {
+            let mut t = three_path_tuner();
+            t.sapphire_startup = true;
+            t.startup = Some(CpuKernel::Avx512256Stream);
+            let mut s = snapshot();
+            s.threads = 32;
+            s.backing_bytes = backing;
+            s.kernel = CpuKernel::Avx512;
+            let action = t.tick(1, &[s], true, true);
+            assert_eq!(
+                action.kernel,
+                (backing[2] == 32 * CPU_LANE_MEMORY_BYTES).then_some(CpuKernel::Avx512256Stream)
+            );
+            assert!(
+                t.cache.winners.is_empty(),
+                "a startup hint is not a confirmed winner"
+            );
+        }
     }
 
     #[test]
