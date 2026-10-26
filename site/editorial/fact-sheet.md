@@ -611,3 +611,19 @@ actual command output, capture provenance and failure-case checks.
   factor again when the input already reflects it; confirmed balances and
   recorded payments must not have the same fees deducted a second time.
 - Full sources and boundaries: `research/cpu-usage-and-fees-2026-10-26.md`.
+
+## Windows sign-in startup and multiple computers (October 26, 2026)
+
+- Public v0.2.36 defaults to `./seine-data` relative to the working directory,
+  with connection settings in `seine.config.json`. Use an absolute `--data-dir`
+  and correct scheduler working directory to preserve a working installation.
+- Existing saved rig names are not rewritten by a CLI override; keep the explicit
+  `--pool-worker` value in subsequent launch commands when overriding a copied
+  configuration. Source: v0.2.36 `src/config.rs:858–910,2445–2483`.
+- Task Scheduler ignore-new applies to the same scheduled task, not separately
+  started miners. A sign-in task runs in the selected user's session; disabling
+  the task does not stop an existing miner.
+- Several computers can use the same receiving address with different rig names.
+  Pool history groups by address/name; old shares keep their original name after
+  renaming. Rewards are accounted by address, not separate balances per rig.
+- Primary links and pinned pool source: [batch research](research/windows-startup-and-multiple-miners-2026-10-26.md).

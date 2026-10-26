@@ -148,3 +148,11 @@ Hardware owns chip selection and measured rankings; autotuning owns runtime deci
 | miner not using 100% CPU; Blocknet CPU usage | `/blog/miner-cpu-usage/` | Interpret OS utilization alongside active mining threads, local work and jobs before changing settings | Blocknet mining, seine, bntpool |
 
 Autotuning owns the search algorithm, RAM owns capacity and benchmarks own repeatable testing. This guide owns the diagnostic sequence for a CPU-utilization observation. No URL is retargeted.
+
+## Windows startup and multiple miners (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| start miner automatically Windows; Blocknet Task Scheduler | `/blog/start-miner-automatically-windows/` | Configure and verify sign-in startup for an already working Windows miner |
+
+Windows setup owns installation; server setup owns Linux systemd; updating owns release replacement. No existing URL is retargeted.
