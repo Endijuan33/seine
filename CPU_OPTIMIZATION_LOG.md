@@ -2,6 +2,30 @@
 
 This log tracks CPU backend/hash-kernel tuning attempts and measured outcomes.
 
+## 2026-10-26 cohort defaults: Zen 4/5 streaming everywhere, AVX2 streaming for Zen 2/3
+
+Native Cherry bare metal, release v0.2.36 vs candidate, `--bench-kind backend`, fixed
+counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
+`benchmark-evidence/hashrate-20261026/` (workspace). One line per experiment:
+
+| Hypothesis | Host | Δ | Verdict |
+|---|---|---|---|
+| Streaming beats `avx512` at the tuned count on Zen 5 desktop | Ryzen 7 9700X, 15 workers | 9.65 vs 7.37 H/s, **+31%** | adopted: cohort default (Zen 4/5, ≥8 workers, incl. fixed `--threads`) |
+| R8D2 / R64D3 demand-fence variants beat plain streaming there | 9700X, 15 workers | 9.53 / 9.59 vs 9.65 | rejected for this cohort (no change) |
+| AVX2 ring + NT stores (`avx2-stream`) beats `avx2` on Zen 3 | EPYC 7443P, 12 workers | 14.76 vs 9.97, **+48%** | adopted for Zen 3 (family 19h without AVX-512) |
+| Same, high count | 7443P, 24 workers | 13.54 vs 8.23, +65% | confirms |
+| Replace demand MFENCE with SFENCE every 32 blocks | 7443P, 12 / 24 workers | ±0.5% / +0.9% | adopted for `avx2-stream` (same-core NT store→load parity verified) |
+| Drop software prefetch in `avx2-stream` | 7443P, 12 / 24 / 30 workers | −14.9% / +8.8% / +6% | rejected: best-point gain ~3% at 2× RAM |
+| `avx2-stream` beats `avx2` on Zen 2 | EPYC 7R32 (c5a.8xlarge), 16 / 28 workers | 17.16 vs 10.27 (**+67%**) / 15.98 vs 9.26 (+73%) | adopted for Zen 2 (family 17h, model ≥ 30h); full 2 GiB parity |
+| Prefetch depth 3 instead of 7 in `avx2-stream` | EPYC 7R32, 16 / 28 workers | +0.1% / −7.0% | rejected; depth 7 kept |
+| Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
+
+Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
+non-temporal-store miner without a cached ring reached 19.0 H/s at 24 workers on the same
+host; bench round fences drop 4-8% as late hashes at these counts. Zen 1/Zen+ (family 17h
+below model 30h) is not enabled: no native evidence. A local WSL screen was invalid
+(agent cgroup throttling) and is excluded.
+
 ## 2026-10-25 joint tuner interruption diagnostics
 
 The native Windows EPYC 9R14 comparison exposed an observability gap: an inner
@@ -315,7 +339,7 @@ explicit opt-out check. Runner: `run_lifecycle_merged.py`.
 
 ## Newest-first index
 
-- `2026-10-26 cohort defaults: Zen 4/5 streaming everywhere, AVX2 streaming for Zen 3`
+- `2026-10-26 cohort defaults: Zen 4/5 streaming everywhere, AVX2 streaming for Zen 2/3`
 - `2026-10-25 native Ice Lake: the x86 regression follows function layout`
 - `2026-10-24 parked CPU worker task budgets and spawn failure recovery`
 - `2026-10-24 streaming-store kernel integration on validated EPYC`
@@ -1096,28 +1120,6 @@ count-dependent path selection; actual gains are decided on each mining host.
   and its dedicated local SSH private key removed. No benchmark VM is retained.
   Observed Spot compute pricing was $0.5276/hour (about $0.35 for this run,
   before storage/network charges); the request ceiling was $0.60/hour.
-
-## 2026-10-26 cohort defaults: Zen 4/5 streaming everywhere, AVX2 streaming for Zen 3
-
-Native Cherry bare metal, release v0.2.36 vs candidate, `--bench-kind backend`, fixed
-counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
-`benchmark-evidence/hashrate-20261026/` (workspace). One line per experiment:
-
-| Hypothesis | Host | Δ | Verdict |
-|---|---|---|---|
-| Streaming beats `avx512` at the tuned count on Zen 5 desktop | Ryzen 7 9700X, 15 workers | 9.65 vs 7.37 H/s, **+31%** | adopted: cohort default (Zen 4/5, ≥8 workers, incl. fixed `--threads`) |
-| R8D2 / R64D3 demand-fence variants beat plain streaming there | 9700X, 15 workers | 9.53 / 9.59 vs 9.65 | rejected for this cohort (no change) |
-| AVX2 ring + NT stores (`avx2-stream`) beats `avx2` on Zen 3 | EPYC 7443P, 12 workers | 14.76 vs 9.97, **+48%** | adopted for Zen 3 (family 19h without AVX-512) |
-| Same, high count | 7443P, 24 workers | 13.54 vs 8.23, +65% | confirms |
-| Replace demand MFENCE with SFENCE every 32 blocks | 7443P, 12 / 24 workers | ±0.5% / +0.9% | adopted for `avx2-stream` (same-core NT store→load parity verified) |
-| Drop software prefetch in `avx2-stream` | 7443P, 12 / 24 / 30 workers | −14.9% / +8.8% / +6% | rejected: best-point gain ~3% at 2× RAM |
-| Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
-
-Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
-non-temporal-store miner without a cached ring reached 19.0 H/s at 24 workers on the same
-host; bench round fences drop 4-8% as late hashes at these counts. Zen 2 (family 17h) is
-not yet enabled for `avx2-stream`: no native evidence. A local WSL screen was invalid
-(agent cgroup throttling) and is excluded.
 
 ## 2026-10-24 automatic Linux L3 placement: worker-only EPYC validation
 

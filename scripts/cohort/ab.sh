@@ -3,6 +3,7 @@
 # Usage: scripts/cohort/ab.sh <lease-name> <out-dir> <baseline-dir> <candidate-dir> <remote-step>...
 # Each build dir holds seine and verify_cpu_kernels. Remote steps run in order on
 # the host from /opt/cohort as root, e.g. "remote_bin_ab.sh depth avx2-stream 12 24".
+# Optional EXTRA_DIR (for example competitor binaries) is uploaded as /opt/cohort/extra.
 # The lease is deleted on exit; its systemd timer remains the backstop.
 set -euo pipefail
 if [ -z "${COHORT_RUN_COPY:-}" ]; then  # run from a private copy (safe to edit mid-run)
@@ -30,6 +31,7 @@ mkdir -p "$stage/baseline" "$stage/candidate"
 cp "$BASE"/seine "$BASE"/verify_cpu_kernels "$stage/baseline/"
 cp "$CAND"/seine "$CAND"/verify_cpu_kernels "$stage/candidate/"
 cp "$HERE"/remote_*.sh "$stage/"
+if [ -n "${EXTRA_DIR:-}" ]; then cp -r "$EXTRA_DIR" "$stage/extra"; fi
 retry bash -c "tar -C '$stage' -czf - . | $(printf '%q ' "${SSH[@]}") 'mkdir -p /opt/cohort && tar -C /opt/cohort -xzf -'"
 id bench >/dev/null 2>&1 || true
 STEPS=$(printf '%s; ' "$@")

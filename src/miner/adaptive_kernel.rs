@@ -89,8 +89,10 @@ fn candidates_for(
 
 /// The streaming kernel for an AMD microarchitecture cohort, if validated.
 /// Zen 4 (family 19h with AVX-512) and Zen 5 (family 1Ah) use the AVX-512 path.
-/// Zen 3 (family 19h without AVX-512) uses the AVX2 path. Callers always
-/// intersect with runtime-detected kernels, so ISA support is never assumed.
+/// Zen 3 (family 19h without AVX-512) and Zen 2 (family 17h, model 30h and up)
+/// use the AVX2 path: native EPYC 7443P +48% and EPYC 7R32 +67% over AVX2.
+/// Zen 1/Zen+ (17h below 30h) is unmeasured. Callers always intersect with
+/// runtime-detected kernels, so ISA support is never assumed.
 fn cohort_stream_kernel(
     identity: &crate::runtime_identity::CpuIdentity,
     supported: &[CpuKernel],
@@ -103,6 +105,12 @@ fn cohort_stream_kernel(
             Some(CpuKernel::Avx512256Stream)
         }
         Some(0x19) if supported.contains(&CpuKernel::Avx2Stream) => Some(CpuKernel::Avx2Stream),
+        Some(0x17)
+            if identity.model.is_some_and(|m| m >= 0x30)
+                && supported.contains(&CpuKernel::Avx2Stream) =>
+        {
+            Some(CpuKernel::Avx2Stream)
+        }
         _ => None,
     }
 }
@@ -2475,14 +2483,23 @@ mod tests {
             candidates_for(&milan, &avx2_only),
             [CpuKernel::Avx2, CpuKernel::Avx2Stream]
         );
-        // Zen 2 (family 17h) is not yet validated natively.
+        // Zen 2 (family 17h, model 30h and up) shares the AVX2 streaming path.
         let rome = CpuIdentity {
             family: Some(0x17),
             model: Some(0x31),
             ..raphael.clone()
         };
-        assert_eq!(static_kernel_for_identity(&rome, &avx2_only, 32), None);
-        assert_eq!(candidates_for(&rome, &avx2_only), [CpuKernel::Avx2]);
+        assert_eq!(
+            static_kernel_for_identity(&rome, &avx2_only, 32),
+            Some(CpuKernel::Avx2Stream)
+        );
+        // Zen 1/Zen+ (17h below 30h) is not yet validated natively.
+        let naples = CpuIdentity {
+            model: Some(0x01),
+            ..rome.clone()
+        };
+        assert_eq!(static_kernel_for_identity(&naples, &avx2_only, 32), None);
+        assert_eq!(candidates_for(&naples, &avx2_only), [CpuKernel::Avx2]);
         let intel = CpuIdentity {
             vendor: Some("GenuineIntel".into()),
             ..masked_zen5.clone()

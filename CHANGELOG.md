@@ -9,7 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
-- **About 48% faster CPU hashing on AMD Zen 3 processors** (measured on EPYC 7443P) with a new memory-streaming kernel.
+- **About 67% faster CPU hashing on AMD Zen 2 processors (measured on EPYC 7R32) and about 48% faster on Zen 3 (measured on EPYC 7443P)** with a new memory-streaming kernel.
 - **About 31% faster for miners who set `--threads` on AMD Ryzen 9000** (measured on Ryzen 7 9700X): fixed thread counts on AMD Zen 4 and Zen 5 CPUs now use the streaming kernel, and automatic tuning now starts from it on every Zen 4 and Zen 5 model.
 - Seine now suggests removing `--threads` when the setting leaves more than half of the machine's cores and free memory unused.
 - Slightly faster CPU hashing on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages, with saved tuning preserved.
