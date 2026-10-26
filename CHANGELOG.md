@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+- **Faster CPU hashing on 32-core AMD EPYC 9R14 Linux systems using transparent huge pages.**
+
 ## v0.2.31
 
 - **Improved NVIDIA driver compatibility:** avoid a startup failure caused by a missing driver symbol on some older CUDA 12 drivers.

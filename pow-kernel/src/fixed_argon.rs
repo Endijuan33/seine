@@ -195,10 +195,12 @@ impl FixedArgon2id {
             ISA_AVX512 => self.fill_blocks::<ISA_AVX512, true, false>(memory_blocks),
             ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
-            ISA_AVX512_256_STREAM => unsafe { self.fill_streaming_ring::<64, 3>(memory_blocks) },
+            ISA_AVX512_256_STREAM => unsafe {
+                self.fill_streaming_ring::<64, 3, false>(memory_blocks)
+            },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
-                self.fill_streaming_ring::<8, 2>(memory_blocks)
+                self.fill_streaming_ring::<8, 2, { cfg!(target_os = "linux") }>(memory_blocks)
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
@@ -211,11 +213,16 @@ impl FixedArgon2id {
     }
 
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
-    // The ring serves recent references until a whole batch of streaming writes is
-    // fenced. At cur % RING == 0 all older arena references are committed.
+    // Periodic mode fences every ring wrap. Linux R8/D2 uses the measured
+    // reference-demand policy: fence before reading an uncommitted arena block.
+    // Recent references stay in the ring; finalization always fences.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,avx512f,avx512vl")]
-    unsafe fn fill_streaming_ring<const RING: usize, const DEPTH: usize>(
+    unsafe fn fill_streaming_ring<
+        const RING: usize,
+        const DEPTH: usize,
+        const DEMAND_FENCE: bool,
+    >(
         &self,
         memory: &mut [PowBlock],
     ) {
@@ -230,13 +237,14 @@ impl FixedArgon2id {
         let cache = ring.as_mut_ptr();
         debug_assert_eq!(arena as usize % 64, 0);
         debug_assert_eq!(cache as usize % 64, 0);
+        let mut committed_end = 2; // Seeds use ordinary stores.
         for slice in 0..SYNC_POINTS {
             let first = if slice == 0 { 2 } else { 0 };
             let di = slice < 2;
             let base = slice * self.segment_length;
             for block in first..self.segment_length {
                 let cur = base + block;
-                if cur & mask == 0 {
+                if !DEMAND_FENCE && cur & mask == 0 {
                     // MFENCE orders prior WC stores before subsequent arena loads.
                     _mm_mfence();
                 }
@@ -248,10 +256,16 @@ impl FixedArgon2id {
                 };
                 debug_assert!(reference < cur - 1);
                 // A distance of exactly RING aliases the output slot, so use the
-                // already-fenced arena in that case, never the cached ring.
+                // arena in that case, never the cached ring. Fence first if needed.
                 let reference_ptr = if cur - reference < RING {
                     cache.add(reference & mask)
                 } else {
+                    if DEMAND_FENCE && reference >= committed_end {
+                        // MFENCE makes prior NT stores in 2..cur visible before
+                        // this arena load. SFENCE would not order store-to-load.
+                        _mm_mfence();
+                        committed_end = cur;
+                    }
                     arena.add(reference)
                 };
                 let dst = cache.add(cur & mask);

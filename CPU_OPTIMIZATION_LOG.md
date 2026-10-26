@@ -4288,3 +4288,47 @@ Raw reports, memory admission, source identities and independent verification
 are retained under workspace
 `benchmark-evidence/longhorn-20261025/native-linux-amd-headroom-depth/ring-publication/campaign/`.
 No code/default change, release or public performance headline follows.
+
+
+## 2026-10-26: demand-triggered streaming fences on native Genoa Linux
+
+A fixed eight-block ring previously imposed MFENCE at every wrap. The new
+policy retains the ring and depth-two prefetch but tracks the committed arena
+prefix. Recent references use the cached ring; an older reference into pending
+non-temporal stores fences before loading and advances the committed prefix.
+The final arena read always retains MFENCE. SFENCE is not a substitute for this
+store-to-load ordering. Seeds use ordinary stores, and a reference exactly one
+ring-length back uses the arena to avoid aliasing the output slot.
+
+On native Linux EPYC 9R14 / m7a.8xlarge, 32 physical cores, 128 GiB RAM and
+64 GiB of measured THP backing, the frozen research screen improved **3.024%**
+in both interleaved 20-second pairs. Three fresh 30-second confirmation pairs
+measured **44.17659 to 45.30134 H/s**, **+2.5460%**, with paired bootstrap 95%
+interval **[+2.5262%, +2.5792%]** and all three pairs faster. Allocation and
+five-second warmup are excluded. This is a same-host offline kernel comparison,
+not a cold-start, pool, power-efficiency or universal hardware claim.
+
+Baseline research revision `633752a` has binary SHA-256
+`640104a55bb6367f4aa0d39b33afdfeb3e054b667c8c0128339dbbaefa637f49`.
+Candidate research revision `de967b5` has SHA-256
+`131259d9ad7413fd3ea2edece00250f72b18a14d06741deec3f464ee9a9994a2`.
+All **11,870 timed hashes** independently matched libargon2, including fourteen
+new reference inputs computed on the native M4 Max. Twelve full-size RustCrypto
+checks passed before timing; 360 reduced checks cover dirty reuse and ring/slice
+boundaries. The rental was terminated immediately after collection, with root
+volume and security-group cleanup verified.
+
+Integration limits the new fence policy to the existing Linux R8/D2 kernel.
+Its precise Genoa automatic-selection and independent ISA gates are unchanged;
+other streaming variants and Windows retain their periodic fences. The changed
+source fingerprint prevents reuse of old timing proof. The existing kernel
+selection/reference and dirty-reuse tests exercise the integrated dispatcher;
+the full-size dispatch example now includes R8/D2 explicitly. Native Windows
+MSVC research separately passed 360 reduced checks, six full-size checks and
+three independently verified smoke hashes, but Windows performance is unmeasured.
+
+Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
+`native-linux-amd-demand-fence/ring-publication/campaign/`,
+`demand-fence-reference/` and `windows-demand-fence-build/`.
+Ring-size interaction experiments are separate and do not alter this frozen
+comparison or justify extrapolating its gain.
