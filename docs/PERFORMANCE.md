@@ -101,6 +101,13 @@ change ships in v0.2.32. Cold-start, pool throughput and energy results are sepa
 The earlier ring-size improvement remains documented in the
 [previous confirmation](../experiments/genoa-ring-20261026/README.md).
 
+On native Windows Server 2025, the same EPYC 9R14 instance class measured
+**33.70 H/s versus 32.84 H/s** with ordinary pages at 32 threads: **+2.61%**
+from the Windows fence improvement in v0.2.33. Three fresh alternating
+30-second pairs gave a paired 95% interval of +2.19% to +2.99%; all 8,936
+timed hashes across screening and confirmation verified independently.
+[Windows method and raw reports](../experiments/genoa-windows-fences-20261026/README.md).
+
 Other rows use 32-vCPU AWS instances with explicit 2 MiB huge pages, swept
 across kernels and thread counts, with four timed runs at the winning setting.
 Their raw results and method remain in the

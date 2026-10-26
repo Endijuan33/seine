@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.33
+
 - Faster CPU hashing on 32-core AMD EPYC 9R14 Windows systems using ordinary memory pages.
 
 ## v0.2.32

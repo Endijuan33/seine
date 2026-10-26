@@ -4384,3 +4384,9 @@ precise hardware, runtime ISA, thread-count, backing and tuning gates; other
 kernel specializations remain unchanged. The rental terminated at 9:13 AM EDT,
 with root volume, security group and local key cleanup verified. Evidence:
 local campaign `native-windows-amd-demand-fence/demand-fence/campaign/`.
+
+Integration verification: all eight native Windows MSVC kernel tests passed,
+including explicit dispatch, dirty arena reuse and streaming boundary guards.
+Only the R8D2 platform predicate changes from Linux to Linux-or-Windows; the
+Linux specialization and implementation body are unchanged. Public raw evidence
+and reproduction instructions: `experiments/genoa-windows-fences-20261026/`.
