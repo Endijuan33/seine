@@ -191,6 +191,12 @@ fn genoa_short_context(context: &Context) -> bool {
         && context.backing == [[0, 0, *workers as u64 * CPU_LANE_MEMORY_BYTES, 0, 0]]
 }
 
+// Native 9R14 cold pair gained 4.96% by prioritizing streaming on the first
+// sweep only. A saved winner makes subsequent periodic sweeps exhaustive again.
+fn genoa_frontier_context(context: &Context) -> bool {
+    genoa_short_context(context) && matches!(context.workers.as_slice(), [31 | 32])
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct Context {
     // Indices in the controller's stable CPU backend list. Different survivors
@@ -377,6 +383,7 @@ pub(super) struct Tuner {
     window_secs: u64,
     short_trials: bool,
     genoa_short_trials: bool,
+    genoa_startup_frontier: bool,
     candidates: Vec<CpuKernel>,
     // Remaining challengers for this count/backing. Cache only a complete sweep.
     pending: Vec<CpuKernel>,
@@ -427,7 +434,9 @@ impl Tuner {
         };
         let short_trials = short_trials_for(identity, &candidates, cfg.cpu_autotune_secs);
         let genoa_short_trials = genoa_short_trials_for(cfg, &host, identity, &candidates);
-        let configuration_for = |paths: &[CpuKernel], use_genoa_short: bool| {
+        let genoa_startup_frontier =
+            genoa_short_trials && candidates.contains(&CpuKernel::Avx512256StreamR8D2);
+        let configuration_for = |paths: &[CpuKernel], use_genoa_short: bool, frontier: bool| {
             let mut configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
             cfg.cpu_profile,
@@ -449,6 +458,9 @@ impl Tuner {
             if use_genoa_short {
                 configuration.push_str(";sample_policy=genoa-thp-30-32-10s-256-v1");
             }
+            if frontier {
+                configuration.push_str(";frontier_policy=genoa-thp31-32-stream-first-v1");
+            }
             if genoa_startup {
                 configuration.push_str(";startup=genoa-32-thp-v1");
             }
@@ -457,17 +469,20 @@ impl Tuner {
             }
             configuration
         };
-        let configuration = configuration_for(&candidates, genoa_short_trials);
+        let configuration =
+            configuration_for(&candidates, genoa_short_trials, genoa_startup_frontier);
         let prior_configuration = ring_startup.then(|| {
             let prior_paths: Vec<_> = candidates
                 .iter()
                 .copied()
                 .filter(|k| *k != CpuKernel::Avx512256StreamR8D2)
                 .collect();
-            configuration_for(&prior_paths, false)
+            configuration_for(&prior_paths, false, false)
         });
         let prior_sample_configuration =
-            genoa_short_trials.then(|| configuration_for(&candidates, false));
+            genoa_short_trials.then(|| configuration_for(&candidates, false, false));
+        let prior_frontier_configuration = genoa_startup_frontier
+            .then(|| configuration_for(&candidates, genoa_short_trials, false));
         let mut name = cfg.cpu_autotune_config_path.as_os_str().to_owned();
         name.push(".kernels.json");
         let path = std::path::PathBuf::from(name);
@@ -481,6 +496,9 @@ impl Tuner {
                 } else if prior_sample_configuration
                     .as_ref()
                     .is_some_and(|prior| record.compatible(&host, prior))
+                    || prior_frontier_configuration
+                        .as_ref()
+                        .is_some_and(|prior| record.compatible(&host, prior))
                 {
                     // A shorter future sample policy does not invalidate an
                     // already confirmed winner for this identical candidate set.
@@ -514,6 +532,7 @@ impl Tuner {
             window_secs: cfg.cpu_autotune_secs.saturating_mul(5).clamp(30, 60),
             short_trials,
             genoa_short_trials,
+            genoa_startup_frontier,
             candidates,
             pending: Vec::new(),
             settling: None,
@@ -784,11 +803,21 @@ impl Tuner {
                 return Action::default();
             }
             if self.pending.is_empty() {
+                let frontier = self.genoa_startup_frontier
+                    && genoa_frontier_context(&context)
+                    && !self.cache.winners.iter().any(|w| w.context == context);
                 self.pending = self
                     .candidates
                     .iter()
                     .copied()
                     .filter(|&k| k != base)
+                    .filter(|&k| {
+                        !frontier
+                            || matches!(
+                                k,
+                                CpuKernel::Avx512256Stream | CpuKernel::Avx512256StreamR8D2
+                            )
+                    })
                     .collect();
             }
             if self.pending.is_empty() {
@@ -1681,7 +1710,8 @@ mod tests {
                 .cache
                 .configuration
                 .replace("kernels=[Avx512256StreamR8D2, ", "kernels=[")
-                .replace(";sample_policy=genoa-thp-30-32-10s-256-v1", ""),
+                .replace(";sample_policy=genoa-thp-30-32-10s-256-v1", "")
+                .replace(";frontier_policy=genoa-thp31-32-stream-first-v1", ""),
             winners: vec![Winner {
                 context: context.clone(),
                 kernel: "avx512-256-stream".into(),
@@ -1721,6 +1751,7 @@ mod tests {
                     .configuration
                     .replace("kernels=[Avx512256StreamR8D2, ", "kernels=[")
                     .replace(";sample_policy=genoa-thp-30-32-10s-256-v1", "")
+                    .replace(";frontier_policy=genoa-thp31-32-stream-first-v1", "")
             } else {
                 "other-settings".into()
             };
@@ -1783,9 +1814,13 @@ mod tests {
         let current_configuration = first.cache.configuration.clone();
         // Both an already-shortened policy and the preceding longer-window
         // policy must retain the known winner when a restart uses 31 workers.
-        for prior_long_window in [false, true] {
-            first.cache.configuration = if prior_long_window {
-                current_configuration.replace(";sample_policy=genoa-thp-30-32-10s-256-v1", "")
+        for prior_policy in 0..3 {
+            first.cache.configuration = if prior_policy == 2 {
+                current_configuration
+                    .replace(";sample_policy=genoa-thp-30-32-10s-256-v1", "")
+                    .replace(";frontier_policy=genoa-thp31-32-stream-first-v1", "")
+            } else if prior_policy == 1 {
+                current_configuration.replace(";frontier_policy=genoa-thp31-32-stream-first-v1", "")
             } else {
                 current_configuration.clone()
             };
@@ -1818,6 +1853,52 @@ mod tests {
         assert_eq!(action.kernel, None);
         assert!(action.hold_counts);
         assert!(!genoa_stream_context(&context));
+    }
+
+    #[test]
+    fn genoa_frontier_is_initial_and_keeps_periodic_full_search() {
+        for (workers, huge, enabled, expected) in [
+            (32, true, true, CpuKernel::Avx512256Stream),
+            (31, true, true, CpuKernel::Avx512256Stream),
+            (30, true, true, CpuKernel::Avx512),
+            (32, false, true, CpuKernel::Avx512),
+            (32, true, false, CpuKernel::Avx512),
+        ] {
+            let mut t = tuner();
+            t.genoa_startup_frontier = enabled;
+            t.candidates = vec![
+                CpuKernel::Avx512,
+                CpuKernel::Avx2,
+                CpuKernel::Avx512256Stream,
+                CpuKernel::Avx512256StreamR8D2,
+            ];
+            let mut state = snapshot();
+            state.threads = workers;
+            state.kernel = CpuKernel::Avx512256StreamR8D2;
+            state.backing_bytes = [0; 5];
+            state.backing_bytes[if huge { 2 } else { 3 }] = workers as u64 * CPU_LANE_MEMORY_BYTES;
+            let context = Context::from_snapshots(&[state]);
+            t.tick(1, &[state], true, true);
+            assert_eq!(t.trial.as_ref().unwrap().candidate, expected);
+            if expected == CpuKernel::Avx512256Stream {
+                assert!(t.pending.is_empty());
+                let trial = t.trial.take().unwrap();
+                t.cache.winners.push(Winner {
+                    context: context.clone(),
+                    kernel: "avx512-256-stream-r8d2".into(),
+                    timestamp: unix_secs(),
+                    base: "avx512-256-stream-r8d2".into(),
+                    candidate: "avx512-256-stream".into(),
+                    samples: vec![sample(100); 3],
+                });
+                t.checked = Some(trial.context);
+                t.next_check = 0;
+                t.tick(RECHECK_SECS + 2, &[state], true, true);
+                assert_eq!(t.trial.as_ref().unwrap().candidate, CpuKernel::Avx512);
+                assert!(t.pending.contains(&CpuKernel::Avx2));
+            }
+            let _ = fs::remove_file(&t.path);
+        }
     }
 
     #[test]

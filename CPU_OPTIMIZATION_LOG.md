@@ -4068,3 +4068,47 @@ The separate steady-state publication phase passed full-size kernel parity
 but failed before timed hashing because its configuration directory was on a
 read-only mount. That harness failure is retained separately and provides no
 performance result. The completed miner pair remains valid.
+
+## 2026-10-26: prioritize streaming during native Genoa startup
+
+The verified 32/31-thread native Genoa traces repeatedly put AVX-512 and AVX2
+around 28–29 H/s while the improved streaming kernel produces 44–45 H/s.
+A scoped policy compares only the two streaming paths on the first
+sweep of a previously unmeasured 31/32-thread full-THP context. Once a winner
+is saved, periodic rechecks use all eligible kernels again. Other counts,
+page backing, hardware and explicit sample settings retain full searches.
+
+Prior confirmed cache entries survive both the original-window and the
+shorter-window policy upgrades. The cache context, age and sample-proof
+checks remain in place. The focused adaptive suite passed 103 tests, with
+five ignored, including restored prior-policy winners, scoped initial paths
+and the later exhaustive recheck.
+
+The predeclared native Linux EPYC 9R14 comparison used 32 physical cores,
+128 GiB RAM and full THP, with a fresh 600-second launch window per build.
+Baseline v0.2.28 (`eb97927`) delivered 41.6400 H/s; candidate `21c5292`
+delivered 43.7033 H/s, a **4.955% startup-throughput gain**. All 51,211
+captured hashes independently matched libargon2, with no invalid or duplicate
+results. The first confirmed worker-count decision moved from 315.6 to 167.8
+seconds. Both kept the 32-worker setting. The baseline also rejected one
+drifting comparison and later retried; the single pair does not isolate every
+source of variance or establish a confidence interval. This is not a sustained
+hashrate or long-run fee-adjusted claim.
+
+Evidence: workspace `benchmark-evidence/longhorn-20261025/`
+`native-linux-amd-frontier/` and
+`comparison-diagnostics/linux-startup-frontier.json`.
+
+## 2026-10-26: do not extend the Genoa ring setting to Zen 5
+
+On native Linux EPYC 9R45 (m8a.8xlarge, 32 physical cores, 128 GiB,
+32 workers with full THP), ring 8/depth 2 regressed against ring 64/depth 3.
+Three fresh interleaved 60-second confirmation pairs measured 49.4492 versus
+48.8690 H/s: **-1.173%**, paired bootstrap 95% interval [-1.250%, -1.084%],
+with the candidate slower in all three pairs. Full-size kernel reference
+parity passed first. Timings exclude allocation and warmup; measured-loop
+outputs were not individually exported. The separate two-pair screen was
+also slower and is retained separately. Keep automatic selection scoped to
+the measured Genoa contexts; this is a demonstrated regression, not merely
+an inconclusive improvement gate. Evidence: workspace campaign
+`native-linux-amd-zen5-ring/ring-publication/campaign/campaign.json`.

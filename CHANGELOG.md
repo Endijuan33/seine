@@ -9,6 +9,10 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.29
+
+- **Faster startup tuning on 32-core AMD EPYC 9R14 Linux systems with transparent huge pages.** Seine spends more time on proven fast settings while continuing to tune automatically and preserving saved tuning.
+
 ## v0.2.28
 
 - **Faster tuning on 32-core AMD EPYC 9R14 Linux systems with transparent huge pages.** Shorter comparisons spend less time on slower settings while preserving confirmed saved tuning.

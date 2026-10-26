@@ -104,6 +104,7 @@ set so stale caches from a different path get re-tuned, not reused.
 
 ## Release notes (`CHANGELOG.md`)
 
+- Never mention competitors; describe Seine improvements and supported hardware.
 - Write for miners deciding whether to upgrade: what improves, who benefits,
   and any action they need to take. Lead with the biggest user benefit; put
   measured hashrate gains and the affected hardware first when available.
