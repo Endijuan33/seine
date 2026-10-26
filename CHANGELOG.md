@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+- **Improved NVIDIA driver compatibility:** avoid a startup failure caused by a missing driver symbol on some older CUDA 12 drivers.
+
 ## v0.2.30
 
 - **Faster startup tuning on 32-core AMD EPYC 9R14 Windows systems using ordinary memory pages.** Seine spends more time on proven fast settings while continuing to tune automatically and preserving saved tuning.

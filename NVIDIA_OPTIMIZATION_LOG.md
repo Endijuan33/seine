@@ -246,3 +246,30 @@ Each row is an explicit attempt ID. IDs are chronological and map 1:1 to the app
 Copy this row and fill every field after each pass:
 
 `| YYYY-MM-DD | <commit or working tree> | <exact code/config change> | <benchmark reports + averaged H/s> | <Kept/Reverted + rationale> |`
+
+
+## 2026-10-26: CUDA driver loader compatibility (validation in progress)
+
+One native Windows v0.2.29 NVIDIA-only run reported initialization failure and a
+panic at cudarc 0.19.2 `driver/sys/mod.rs:21887`. The selected `cuda-12080`
+bindings eagerly require `cuEventElapsedTime_v2` while loading the driver, even
+though the CUDA 12 event-timing wrapper uses the original `cuEventElapsedTime`.
+The older v0.2.28 report at the same location continued hashing on its CPU.
+
+A synthetic driver fixture exports every generated symbol except that v2 event
+function. Its only called function, `cuInit`, returns CUDA_ERROR_NO_DEVICE.
+On both native Windows and Linux, the current CUDA 12.8 binding panics at exactly
+21887. Selecting the CUDA 12.0 driver ABI loads successfully and returns the
+expected ordinary no-device result. This reproduces the loader failure without
+assuming access to the affected user's driver. It is not a GPU mining test.
+
+The candidate changes only cudarc's selected ABI feature from `cuda-12080` to
+`cuda-12000`. The dependency version, CUDA kernels, GPU architecture selection
+and bundled Windows NVRTC 12.8 runtime are unchanged. The generic CUDA 12 NVRTC
+DLL name remains in the loader's candidate names. All 33 NVIDIA backend unit
+tests pass; the existing full-size GPU differential test is queued through gpuq
+and remains required before treating hardware validation as complete.
+
+Evidence: workspace `benchmark-evidence/longhorn-20261025/cuda-loader-probe/`;
+`result.json`, `windows-result.json`, generated synthetic fixture, build logs and
+`nvidia-tests.log`. This records compatibility evidence, not a hashrate gain.
