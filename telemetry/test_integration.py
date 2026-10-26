@@ -144,10 +144,28 @@ def diagnostic_report():
     value['installation_id'] = uuid.uuid4().hex
     value['report_id'] = uuid.uuid4().hex
     value['miner_version'] = 'diagnostics-fixture'
+    value['diagnostics']['previous_run_unclean'] = False
+    value['diagnostics'].pop('previous_run', None)
     return value
 
 valid_diagnostic = diagnostic_report()
 assert send(valid_diagnostic) == 204
+stored = json.loads(query(f"SELECT payload->'diagnostics' FROM telemetry_reports WHERE report_id='{valid_diagnostic['report_id']}'"))
+assert stored['events'][0]['detail']['os_error'] == 12
+assert stored['events'][0]['detail']['requested_bytes'] == 2147483648
+legacy_diagnostic = diagnostic_report()
+legacy_diagnostic['schema_version'] = 3
+legacy_diagnostic['diagnostics'].pop('phase')
+for event in legacy_diagnostic['diagnostics']['events']:
+    event.pop('detail', None)
+    event.pop('phase', None)
+assert send(legacy_diagnostic) == 204
+wrong_generation = diagnostic_report()
+wrong_generation['schema_version'] = 3
+assert send(wrong_generation) == 422
+private_detail = diagnostic_report()
+private_detail['diagnostics']['events'][0]['detail']['message'] = 'PRIVATE WALLET'
+assert send(private_detail) == 422
 private = diagnostic_report()
 private['diagnostics']['events'][0]['message'] = 'PRIVATE WALLET'
 assert send(private) == 422
@@ -190,4 +208,4 @@ for _ in range(5):
         insert(failure, hours)
 assert analysis('data_quality.sql')['status'] == 'ok'
 assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
-print('PASS: schema 3 diagnostics, early failures, private-data rejection, installation-weighted incident thresholds and periodic/final separation')
+print('PASS: schema 4 diagnostics, early failures, private-data rejection, installation-weighted incident thresholds and periodic/final separation')

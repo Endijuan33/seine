@@ -713,6 +713,10 @@ async fn run_pool_client_loop(
                                 let login_rejected = matches!(&event, PoolEvent::LoginRejected(_));
                                 let _ = event_tx.try_send(event);
                                 if login_rejected {
+                                    crate::diagnostics::record_failure(seine_telemetry::DiagnosticCode::Warning,
+                                        seine_telemetry::DiagnosticKind::Authentication, None,
+                                        seine_telemetry::FailureDetail::new(seine_telemetry::FailureReason::LoginRejected,
+                                            seine_telemetry::DiagnosticOperation::PoolLogin));
                                     reject_pending_submits(
                                         &event_tx,
                                         &mut pending_submits,
@@ -783,6 +787,15 @@ async fn connect_pool_tcp_stream(endpoint: &PoolEndpoint) -> Result<TokioTcpStre
     let addrs = resolve_pool_addrs(&endpoint.authority)
         .with_context(|| format!("failed to resolve pool endpoint {}", endpoint.display()))?;
     if addrs.is_empty() {
+        crate::diagnostics::record_failure(
+            seine_telemetry::DiagnosticCode::Warning,
+            seine_telemetry::DiagnosticKind::Connection,
+            None,
+            seine_telemetry::FailureDetail::new(
+                seine_telemetry::FailureReason::DnsFailed,
+                seine_telemetry::DiagnosticOperation::PoolResolve,
+            ),
+        );
         bail!(
             "pool endpoint resolved to no addresses: {}",
             endpoint.display()
@@ -790,6 +803,10 @@ async fn connect_pool_tcp_stream(endpoint: &PoolEndpoint) -> Result<TokioTcpStre
     }
 
     let mut last_err: Option<String> = None;
+    let mut failure = seine_telemetry::FailureDetail::new(
+        seine_telemetry::FailureReason::ConnectionFailed,
+        seine_telemetry::DiagnosticOperation::PoolConnect,
+    );
     for addr in addrs {
         match tokio::time::timeout(CONNECT_TIMEOUT, TokioTcpStream::connect(addr)).await {
             Ok(Ok(stream)) => {
@@ -797,14 +814,28 @@ async fn connect_pool_tcp_stream(endpoint: &PoolEndpoint) -> Result<TokioTcpStre
                 return Ok(stream);
             }
             Ok(Err(err)) => {
+                failure = crate::diagnostics::io_detail(
+                    seine_telemetry::DiagnosticOperation::PoolConnect,
+                    &err,
+                );
                 last_err = Some(err.to_string());
             }
             Err(_) => {
+                failure = seine_telemetry::FailureDetail::new(
+                    seine_telemetry::FailureReason::ConnectionTimedOut,
+                    seine_telemetry::DiagnosticOperation::PoolConnect,
+                );
                 last_err = Some(format!("connection timed out to {addr}"));
             }
         }
     }
 
+    crate::diagnostics::record_failure(
+        seine_telemetry::DiagnosticCode::Warning,
+        seine_telemetry::DiagnosticKind::Connection,
+        None,
+        failure,
+    );
     Err(anyhow!(
         "failed to connect to pool at {}: {}",
         endpoint.display(),
@@ -813,7 +844,12 @@ async fn connect_pool_tcp_stream(endpoint: &PoolEndpoint) -> Result<TokioTcpStre
 }
 
 fn resolve_pool_addrs(authority: &str) -> Result<Vec<SocketAddr>> {
-    let mut addrs: Vec<SocketAddr> = authority.to_socket_addrs()?.collect();
+    let mut addrs: Vec<SocketAddr> = authority
+        .to_socket_addrs()
+        .inspect_err(|err| {
+            crate::diagnostics::record_io(seine_telemetry::DiagnosticOperation::PoolResolve, err);
+        })?
+        .collect();
     addrs.sort_by_key(|addr| !addr.is_ipv4());
     Ok(addrs)
 }
@@ -829,8 +865,25 @@ async fn run_tcp_reader(
                     break;
                 }
             }
-            Ok(None) => break,
+            Ok(None) => {
+                crate::diagnostics::record_failure(
+                    seine_telemetry::DiagnosticCode::Warning,
+                    seine_telemetry::DiagnosticKind::Connection,
+                    None,
+                    seine_telemetry::FailureDetail::new(
+                        seine_telemetry::FailureReason::ConnectionClosed,
+                        seine_telemetry::DiagnosticOperation::PoolRead,
+                    ),
+                );
+                break;
+            }
             Err(err) => {
+                if let Some(io) = err.downcast_ref::<std::io::Error>() {
+                    crate::diagnostics::record_io(
+                        seine_telemetry::DiagnosticOperation::PoolRead,
+                        io,
+                    );
+                }
                 let _ = inbound_tx.send(InboundFrame::ReadError(err.to_string()));
                 break;
             }
@@ -851,7 +904,8 @@ where
             }
             ClientOutbound::Keepalive => writer.write_all(b"\n").await,
         };
-        if result.is_err() {
+        if let Err(error) = result {
+            crate::diagnostics::record_io(seine_telemetry::DiagnosticOperation::PoolWrite, &error);
             break;
         }
     }
@@ -1315,6 +1369,37 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn refused_connection_retains_typed_cause_without_endpoint() {
+        let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let endpoint = parse_pool_endpoint(&format!("stratum+tcp://{address}")).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        assert!(runtime
+            .block_on(connect_pool_tcp_stream(&endpoint))
+            .is_err());
+        let snapshot = guard.0.snapshot(false);
+        assert_eq!(snapshot.events.len(), 1);
+        let detail = snapshot.events[0].detail.as_ref().unwrap();
+        assert_eq!(
+            detail.operation,
+            seine_telemetry::DiagnosticOperation::PoolConnect
+        );
+        assert_eq!(
+            detail.reason,
+            seine_telemetry::FailureReason::ConnectionRefused
+        );
+        assert!(detail.os_error.is_some());
+        assert!(!serde_json::to_string(&snapshot)
+            .unwrap()
+            .contains(&address.to_string()));
+    }
 
     fn capture_payload<F>(writer: F) -> Value
     where

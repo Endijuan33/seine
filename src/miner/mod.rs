@@ -278,6 +278,7 @@ pub(crate) fn run_with_thread_control(
             None,
         );
     }
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::ShuttingDown);
     drop(telemetry);
     result
 }
@@ -302,6 +303,7 @@ fn run_with_thread_control_inner(
 
     // Pin the destination for this run, including pool reconnects and daemon
     // template requests. Keep the user's saved shortname for the next run.
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::ResolvingAddress);
     let resolved_cfg = resolve_mining_config(cfg, &crate::shortname::ShortnameResolver::default())?;
     let cfg = &resolved_cfg;
 
@@ -317,6 +319,7 @@ fn run_with_thread_control_inner(
         thread_control::validate_headroom(requested, available)?;
     }
 
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::InitializingBackends);
     // Phase 1: Build NVIDIA backends and start compilation in background threads.
     // NvidiaBackend::new() only depends on NVIDIA-specific config, not CPU autotune.
     let per_backend_event_capacity = cfg
@@ -510,12 +513,14 @@ fn run_with_thread_control_inner(
     drop(deferred_tx);
 
     // Phase 2: CPU autotune (runs in parallel with NVIDIA compilation).
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::Tuning);
     let runtime_cfg = prepare_runtime_config(cfg, shutdown.as_ref(), RuntimeMode::Mining)?;
     if shutdown.load(Ordering::SeqCst) {
         return Ok(());
     }
     let cfg = &runtime_cfg;
 
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::InitializingBackends);
     let backend_executor = backend_executor::BackendExecutor::new();
     if let Some(recorder) = telemetry {
         backend_executor.set_hardware_telemetry(recorder);
@@ -606,6 +611,15 @@ fn run_with_thread_control_inner(
     // for at least one NVIDIA to finish (or we'd start with zero backends).
     if !has_non_nvidia && !has_nvidia_ready {
         if nvidia_index == 0 {
+            crate::diagnostics::record_failure(
+                seine_telemetry::DiagnosticCode::Error,
+                seine_telemetry::DiagnosticKind::General,
+                None,
+                seine_telemetry::FailureDetail::new(
+                    seine_telemetry::FailureReason::NoBackendAvailable,
+                    seine_telemetry::DiagnosticOperation::BackendStartup,
+                ),
+            );
             bail!("no mining backend could be started");
         }
         info(
@@ -946,6 +960,7 @@ fn run_with_thread_control_inner(
                 return Err(err.context("starting CPU autotune controller"));
             }
         };
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::Mining);
     let result = match cfg.mode {
         MiningMode::Daemon => {
             let client = daemon_client
@@ -981,6 +996,7 @@ fn run_with_thread_control_inner(
         ),
     };
 
+    crate::diagnostics::set_phase(seine_telemetry::RunPhase::ShuttingDown);
     adaptive_controller.stop();
     let shutdown_requested = shutdown.load(Ordering::SeqCst);
     info("MINER", "shutting down: stopping backends...");
@@ -2478,12 +2494,36 @@ fn activate_backends_with_start_id(
                 backend_event_sources.push(activated.event_rx);
             }
             Err(err) => {
+                let mut detail = seine_telemetry::FailureDetail::new(
+                    seine_telemetry::FailureReason::BackendStartFailed,
+                    seine_telemetry::DiagnosticOperation::BackendStartup,
+                );
+                detail.os_error = err
+                    .chain()
+                    .find_map(|e| e.downcast_ref::<std::io::Error>())
+                    .and_then(std::io::Error::raw_os_error)
+                    .map(i64::from);
+                crate::diagnostics::record_failure(
+                    seine_telemetry::DiagnosticCode::Warning,
+                    crate::diagnostics::classify(&format!("{err:#}")),
+                    Some(crate::diagnostics::backend_name(backend_spec.kind)),
+                    detail,
+                );
                 warn("BACKEND", format!("{err:#}"));
             }
         }
     }
 
     if active.is_empty() && extra_event_sources.is_empty() {
+        crate::diagnostics::record_failure(
+            seine_telemetry::DiagnosticCode::Error,
+            seine_telemetry::DiagnosticKind::General,
+            None,
+            seine_telemetry::FailureDetail::new(
+                seine_telemetry::FailureReason::NoBackendAvailable,
+                seine_telemetry::DiagnosticOperation::BackendStartup,
+            ),
+        );
         bail!("no mining backend could be started");
     }
 

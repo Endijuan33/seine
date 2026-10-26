@@ -28,10 +28,32 @@ WITH reports AS (
            event->>'code' AS code, event->>'kind' AS kind,
            event->>'source' AS source, (event->>'line')::int AS line,
            event->>'backend' AS backend,
+           event->'detail' AS detail, event->>'phase' AS phase,
+           diagnostics->>'cpu_page_mode' AS requested_page_mode,
+           (diagnostics->>'requested_cpu_threads')::int AS requested_threads,
+           min((payload #>> '{hardware,resources,available_memory_gib}')::int) AS minimum_reported_available_memory_gib,
            count(DISTINCT installation_id) AS affected_installations,
            sum((event->>'count')::bigint) AS occurrences,
            max(received_at) AS last_received
-    FROM events GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13
+    FROM events GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
+), unclean_clusters AS (
+    SELECT version, diagnostics->>'build_commit' AS build_commit,
+           payload #>> '{hardware,cpu_model}' AS cpu,
+           payload #>> '{hardware,os}' AS os,
+           payload #>> '{hardware,runtime_environment}' AS environment,
+           diagnostics #>> '{previous_run,phase}' AS last_observed_phase,
+           diagnostics #>> '{previous_run,build_commit}' AS previous_build_commit,
+           min((diagnostics #>> '{previous_run,uptime_secs}')::bigint) AS minimum_previous_uptime_secs,
+           max((diagnostics #>> '{previous_run,uptime_secs}')::bigint) AS maximum_previous_uptime_secs,
+           count(DISTINCT installation_id) AS affected_installations,
+           count(DISTINCT installation_id) FILTER (WHERE EXISTS (
+               SELECT 1 FROM jsonb_array_elements(payload->'backends') b
+               WHERE (b->>'hashes')::bigint > 0
+           )) AS installations_hashing_in_restart_report,
+           max(received_at) AS last_received
+    FROM covered WHERE received_at >= now() - interval '24 hours'
+      AND (diagnostics->>'previous_run_unclean')::boolean
+    GROUP BY 1,2,3,4,5,6,7
 ), recent_errors AS (
     SELECT version, count(DISTINCT installation_id) AS affected_installations
     FROM events WHERE received_at >= now() - interval '24 hours'
@@ -47,7 +69,8 @@ SELECT jsonb_build_object(
     'window_days', 7,
     'diagnostic_installations', (SELECT count(DISTINCT installation_id) FROM covered),
     'versions', coalesce((SELECT jsonb_agg(versions ORDER BY version) FROM versions), '[]'::jsonb),
-    'issue_clusters', coalesce((SELECT jsonb_agg(c) FROM (SELECT * FROM clusters ORDER BY affected_installations DESC, occurrences DESC, version, source, line LIMIT 30) c), '[]'::jsonb),
+    'issue_clusters', coalesce((SELECT jsonb_agg(c) FROM (SELECT * FROM clusters ORDER BY (code IN ('error','backend_error','backend_quarantined','run_failed','rust_panic')) DESC, (detail IS NOT NULL) DESC, affected_installations DESC, occurrences DESC, version, source, line LIMIT 30) c), '[]'::jsonb),
+    'unclean_run_clusters', coalesce((SELECT jsonb_agg(c) FROM (SELECT * FROM unclean_clusters ORDER BY affected_installations DESC, last_received DESC LIMIT 30) c), '[]'::jsonb),
     'unclean_run_installations', (SELECT count(DISTINCT installation_id) FROM covered WHERE (diagnostics->>'previous_run_unclean')::boolean),
     'reports_with_dropped_diagnostics', (SELECT count(*) FROM covered WHERE (diagnostics->>'dropped_events')::bigint > 0 OR (diagnostics->>'dropped_backend_samples')::bigint > 0),
     'recent_error_versions', coalesce((SELECT jsonb_agg(recent_errors ORDER BY version) FROM recent_errors), '[]'::jsonb),

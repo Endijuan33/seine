@@ -46,7 +46,11 @@ traces are never uploaded. Reports include the source revision and fingerprint,
 pool-or-daemon mode, requested backend types, requested CPU threads, page and
 affinity policies and whether CPU thread tuning is enabled. They also identify
 truncated summaries and an unclean previous run, which may reflect a forced stop
-or power loss rather than a crash.
+or power loss rather than a crash. Where available, structured failure details
+include a fixed reason and operation, a numeric operating-system error code and
+the requested allocation size. Reports also include the current run phase and,
+for an interrupted previous run, its last observed phase, elapsed runtime and
+build revision. These checkpoints do not identify the termination cause.
 
 Seine creates a random installation ID in its data directory to distinguish
 installations and avoid counting frequent reports as additional users. This ID

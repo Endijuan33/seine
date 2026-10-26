@@ -63,17 +63,26 @@ The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
 
 ### Reliability reporting
 
-The [diagnostic fixture](diagnostics-fixture.json) demonstrates schema 3. The
-collector continues accepting schema 1 and 2. Deploy it before schema 3 miners.
+The [diagnostic fixture](diagnostics-fixture.json) demonstrates schema 4. The
+collector continues accepting schemas 1–3. Deploy it before schema 4 miners.
 The recorder starts after configuration parsing, before address resolution,
 backend initialization and tuning. UI warnings/errors identify their original
 call site through `track_caller`; backend error and quarantine paths also report
 backend type. Rust panic hooks retain source locations without panic contents.
 Category hints are heuristic; inspect the exact source revision before diagnosing.
+Schema 4 also captures typed reasons at CPU allocation and pool DNS/connect/read/write/login
+failure sites, before errors become display strings. Details contain only fixed enums,
+OS error numbers and requested allocation bytes. Linux mandatory HugeTLB and Windows
+mandatory large-page failures retain their cause; ordinary mapping failures retain theirs
+before a possible heap fallback. A warning can describe a recoverable attempt. Backend
+startup failures retain the backend type and any typed IO error available in their chain.
+Windows repository-relative source paths are normalized without accepting absolute paths.
+Generic warnings and uninstrumented paths still have only category/source information.
 One failure can generate several warning/error codes: event counts are not counts
 of independent incidents. Repeated identical events increment counters; at most
 32 distinct event groups are retained per window. Dropped events and backend
-samples are explicit. Error groups can displace warning groups at capacity.
+samples are explicit. Structured causes can displace generic warnings at capacity; error groups can
+also displace other warnings.
 
 Early failed runs produce valid short final reports; these are excluded from the
 periodic performance-completeness alarm. A local file lock protects run markers
@@ -84,16 +93,27 @@ Pending reports preserve their report ID on replay and expire when checked after
 cooldown. Normal performance-only reports are not spooled. Opt-out is checked
 before every upload, including replays; it clears pending state when available.
 Disk/network work stays in the reporting thread, outside mining control loops.
+The thread checkpoints the current run phase, elapsed time and build every five seconds,
+including before the first upload. The bounded sidecar tied to the installation and marker write is cleared on clean
+shutdown/opt-out and read only with a fresh matching unfinished-run marker. Legacy markers
+remain readable. Checkpoints can lag by a tick plus reporting/network work, or be missing
+on very short runs or IO failure. `mining` includes waiting/reconnecting and live tuning;
+`tuning` describes startup tuning. Parallel GPU initialization may overlap that phase.
+Neither checkpoint phase nor available memory establishes an OOM kill or a crash cause.
 
 Run `python3 telemetry/agent_report.py` for installation-weighted issue clusters
 by build, source, CPU, OS, runtime environment and backend. It includes diagnostic
 coverage separately from legacy clients; no reports does not mean no failures.
+The briefing groups typed details and phases separately and prioritizes recorded errors
+and structured causes before common warnings. Its `unclean_run_clusters` includes hardware,
+previous-build/phase/uptime and installation counts with hashes in the restart report.
+Null fields mean unavailable evidence, including reports from older miners. Infrastructure
+health is evaluated separately from sample-quality and miner-reliability assessments.
 `diagnostics.sql` flags a version after at least three installations report errors,
 quarantines or unclean runs within 24 hours. Single-installation failures and
 warnings remain visible below that threshold. The five-minute server check records
-these incidents in systemd/journald; **no external notification destination is
-configured**. A future notification integration must consume these aggregates,
-not raw report payloads.
+these incidents in systemd/journald; the separate alert timer sends aggregate incidents to the configured Discord destination
+(see the production runbook). It never sends raw report payloads.
 
 Limits: configuration/CLI parsing failures occur before reporting starts. Native
 aborts, OOM kills and power loss cannot reliably run an upload; an unclean marker
@@ -165,11 +185,14 @@ indexes, WAL and backups. Revisit disk sizing using measured production growth.
 
 ### Schema rollout
 
-Deploy the updated collector **before** distributing miners that emit schema 3.
-The collector accepts schemas 1, 2 and 3 at the existing `/v1/reports` URL; the URL
-version does not change. Old reports omit resource/backing fields and remain
-readable. Older collectors reject schema 3, so releasing the new miner first
-would lose reports. No database table rewrite or miner/pool restart is needed for
+For schema 4, deploy the collector and updated analysis scripts before releasing the
+miner. A schema-3-only collector rejects the new reports. Schemas 1–3 remain accepted,
+without fabricating missing detail. No database migration is needed; raw JSON retains
+the added fields. Test the updated fixture against the collector, then release the miner.
+Previously uploaded reports cannot recover causes they never recorded.
+
+All schemas use the existing `/v1/reports` URL. Old reports omit newer fields and
+remain readable. No database table rewrite or miner/pool restart is needed for
 the collector upgrade; the performance view is replaced in place.
 
 The pool-mining hash sampling path feeds the same recorder as daemon mining.

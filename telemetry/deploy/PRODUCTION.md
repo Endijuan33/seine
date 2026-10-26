@@ -37,8 +37,10 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://telemetry.seineminer.com/healt
 
 Expect HTTP 204. This public endpoint alone does not verify the database.
 
-Schema 3 miners require the upgraded collector; deploy it before the miner release.
-The upgraded collector still accepts schema 1 and 2 clients. After this upgrade, the
+Schema 4 miners require the upgraded collector; deploy it before the miner release.
+The upgraded collector still accepts schemas 1–3. Deploy updated `diagnostics.sql`
+and `agent_report.py` with it to expose typed causes and interrupted-run context.
+Existing records remain readable; missing cause details cannot be reconstructed. After this upgrade, the
 completeness check may continue failing for old pool miners until they upgrade
 or their inventory-only reports leave the six-hour window. Use the agent
 briefing's per-version data-quality result to distinguish that known client

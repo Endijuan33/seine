@@ -41,7 +41,7 @@ def main():
     }
     failed = False
     for key, command, data in (
-        ('health', '/opt/seine/telemetry/deploy/check.sh', None),
+        ('health', '/opt/seine/telemetry/deploy/check.sh --infrastructure-only', None),
         ('data_quality', REMOTE_SQL, Path(__file__).with_name('data_quality.sql').read_text()),
         ('telemetry', REMOTE_SQL, Path(__file__).with_suffix('.sql').read_text()),
         ('diagnostics', REMOTE_SQL, Path(__file__).with_name('diagnostics.sql').read_text()),
@@ -76,6 +76,15 @@ def main():
             'Investigate the miner sampling path; waiting for cohorts is not sufficient.'
         )
     diagnostics = briefing.get('diagnostics', {})
+    briefing['diagnostic_interpretation'] = (
+        'Event detail contains typed causes captured at the failing operation; absent detail means '
+        'legacy or uninstrumented code, not an unknown error message. OS error numbers are platform-specific. '
+        'Requested bytes describe one failed allocation. Available memory is a report-time snapshot, '
+        'not proof of OOM and excludes reserved HugeTLB pages. Unclean clusters show the last observed '
+        'phase of the previous run, not a crash cause; checkpoints can lag or be absent. '
+        'Hashing in a restart report establishes work after restart, not recovery from every issue. '
+        'Several events can describe one failure.'
+    )
     if diagnostics.get('status') == 'attention':
         failed = True
         briefing['diagnostic_assessment'] = (

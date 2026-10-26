@@ -1,7 +1,7 @@
 //! The upload allowlist, deliberately independent of miner config and logs.
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,9 +49,85 @@ pub enum DiagnosticKind {
     UnsupportedHardware,
 }
 
+/// Fixed values only: never serialize error messages, URLs or OS error descriptions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureReason {
+    HugePagesUnavailable,
+    AllocationFailed,
+    DnsFailed,
+    ConnectionRefused,
+    ConnectionTimedOut,
+    ConnectionReset,
+    ConnectionFailed,
+    ConnectionClosed,
+    IoFailed,
+    LoginRejected,
+    BackendStartFailed,
+    NoBackendAvailable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticOperation {
+    CpuAllocation,
+    PoolResolve,
+    PoolConnect,
+    PoolRead,
+    PoolWrite,
+    PoolLogin,
+    BackendStartup,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunPhase {
+    Starting,
+    ResolvingAddress,
+    InitializingBackends,
+    Tuning,
+    Mining,
+    ShuttingDown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FailureDetail {
+    pub reason: FailureReason,
+    pub operation: DiagnosticOperation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_error: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_bytes: Option<u64>,
+}
+
+impl FailureDetail {
+    pub fn new(reason: FailureReason, operation: DiagnosticOperation) -> Self {
+        Self {
+            reason,
+            operation,
+            os_error: None,
+            requested_bytes: None,
+        }
+    }
+}
+
+/// Last observed checkpoint, not the termination cause or exact termination time.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviousRun {
+    pub phase: RunPhase,
+    pub uptime_secs: u64,
+    pub build_commit: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DiagnosticEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<FailureDetail>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<RunPhase>,
     pub code: DiagnosticCode,
     pub kind: DiagnosticKind,
     /// Repository-relative source location, never a local path or log message.
@@ -66,6 +142,10 @@ pub struct DiagnosticEvent {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Diagnostics {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<RunPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_run: Option<PreviousRun>,
     pub build_commit: String,
     pub source_fingerprint: String,
     pub mode: String,
@@ -120,12 +200,21 @@ impl Diagnostics {
                 "auto" | "os" | "off" | "pcore-only"
             )
             && matches!(self.reason.as_str(), "periodic" | "shutdown" | "failure")
+            && self.previous_run.as_ref().is_none_or(|r| {
+                self.previous_run_unclean
+                    && r.uptime_secs <= 315_360_000
+                    && fingerprint(&r.build_commit)
+            })
             && self.events.len() <= 32
             && self.uptime_secs <= 315_360_000
             && self.dropped_events <= 1_000_000_000_000
             && self.dropped_backend_samples <= 128
             && self.events.iter().all(|e| {
-                valid_source(&e.source)
+                e.detail.as_ref().is_none_or(|d| {
+                    d.os_error
+                        .is_none_or(|n| (i32::MIN as i64..=u32::MAX as i64).contains(&n))
+                        && d.requested_bytes.is_none_or(|n| n > 0 && n <= (1u64 << 50))
+                }) && valid_source(&e.source)
                     && e.line <= 1_000_000
                     && e.backend.as_deref().is_none_or(backend_name)
                     && e.count > 0
@@ -247,10 +336,16 @@ impl Report {
                     .diagnostics
                     .as_ref()
                     .is_some_and(|d| d.reason != "periodic"))
-            && self
-                .diagnostics
-                .as_ref()
-                .is_none_or(|d| self.schema_version >= 3 && d.validate())
+            && self.diagnostics.as_ref().is_none_or(|d| {
+                self.schema_version >= 3
+                    && d.validate()
+                    && (self.schema_version >= 4
+                        || (d.phase.is_none()
+                            && d.previous_run.is_none()
+                            && d.events
+                                .iter()
+                                .all(|e| e.detail.is_none() && e.phase.is_none())))
+            })
             && self.backends.len() <= 128
             && self.backends.iter().all(|b| {
                 matches!(
@@ -324,6 +419,62 @@ mod tests {
         assert!(!final_report.validate());
         final_report.diagnostics.as_mut().unwrap().reason = "failure".into();
         assert!(final_report.validate());
+    }
+
+    #[test]
+    fn structured_diagnostics_reject_secrets_limits_and_schema_downgrades() {
+        let value: serde_json::Value =
+            serde_json::from_str(include_str!("../diagnostics-fixture.json")).unwrap();
+        for field in ["reason", "operation", "message"] {
+            let mut bad = value.clone();
+            bad["diagnostics"]["events"][0]["detail"][field] = "PRIVATE".into();
+            assert!(serde_json::from_value::<Report>(bad).is_err());
+        }
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate());
+        report.schema_version = 3;
+        assert!(!report.validate());
+        report.diagnostics.as_mut().unwrap().phase = None;
+        report.diagnostics.as_mut().unwrap().previous_run = None;
+        for event in &mut report.diagnostics.as_mut().unwrap().events {
+            event.detail = None;
+            event.phase = None;
+        }
+        assert!(report.validate()); // Real schema 3 remains readable.
+        let mut report: Report =
+            serde_json::from_str(include_str!("../diagnostics-fixture.json")).unwrap();
+        report.diagnostics.as_mut().unwrap().events[0]
+            .detail
+            .as_mut()
+            .unwrap()
+            .requested_bytes = Some(u64::MAX);
+        assert!(!report.validate());
+        report.diagnostics.as_mut().unwrap().events[0]
+            .detail
+            .as_mut()
+            .unwrap()
+            .requested_bytes = Some(2147483648);
+        report.diagnostics.as_mut().unwrap().events[0]
+            .detail
+            .as_mut()
+            .unwrap()
+            .os_error = Some(i64::MAX);
+        assert!(!report.validate());
+        report.diagnostics.as_mut().unwrap().events[0]
+            .detail
+            .as_mut()
+            .unwrap()
+            .os_error = Some(12);
+        report.diagnostics.as_mut().unwrap().previous_run_unclean = false;
+        assert!(!report.validate());
+        report.diagnostics.as_mut().unwrap().previous_run_unclean = true;
+        let d = report.diagnostics.as_mut().unwrap();
+        d.events = vec![d.events[0].clone(); 32];
+        for e in &mut d.events {
+            e.source = format!("src/{}.rs", "a".repeat(113));
+        }
+        assert!(report.validate());
+        assert!(serde_json::to_vec(&report).unwrap().len() < MAX_BODY_BYTES);
     }
 
     #[test]

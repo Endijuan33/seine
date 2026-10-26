@@ -1,7 +1,8 @@
 //! Bounded failure counters. Free-form messages never enter the upload state.
 use crate::config::{BackendKind, Config, CpuAffinityMode, MiningMode};
 use seine_telemetry::{
-    DiagnosticCode, DiagnosticEvent, DiagnosticKind, Diagnostics, Report, MAX_BODY_BYTES,
+    DiagnosticCode, DiagnosticEvent, DiagnosticKind, DiagnosticOperation, Diagnostics,
+    FailureDetail, FailureReason, PreviousRun, Report, RunPhase, MAX_BODY_BYTES,
 };
 use std::{
     collections::BTreeMap,
@@ -17,7 +18,15 @@ use std::{
 
 static ACTIVE: Mutex<Option<Weak<Recorder>>> = Mutex::new(None);
 static PANIC_HOOK: Once = Once::new();
-type Key = (DiagnosticCode, DiagnosticKind, String, u32, Option<String>);
+type Key = (
+    DiagnosticCode,
+    DiagnosticKind,
+    String,
+    u32,
+    Option<String>,
+    Option<FailureDetail>,
+    RunPhase,
+);
 
 pub(crate) struct Recorder {
     started: Instant,
@@ -26,6 +35,8 @@ pub(crate) struct Recorder {
     dropped: AtomicU64,
     failed: AtomicBool,
     previous_unclean: AtomicBool,
+    phase: Mutex<RunPhase>,
+    previous_run: Mutex<Option<PreviousRun>>,
 }
 
 pub(crate) struct Guard(pub Arc<Recorder>);
@@ -52,6 +63,8 @@ pub(crate) fn context(cfg: &Config) -> Diagnostics {
     backends.sort();
     backends.dedup();
     Diagnostics {
+        phase: None,
+        previous_run: None,
         build_commit: fingerprint(option_env!("SEINE_GIT_COMMIT").unwrap_or("unknown")),
         source_fingerprint: fingerprint(crate::runtime_identity::source_fingerprint()),
         mode: match cfg.mode {
@@ -87,6 +100,8 @@ pub(crate) fn install(context: Diagnostics) -> Guard {
         dropped: AtomicU64::new(0),
         failed: AtomicBool::new(false),
         previous_unclean: AtomicBool::new(false),
+        phase: Mutex::new(RunPhase::Starting),
+        previous_run: Mutex::new(None),
     });
     if let Ok(mut active) = ACTIVE.lock() {
         *active = Some(Arc::downgrade(&recorder));
@@ -182,10 +197,97 @@ fn record_at(
         return;
     };
     drop(active);
-    recorder.record(code, kind, backend, location.file(), location.line());
+    recorder.record_detail(code, kind, backend, location.file(), location.line(), None);
+}
+
+/// Exact, typed context captured before errors are converted to display strings.
+#[track_caller]
+pub(crate) fn record_failure(
+    code: DiagnosticCode,
+    kind: DiagnosticKind,
+    backend: Option<&str>,
+    detail: FailureDetail,
+) {
+    let Ok(active) = ACTIVE.try_lock() else {
+        return;
+    };
+    let Some(recorder) = active.as_ref().and_then(Weak::upgrade) else {
+        return;
+    };
+    drop(active);
+    let location = Location::caller();
+    recorder.record_detail(
+        code,
+        kind,
+        backend,
+        location.file(),
+        location.line(),
+        Some(detail),
+    );
+}
+
+pub(crate) fn set_phase(phase: RunPhase) {
+    let Ok(active) = ACTIVE.try_lock() else {
+        return;
+    };
+    if let Some(recorder) = active.as_ref().and_then(Weak::upgrade) {
+        *recorder.phase.lock().unwrap_or_else(|e| e.into_inner()) = phase;
+    }
+}
+
+#[track_caller]
+pub(crate) fn allocation_failure(large: bool, bytes: usize, os_error: Option<i64>) {
+    record_failure(
+        DiagnosticCode::Warning,
+        DiagnosticKind::Memory,
+        Some("cpu"),
+        FailureDetail {
+            reason: if large {
+                FailureReason::HugePagesUnavailable
+            } else {
+                FailureReason::AllocationFailed
+            },
+            operation: DiagnosticOperation::CpuAllocation,
+            os_error,
+            requested_bytes: Some(bytes as u64),
+        },
+    );
+}
+
+pub(crate) fn io_detail(operation: DiagnosticOperation, error: &std::io::Error) -> FailureDetail {
+    use std::io::ErrorKind;
+    let reason = if operation == DiagnosticOperation::PoolResolve {
+        FailureReason::DnsFailed
+    } else {
+        match error.kind() {
+            ErrorKind::ConnectionRefused => FailureReason::ConnectionRefused,
+            ErrorKind::TimedOut => FailureReason::ConnectionTimedOut,
+            ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::BrokenPipe => {
+                FailureReason::ConnectionReset
+            }
+            _ => FailureReason::IoFailed,
+        }
+    };
+    FailureDetail {
+        reason,
+        operation,
+        os_error: error.raw_os_error().map(i64::from),
+        requested_bytes: None,
+    }
+}
+
+#[track_caller]
+pub(crate) fn record_io(operation: DiagnosticOperation, error: &std::io::Error) {
+    record_failure(
+        DiagnosticCode::Warning,
+        DiagnosticKind::Connection,
+        None,
+        io_detail(operation, error),
+    );
 }
 
 impl Recorder {
+    #[cfg(test)]
     fn record(
         &self,
         code: DiagnosticCode,
@@ -194,6 +296,18 @@ impl Recorder {
         source: &str,
         line: u32,
     ) {
+        self.record_detail(code, kind, backend, source, line, None);
+    }
+
+    fn record_detail(
+        &self,
+        code: DiagnosticCode,
+        kind: DiagnosticKind,
+        backend: Option<&str>,
+        source: &str,
+        line: u32,
+        detail: Option<FailureDetail>,
+    ) {
         if matches!(code, DiagnosticCode::RunFailed | DiagnosticCode::RustPanic) {
             self.failed.store(true, Ordering::Relaxed);
         }
@@ -201,11 +315,15 @@ impl Recorder {
             self.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         };
-        let source = if seine_telemetry::valid_source(source) {
-            source
+        // Rust locations on Windows use backslashes. Only normalize relative paths;
+        // never strip an absolute prefix (which could reveal private filenames).
+        let normalized = source.replace('\\', "/");
+        let source = if seine_telemetry::valid_source(&normalized) {
+            normalized.as_str()
         } else {
             "unknown"
         };
+        let phase = *self.phase.lock().unwrap_or_else(|e| e.into_inner());
         let backend = backend
             .filter(|b| matches!(*b, "cpu" | "nvidia" | "amd" | "metal"))
             .map(str::to_owned);
@@ -215,19 +333,32 @@ impl Recorder {
             source.to_owned(),
             line.min(1_000_000),
             backend.clone(),
+            detail.clone(),
+            phase,
         );
         if events.len() >= 32 && !events.contains_key(&key) {
-            if !matches!(
+            let is_error = !matches!(
                 code,
                 DiagnosticCode::Warning | DiagnosticCode::BackendWarning
-            ) {
+            );
+            if is_error || detail.is_some() {
+                // Keep specific causes when generic startup warnings fill the window.
+                let is_warning = |k: &&Key| {
+                    matches!(
+                        k.0,
+                        DiagnosticCode::Warning | DiagnosticCode::BackendWarning
+                    )
+                };
                 let victim = events
                     .keys()
-                    .find(|k| {
-                        matches!(
-                            k.0,
-                            DiagnosticCode::Warning | DiagnosticCode::BackendWarning
-                        )
+                    .filter(is_warning)
+                    .find(|k| k.5.is_none())
+                    .or_else(|| {
+                        if is_error {
+                            events.keys().find(is_warning)
+                        } else {
+                            None
+                        }
                     })
                     .cloned();
                 if let Some(victim) = victim {
@@ -245,6 +376,8 @@ impl Recorder {
         let event = events.entry(key).or_insert_with(|| DiagnosticEvent {
             code,
             kind,
+            detail,
+            phase: Some(phase),
             source: source.into(),
             line: line.min(1_000_000),
             backend,
@@ -254,6 +387,18 @@ impl Recorder {
         });
         event.count = event.count.saturating_add(1);
         event.last_seen_secs = now;
+    }
+
+    pub(crate) fn checkpoint(&self) -> PreviousRun {
+        PreviousRun {
+            phase: *self.phase.lock().unwrap_or_else(|e| e.into_inner()),
+            uptime_secs: self.started.elapsed().as_secs(),
+            build_commit: self.context.build_commit.clone(),
+        }
+    }
+
+    pub(crate) fn set_previous_run(&self, previous: Option<PreviousRun>) {
+        *self.previous_run.lock().unwrap_or_else(|e| e.into_inner()) = previous;
     }
 
     pub(crate) fn set_previous_unclean(&self, value: bool) {
@@ -270,7 +415,13 @@ impl Recorder {
             "shutdown"
         }
         .into();
+        result.phase = Some(self.checkpoint().phase);
         result.previous_run_unclean = self.previous_unclean.swap(false, Ordering::Relaxed);
+        result.previous_run = self
+            .previous_run
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         result.dropped_events = self.dropped.swap(0, Ordering::Relaxed);
         if let Ok(mut events) = self.events.lock() {
             result.events = std::mem::take(&mut *events).into_values().collect();
@@ -287,6 +438,28 @@ pub(crate) struct Store {
     marker: PathBuf,
     pending: PathBuf,
     attempt: PathBuf,
+    checkpoint_path: PathBuf,
+    pub(crate) previous_run: Option<PreviousRun>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Checkpoint {
+    installation_id: String,
+    marker_modified_ns: u64,
+    run: PreviousRun,
+}
+
+fn marker_stamp(path: &Path) -> Option<u64> {
+    fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()?
+        .as_nanos()
+        .try_into()
+        .ok()
 }
 
 impl Store {
@@ -303,12 +476,32 @@ impl Store {
         let marker = dir.join("seine.diagnostics.running");
         let previous_unclean =
             fresh(&marker) && fs::read_to_string(&marker).ok().as_deref() == Some(installation_id);
+        let checkpoint_path = dir.join("seine.diagnostics.phase.json");
+        let previous_run = if previous_unclean && fresh(&checkpoint_path) {
+            fs::metadata(&checkpoint_path)
+                .ok()
+                .filter(|m| m.len() <= 1024)
+                .and_then(|_| fs::read(&checkpoint_path).ok())
+                .and_then(|bytes| serde_json::from_slice::<Checkpoint>(&bytes).ok())
+                .filter(|c| {
+                    c.installation_id == installation_id
+                        && Some(c.marker_modified_ns) == marker_stamp(&marker)
+                        && c.run.uptime_secs <= 315_360_000
+                        && fingerprint(&c.run.build_commit) == c.run.build_commit
+                })
+                .map(|c| c.run)
+        } else {
+            None
+        };
+        let _ = fs::remove_file(&checkpoint_path);
         fs::write(&marker, installation_id).ok()?;
         let _ = fs::remove_file(dir.join("seine.diagnostics.pending.tmp"));
         Some((
             Self {
                 _lock: lock,
                 marker,
+                checkpoint_path,
+                previous_run,
                 pending: dir.join("seine.diagnostics.pending.json"),
                 attempt: dir.join("seine.diagnostics.attempt"),
             },
@@ -364,7 +557,29 @@ impl Store {
     pub(crate) fn heartbeat(&self, installation_id: &str) {
         let _ = fs::write(&self.marker, installation_id);
     }
+    pub(crate) fn checkpoint(&self, installation_id: &str, run: PreviousRun) {
+        // Tie the sidecar to this exact marker write. A legacy miner can update
+        // the plain marker without updating the sidecar; never attribute that
+        // older checkpoint to its later run.
+        self.heartbeat(installation_id);
+        let Some(marker_modified_ns) = marker_stamp(&self.marker) else {
+            return;
+        };
+        let checkpoint = Checkpoint {
+            installation_id: installation_id.into(),
+            marker_modified_ns,
+            run,
+        };
+        let temp = self.checkpoint_path.with_extension("tmp");
+        if let Ok(bytes) = serde_json::to_vec(&checkpoint) {
+            if fs::write(&temp, bytes).is_ok() {
+                let _ = fs::rename(&temp, &self.checkpoint_path);
+            }
+        }
+    }
     pub(crate) fn finish(&self) {
+        let _ = fs::remove_file(&self.checkpoint_path);
+        let _ = fs::remove_file(self.checkpoint_path.with_extension("tmp"));
         let _ = fs::remove_file(&self.marker);
     }
 }
@@ -391,6 +606,8 @@ pub(crate) fn clear_disabled(settings: &Path) {
     };
     if lock.try_lock().is_ok() {
         let _ = fs::remove_file(dir.join("seine.diagnostics.running"));
+        let _ = fs::remove_file(dir.join("seine.diagnostics.phase.json"));
+        let _ = fs::remove_file(dir.join("seine.diagnostics.phase.tmp"));
         let _ = fs::remove_file(dir.join("seine.diagnostics.pending.json"));
         let _ = fs::remove_file(dir.join("seine.diagnostics.pending.tmp"));
         let _ = fs::remove_file(dir.join("seine.diagnostics.attempt"));
@@ -400,6 +617,8 @@ pub(crate) fn clear_disabled(settings: &Path) {
 #[cfg(test)]
 pub(crate) fn test_context() -> Diagnostics {
     Diagnostics {
+        phase: None,
+        previous_run: None,
         build_commit: "abcdef123456".into(),
         source_fingerprint: "1234abcd".into(),
         mode: "pool".into(),
@@ -428,7 +647,111 @@ mod tests {
             dropped: AtomicU64::new(0),
             failed: AtomicBool::new(false),
             previous_unclean: AtomicBool::new(false),
+            phase: Mutex::new(RunPhase::Starting),
+            previous_run: Mutex::new(None),
         }
+    }
+
+    #[test]
+    fn structured_causes_separate_errors_at_one_site_and_normalize_windows_sources() {
+        let recorder = recorder();
+        *recorder.phase.lock().unwrap() = RunPhase::InitializingBackends;
+        for errno in [12, 13, 12] {
+            recorder.record_detail(
+                DiagnosticCode::Warning,
+                DiagnosticKind::Memory,
+                Some("cpu"),
+                r"src\backend\cpu\kernel.rs",
+                10,
+                Some(FailureDetail {
+                    reason: FailureReason::HugePagesUnavailable,
+                    operation: DiagnosticOperation::CpuAllocation,
+                    requested_bytes: Some(2147483648),
+                    os_error: Some(errno),
+                }),
+            );
+        }
+        let snapshot = recorder.snapshot(false);
+        assert_eq!(snapshot.events.len(), 2);
+        assert_eq!(snapshot.events.iter().map(|e| e.count).sum::<u64>(), 3);
+        assert!(snapshot
+            .events
+            .iter()
+            .all(|e| e.source == "src/backend/cpu/kernel.rs"
+                && e.phase == Some(RunPhase::InitializingBackends)));
+        let mut report: Report =
+            serde_json::from_str(include_str!("../telemetry/fixture.json")).unwrap();
+        report.schema_version = seine_telemetry::SCHEMA_VERSION;
+        report.diagnostics = Some(snapshot);
+        assert!(report.validate());
+        let json = serde_json::to_vec(&report).unwrap();
+        assert!(serde_json::from_slice::<Report>(&json).unwrap().validate());
+        recorder.record(
+            DiagnosticCode::Warning,
+            DiagnosticKind::General,
+            None,
+            r"C:\Users\alice\src\private.rs",
+            1,
+        );
+        assert_eq!(recorder.snapshot(false).events[0].source, "unknown");
+    }
+
+    #[test]
+    fn specific_cause_displaces_generic_warning_at_capacity() {
+        let recorder = recorder();
+        for line in 0..32 {
+            recorder.record(
+                DiagnosticCode::Warning,
+                DiagnosticKind::General,
+                None,
+                "src/miner/mod.rs",
+                line,
+            );
+        }
+        recorder.record_detail(
+            DiagnosticCode::Warning,
+            DiagnosticKind::Memory,
+            Some("cpu"),
+            "src/backend/cpu/kernel.rs",
+            100,
+            Some(FailureDetail::new(
+                FailureReason::HugePagesUnavailable,
+                DiagnosticOperation::CpuAllocation,
+            )),
+        );
+        let snapshot = recorder.snapshot(false);
+        assert_eq!(snapshot.events.len(), 32);
+        assert_eq!(snapshot.dropped_events, 1);
+        assert!(snapshot.events.iter().any(|e| e.detail.is_some()));
+    }
+
+    #[test]
+    fn io_details_preserve_codes_without_error_text() {
+        for (kind, reason) in [
+            (
+                std::io::ErrorKind::ConnectionRefused,
+                FailureReason::ConnectionRefused,
+            ),
+            (
+                std::io::ErrorKind::TimedOut,
+                FailureReason::ConnectionTimedOut,
+            ),
+            (
+                std::io::ErrorKind::BrokenPipe,
+                FailureReason::ConnectionReset,
+            ),
+        ] {
+            let error = std::io::Error::new(kind, "PRIVATE https://user:password@host/wallet");
+            let detail = io_detail(DiagnosticOperation::PoolConnect, &error);
+            assert_eq!(detail.reason, reason);
+            assert!(!serde_json::to_string(&detail).unwrap().contains("PRIVATE"));
+        }
+        let detail = io_detail(
+            DiagnosticOperation::PoolResolve,
+            &std::io::Error::from_raw_os_error(13),
+        );
+        assert_eq!(detail.reason, FailureReason::DnsFailed);
+        assert_eq!(detail.os_error, Some(13));
     }
 
     #[test]
@@ -515,7 +838,7 @@ mod tests {
         assert!(!recorder.snapshot(true).previous_run_unclean);
         let mut report: Report =
             serde_json::from_str(include_str!("../telemetry/fixture.json")).unwrap();
-        report.schema_version = 3;
+        report.schema_version = seine_telemetry::SCHEMA_VERSION;
         report.window_secs = 1;
         report.backends.clear();
         report.diagnostics = Some(snapshot);
@@ -559,20 +882,93 @@ mod tests {
             store.pending(&report.installation_id).unwrap().report_id,
             report.report_id
         );
+        store.checkpoint(
+            &report.installation_id,
+            PreviousRun {
+                phase: RunPhase::Tuning,
+                uptime_secs: 42,
+                build_commit: "abcdef".into(),
+            },
+        );
         drop(store); // Simulated abnormal exit: no finish().
         let (store, unclean) = Store::open(&settings, &report.installation_id).unwrap();
         assert!(unclean);
+        let previous = store.previous_run.as_ref().unwrap();
+        assert_eq!(previous.phase, RunPhase::Tuning);
+        assert_eq!(previous.uptime_secs, 42);
+        assert_eq!(previous.build_commit, "abcdef");
         assert!(store.pending("changed-destination-id").is_none());
         assert!(!store.pending.exists());
         store.finish();
         drop(store);
         let (store, unclean) = Store::open(&settings, &report.installation_id).unwrap();
         assert!(!unclean);
+        assert!(store.previous_run.is_none());
         store.save(&report);
         let file = File::options().write(true).open(&store.pending).unwrap();
         file.set_modified(SystemTime::now() - Duration::from_secs(86401))
             .unwrap();
         assert!(store.pending(&report.installation_id).is_none());
         store.finish();
+    }
+    #[test]
+    fn checkpoint_requires_matching_fresh_marker_and_bounded_valid_context() {
+        let dir = std::env::temp_dir().join(format!("seine-checkpoint-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let settings = dir.join("settings.json");
+        let id = "11111111111111111111111111111111";
+        for content in [
+            r#"{"installation_id":"other","run":{"phase":"mining","uptime_secs":5,"build_commit":"abcdef"}}"#.to_string(),
+            "PRIVATE".repeat(300),
+            r#"{"installation_id":"11111111111111111111111111111111","run":{"phase":"mining","uptime_secs":5,"build_commit":"PRIVATE"}}"#.to_string(),
+        ] {
+            fs::write(dir.join("seine.diagnostics.running"), id).unwrap();
+            fs::write(dir.join("seine.diagnostics.phase.json"), content).unwrap();
+            let (store, unclean) = Store::open(&settings, id).unwrap();
+            assert!(unclean);
+            assert!(store.previous_run.is_none());
+            store.finish();
+        }
+        let (store, _) = Store::open(&settings, id).unwrap();
+        store.checkpoint(
+            id,
+            PreviousRun {
+                phase: RunPhase::Mining,
+                uptime_secs: 90,
+                build_commit: "abcdef".into(),
+            },
+        );
+        drop(store);
+        // Simulate a legacy writer starting another run with no phase sidecar.
+        let file = File::options()
+            .write(true)
+            .open(dir.join("seine.diagnostics.running"))
+            .unwrap();
+        file.set_modified(SystemTime::now() - Duration::from_secs(1))
+            .unwrap();
+        let (store, unclean) = Store::open(&settings, id).unwrap();
+        assert!(unclean);
+        assert!(store.previous_run.is_none());
+        store.checkpoint(
+            id,
+            PreviousRun {
+                phase: RunPhase::Mining,
+                uptime_secs: 90,
+                build_commit: "abcdef".into(),
+            },
+        );
+        drop(store);
+        let file = File::options()
+            .write(true)
+            .open(dir.join("seine.diagnostics.running"))
+            .unwrap();
+        file.set_modified(SystemTime::now() - Duration::from_secs(86401))
+            .unwrap();
+        let (store, unclean) = Store::open(&settings, id).unwrap();
+        assert!(!unclean);
+        assert!(store.previous_run.is_none());
+        store.finish();
+        drop(store);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

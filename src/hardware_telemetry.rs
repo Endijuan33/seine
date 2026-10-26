@@ -358,6 +358,8 @@ fn start_with_context(
                 crate::diagnostics::Store::open(&options.state_path, &options.installation_id).map(
                     |(store, unclean)| {
                         diagnostics.set_previous_unclean(unclean);
+                        diagnostics.set_previous_run(store.previous_run.clone());
+                        store.checkpoint(&options.installation_id, diagnostics.checkpoint());
                         store
                     },
                 );
@@ -371,10 +373,14 @@ fn start_with_context(
             }
             let mut since = Instant::now();
             // Regular reports stay hourly; shutdown/failure wakes the worker immediately.
-            let mut delay = Duration::from_secs(300);
+            let mut next_report = Instant::now() + Duration::from_secs(300);
             loop {
                 let final_report = !matches!(
-                    stopped.recv_timeout(delay),
+                    stopped.recv_timeout(
+                        next_report
+                            .saturating_duration_since(Instant::now())
+                            .min(Duration::from_secs(5))
+                    ),
                     Err(crossbeam_channel::RecvTimeoutError::Timeout)
                 );
                 if !still_enabled(&options) {
@@ -384,15 +390,20 @@ fn start_with_context(
                     }
                     break;
                 }
+                // Checkpoints stay in the reporting thread. A forced stop may lose
+                // up to one tick; they describe the last observation, not its cause.
+                if let Some(store) = &store {
+                    store.checkpoint(&options.installation_id, diagnostics.checkpoint());
+                }
+                if !final_report && Instant::now() < next_report {
+                    continue;
+                }
                 if let Some(store) = &store {
                     if let Some(pending) = store.pending(&options.installation_id) {
                         if send_report(&client, &options, &pending, Some(store)) {
                             store.clear_pending();
                         }
                     }
-                }
-                if let Some(store) = &store {
-                    store.heartbeat(&options.installation_id);
                 }
                 let diagnostic_snapshot = diagnostics.snapshot(final_report);
                 let has_diagnostics = !diagnostic_snapshot.events.is_empty()
@@ -465,7 +476,7 @@ fn start_with_context(
                     }
                     break;
                 }
-                delay = INTERVAL;
+                next_report = Instant::now() + INTERVAL;
             }
         })?;
     Ok((
@@ -496,6 +507,8 @@ mod tests {
             .unwrap()
             .unwrap();
         let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        crate::diagnostics::set_phase(seine_telemetry::RunPhase::InitializingBackends);
+        crate::diagnostics::allocation_failure(true, 2147483648, Some(12));
         crate::miner::ui::warn(
             "PRIVATE TAG",
             "driver failed at /home/alice with wallet PRIVATE WALLET",
@@ -514,6 +527,13 @@ mod tests {
         assert!(report.validate());
         let diagnostics = report.diagnostics.as_ref().unwrap();
         assert_eq!(diagnostics.reason, "failure");
+        assert!(diagnostics
+            .events
+            .iter()
+            .any(|e| e.detail.as_ref().is_some_and(|d| d.reason
+                == seine_telemetry::FailureReason::HugePagesUnavailable
+                && d.os_error == Some(12)
+                && d.requested_bytes == Some(2147483648))));
         assert!(diagnostics
             .events
             .iter()

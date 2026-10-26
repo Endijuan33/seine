@@ -35,7 +35,7 @@
   <div id="result" role="status" aria-live="polite">Disabled. No report has been sent.</div>
   <p class="small">The checkbox controls this test harness only. The miner preference is stored by <code>seine --telemetry on|off</code>.</p>
 </section>
-<section><h2>Upload allowlist</h2><p>Schema 3 adds bounded warning/error counts, source locations and restart diagnostics alongside hardware, build and performance fields. Wallet addresses, worker names, hostnames, credentials and logs are excluded.</p><pre id="payload">Loading fixture…</pre></section>
+<section><h2>Upload allowlist</h2><p>Schema 4 adds specific failure reasons, operation names, OS error codes, allocation sizes and the last observed phase of an interrupted run. Older reports remain readable. Wallet addresses, worker names, hostnames, credentials and logs are excluded.</p><pre id="payload">Loading fixture…</pre></section>
 <script>
 let fixture, last;
 const buttons=[...document.querySelectorAll('button')];

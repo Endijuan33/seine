@@ -1532,6 +1532,7 @@ impl VirtualArena {
             if large_page_minimum == 0 {
                 allocation_failures = allocation_failures.saturating_add(1);
                 if page_mode == CpuPageMode::Large {
+                    crate::diagnostics::allocation_failure(true, byte_len, None);
                     return Err("GetLargePageMinimum reported no supported large-page size".into());
                 }
             } else {
@@ -1564,6 +1565,11 @@ impl VirtualArena {
                 }
                 allocation_failures = allocation_failures.saturating_add(1);
                 if page_mode == CpuPageMode::Large {
+                    crate::diagnostics::allocation_failure(
+                        true,
+                        byte_len,
+                        Some(i64::from(large_page_error)),
+                    );
                     return Err(format!(
                         "MEM_LARGE_PAGES VirtualAlloc unavailable (Win32 error {large_page_error})"
                     ));
@@ -1581,6 +1587,7 @@ impl VirtualArena {
         };
         if ptr.is_null() {
             let error = unsafe { GetLastError() };
+            crate::diagnostics::allocation_failure(false, byte_len, Some(i64::from(error)));
             return Err(format!(
                 "regular VirtualAlloc failed for {byte_len} bytes (Win32 error {error})"
             ));
@@ -1779,6 +1786,11 @@ impl MmapArena {
                 let error = std::io::Error::last_os_error();
                 allocation_failures = allocation_failures.saturating_add(1);
                 if page_mode == CpuPageMode::Large {
+                    crate::diagnostics::allocation_failure(
+                        true,
+                        byte_len,
+                        error.raw_os_error().map(i64::from),
+                    );
                     return Err(format!(
                         "MAP_HUGETLB mmap failed for {byte_len} bytes: {error}"
                     ));
@@ -1803,6 +1815,11 @@ impl MmapArena {
             };
             if ptr == libc::MAP_FAILED {
                 let error = std::io::Error::last_os_error();
+                crate::diagnostics::allocation_failure(
+                    false,
+                    byte_len,
+                    error.raw_os_error().map(i64::from),
+                );
                 return Err(format!("regular mmap failed for {byte_len} bytes: {error}"));
             }
             let backing = if page_mode == CpuPageMode::Regular {
@@ -1849,6 +1866,11 @@ impl MmapArena {
             };
             if ptr == libc::MAP_FAILED {
                 let error = std::io::Error::last_os_error();
+                crate::diagnostics::allocation_failure(
+                    false,
+                    byte_len,
+                    error.raw_os_error().map(i64::from),
+                );
                 return Err(format!("mmap failed for {byte_len} bytes: {error}"));
             }
             Ok(Self {
@@ -1893,6 +1915,11 @@ impl MmapArena {
             };
             if ptr == libc::MAP_FAILED {
                 let error = std::io::Error::last_os_error();
+                crate::diagnostics::allocation_failure(
+                    true,
+                    map_len,
+                    error.raw_os_error().map(i64::from),
+                );
                 return Err(format!(
                     "MAP_HUGETLB|MAP_HUGE_1GB mmap failed for {map_len} bytes: {error}; reserve \
                      1 GiB pages via /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages"

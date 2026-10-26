@@ -7,6 +7,10 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## Unreleased
 
+- **More useful failure reports:** optional telemetry preserves specific memory and pool connection failure reasons, Windows code locations, and the last observed stage of interrupted runs.
+
+**For self-hosted telemetry collectors:** update the collector before installing miners built from this version; see the [deployment guide](telemetry/deploy/PRODUCTION.md).
+
 - **Clearer tuning startup:** CPU and NVIDIA messages explain when saved tuning is reused and why tuning runs again.
 
 - **Peak hashrate by default:** CPU tuning targets the highest confirmed hashrate; choosing fewer workers at a lower rate is opt-in with `--cpu-profile efficiency`.

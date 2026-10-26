@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "installation_id": "11111111111111111111111111111111",
   "report_id": "22222222222222222222222222222222",
   "miner_version": "0.2.23-fixture",
@@ -68,7 +68,7 @@
     "cpu_autotune": true,
     "uptime_secs": 3600,
     "reason": "periodic",
-    "previous_run_unclean": false,
+    "previous_run_unclean": true,
     "dropped_events": 0,
     "dropped_backend_samples": 0,
     "events": [
@@ -80,8 +80,21 @@
         "backend": "cpu",
         "count": 2,
         "first_seen_secs": 30,
-        "last_seen_secs": 120
+        "last_seen_secs": 120,
+        "phase": "initializing_backends",
+        "detail": {
+          "reason": "huge_pages_unavailable",
+          "operation": "cpu_allocation",
+          "os_error": 12,
+          "requested_bytes": 2147483648
+        }
       }
-    ]
+    ],
+    "phase": "mining",
+    "previous_run": {
+      "phase": "initializing_backends",
+      "uptime_secs": 19,
+      "build_commit": "abcdef123456"
+    }
   }
 }
