@@ -104,6 +104,9 @@ set so stale caches from a different path get re-tuned, not reused.
 
 ## Release notes (`CHANGELOG.md`)
 
+- Batch several validated improvements into fewer releases. Keep landing finished
+  work promptly; do not publish a new release for each small performance gain.
+
 - Never mention competitors; describe Seine improvements and supported hardware.
 - Write for miners deciding whether to upgrade: what improves, who benefits,
   and any action they need to take. Lead with the biggest user benefit; put
