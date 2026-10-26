@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.38
 
 - **Up to about 16% faster CPU hashing on AMD Zen 4 servers** (measured on 32-core EPYC 9R14) for systems using the default memory-streaming kernel, and up to about 3% on Ryzen 9000 (measured on Ryzen 7 9700X).
 - **Up to about 8% faster CPU hashing on Linux with AMD Zen 2 and Zen 3 processors** (measured on EPYC 7R32 and EPYC 7R13).
