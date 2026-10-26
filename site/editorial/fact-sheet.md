@@ -560,3 +560,13 @@ checks extracted files (`.github/workflows/release.yml:105-110,138`). Matching a
 hash verifies correspondence to that reference, not a malware verdict. See
 `batches/2026-10-download-verification/research.md` for primary Microsoft sources,
 actual command output, capture provenance and failure-case checks.
+
+## RAM planning and share outcomes — checked October 26, 2026
+
+- Public seine v0.2.26 CPU arenas are 2 GiB per thread. Automatic sizing reserves
+  5% of effective total RAM in addition to accounting for current use; explicit
+  thread counts override that reserve but retain memory checks. Sources and
+  arithmetic: `research/ram-planning-2026-10-26.md`.
+- Pool submission acknowledgment, verification and payout eligibility are distinct.
+  Assignment difficulty and template+nonce deduplication govern shares. Sources:
+  sibling pool `frontend/blog/editorial/share-outcomes-2026-10-26.md`.

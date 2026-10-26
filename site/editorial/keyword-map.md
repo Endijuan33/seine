@@ -108,3 +108,11 @@ The hardware comparison guide also presents the dated RTX 5090 results with the 
 The download-verification guide owns warning identification, archive integrity checks and detection reports. The Windows guide retains the normal installation flow and its brief checksum step; the NVIDIA guide owns runtime and device setup. Neither file integrity nor the software category is presented as an antivirus verdict. Both setup guides link to the new troubleshooting owner.
 
 Added 2026-10-26: the Linux guide owns native archive installation and first-run errors. The general guide remains the cross-platform overview; huge pages and server guides own detailed tuning, NUMA and headless operation. No URL is retargeted or redirected.
+
+## RAM planning (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job | Supporting phrases |
+|---|---|---|---|
+| how much RAM to mine Blocknet; RAM per mining thread | `/blog/how-much-ram-to-mine-blocknet/` | Budget available memory, choose automatic or fixed CPU threads, and diagnose allocation/page-pool errors | 2 GiB per thread, seine memory reserve, container memory limit |
+
+The hardware article owns chip selection and measured hashrates; Argon2id owns algorithm mechanics; the huge-pages guide owns page configuration. This article owns the cross-platform memory budget and allocation decision process. Examples are arithmetic, not new benchmarks.
