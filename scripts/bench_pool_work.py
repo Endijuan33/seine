@@ -71,6 +71,7 @@ def main():
     shares = []
     connections = []
     errors = []
+    connection_events = []
     generations = {"user": 0, "fee": 0}
     server = socket.socket()
     server.bind(("127.0.0.1", args.listen_port))
@@ -92,6 +93,14 @@ def main():
         next_job_at = None
         buffer = b""
         conn.settimeout(0.25)
+        def connection_event(kind, error=None):
+            event = {"connection": connection_id, "elapsed": time.monotonic()-started,
+                     "kind": kind, "phase": "teardown" if teardown.is_set() else "measurement",
+                     "role": None if identity is None else ("user" if identity == address else "fee"),
+                     "buffered_bytes": len(buffer), "error": str(error) if error else None}
+            with lock:
+                connection_events.append(event)
+
         def send(value):
             record({"connection": connection_id, "direction": "out", "message": value})
             conn.sendall((json.dumps(value) + "\n").encode())
@@ -131,6 +140,7 @@ def main():
                 except socket.timeout:
                     continue
                 if not data:
+                    connection_event("peer_eof")
                     break
                 buffer += data
                 if len(buffer) > 1024 * 1024:
@@ -173,13 +183,15 @@ def main():
                             "error": rejection, "difficulty": 1}})
                     elif msg.get("id") is not None:
                         send({"id": msg["id"], "status": "ok"})
+        except ConnectionError as error:
+            # A peer can reset its old socket when rotating fee destinations.
+            # Retain the interruption for review; it is not malformed Stratum.
+            # Lost/unreceived work never enters the measured share count.
+            connection_event("peer_reset", error)
         except (OSError, ValueError, TypeError) as error:
-            # Terminating a miner with unread job/ack bytes can reset its TCP
-            # socket. Only suppress that expected post-window teardown event;
-            # a reset during measurement is still recorded as a failure.
-            if not (teardown.is_set() and isinstance(error, ConnectionError)):
-                with lock:
-                    errors.append({"connection": connection_id, "error": str(error)})
+            with lock:
+                errors.append({"connection": connection_id, "elapsed": time.monotonic()-started,
+                               "error": str(error)})
         finally:
             conn.close()
 
@@ -260,7 +272,10 @@ def main():
               "stale_receipts_in_window": sum(s['stale'] for s in measured),
               "rejected_receipts_in_window": sum(not s['eligible'] for s in measured),
               "verification": "pending; receipt acknowledgements are not cryptographic validation",
-              "shares": shares, "protocol_errors": errors}
+              "shares": shares, "protocol_errors": errors,
+              "connection_events": connection_events,
+              "connection_review_required": any(event['kind'] == 'peer_reset' and event['phase'] == 'measurement'
+                                                for event in connection_events)}
     (args.output / "work.json").write_text(json.dumps(result, indent=2)+"\n")
     print(json.dumps({k: v for k,v in result.items() if k not in {"shares", "command", "header_base"}}))
     return 0 if reason == "measurement_complete" and shares else 1
