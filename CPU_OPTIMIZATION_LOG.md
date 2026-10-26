@@ -4712,3 +4712,39 @@ Local evidence: `windows-short-trials-retry-prep/series-plan.json`,
 campaign directory. The prepared integration passed 122 adaptive tests (five
 existing heavyweight tests ignored) and a default-feature release build, but
 remains unlanded pending a satisfactory native follow-up.
+
+
+## 2026-10-26 current Linux Genoa cold comparison
+
+The official v0.2.36 Linux artifact (`f3c8175`, executable SHA-256
+`43684e9894fc98a01370246ab1b1a6e0b2c113282b2142cba2ecf57ba7e749aa`)
+completed the previously missing current NTM 1.2.2 comparison on one native
+EPYC 9R14 rental with 32 physical cores, 128 GiB RAM and transparent huge pages.
+The predeclared order was 120 seconds of NTM admission, 900 seconds of cold
+Seine, then 900 seconds of cold NTM; both measured cases used fresh settings.
+
+All **86,221 captured hashes** passed independent full-size libargon2 cache
+verification, with no invalid or duplicate hashes. Seine captured 40,506 hashes
+(40,505 inside its window), NTM captured 40,372 in its measured window, and the
+admission run contributed 5,343. Gross rates were **45.00556 versus 44.85778 H/s**
+(+0.32944%); user-directed rates including observed fee work were **44.04778
+versus 44.85778 H/s** (-1.80571%). These are descriptive results from one fixed
+cold pair, with no confidence interval or long-run fee/power claim. Gross
+near-parity does not establish an overall win. No fee policy was changed.
+
+The result also demonstrates why earlier slower rentals cannot establish a
+Seine regression: the unchanged NTM executable returned to 44.525 H/s in this
+admission run, compared with approximately 31.34 H/s on the earlier rental.
+Hardware identity alone did not make those environments performance-equivalent.
+
+Seine retained 32 workers and the R8/D2 demand-fence kernel. Its first count
+comparison completed at 168.8 seconds. Keep targeting the remaining throughput
+and startup deficit; do not rerun solely to seek a favorable result. The rental
+and its disk/access resources were deleted immediately after completion.
+
+Local campaign evidence: `comparison-diagnostics/linux-v36-comparison.json`,
+`native-linux-amd-v36-comparison/`, and the reproducible summary command
+`python3 operations/summarize_linux_v36.py` from the campaign directory. The
+summary binds the exact executable, raw capture and independent reference cache
+hashes. This comparison does not replace the separately scoped README/site
+steady-throughput records.
