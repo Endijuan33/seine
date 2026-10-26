@@ -59,13 +59,17 @@ These checks are recorded in journald and evaluated independently by the alert r
 Legacy inventory-only reports produce their own version-specific alert; they do not
 prevent collector outages or miner failures from being reported.
 
+The [October 26 schema-6 rollout proposal](ROLLOUT-SCHEMA6-20261026.md) pins the
+reviewed target and records acceptance checks, exact collector-only commands and
+image rollback. It is prepared, not executed; deployment requires an explicit request.
+
 For deployment, first review the intended commit and create a fresh recovery backup.
 Then fast-forward the checkout and rebuild only the collector:
 
 ```sh
 systemctl start seine-telemetry-backup.service
 git pull --ff-only origin master
-docker compose -f telemetry/deploy/compose.yaml --env-file telemetry/deploy/.env up -d --build collector
+docker compose -f telemetry/deploy/compose.yaml --env-file telemetry/deploy/.env up -d --no-deps --build collector
 systemctl start seine-telemetry-check.service
 ```
 
