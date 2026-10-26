@@ -200,7 +200,7 @@ impl FixedArgon2id {
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
-                self.fill_streaming_ring::<8, 2, { cfg!(target_os = "linux") }>(memory_blocks)
+                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }>(memory_blocks)
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),

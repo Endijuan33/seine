@@ -4359,3 +4359,28 @@ Keep ring 8. All **10,944 timed hashes** independently matched libargon2, with
 36 full-size RustCrypto checks before timing. The rental was terminated promptly
 and cleanup verified. Evidence:
 `benchmark-evidence/longhorn-20261025/native-linux-amd-demand-ring/ring-publication/campaign/`.
+
+## 2026-10-26: demand-triggered fences confirmed on native Genoa Windows
+
+The separately frozen Windows candidate passed the predeclared two-pair
+20-second screen and three fresh alternating 30-second confirmation pairs.
+The 32-worker, 64 GiB ordinary-page comparison measured 32.83906 baseline versus
+33.69681 candidate H/s: +2.61177%, paired bootstrap 95% interval
+[+2.19450%, +2.99261%], three of three pairs faster. Allocation, five-second
+warmup and teardown are excluded; this is fixed-kernel throughput, not pool
+or startup performance. The host was native Windows Server 2025, EPYC 9R14,
+32 physical cores and 128 GiB, with OS placement and no power limit.
+
+All 8,936 timed hashes independently matched the existing libargon2 cache;
+12 native full-size RustCrypto checks passed before timing. Baseline executable
+SHA-256: 87bc84be855a325ea962f74be4f3ee2a60f7a2a73e0b0af9732bb34094e83ed3.
+Candidate: 1612f4ee93e88184fffa84f45d3960a7ef8432b243876fcfc1edeab807e399ea.
+The baseline periodic loop and timing/allocation functions are unchanged
+between their frozen sources except for the candidate's policy label. The
+candidate uses the same demand-fence loop already integrated on Linux.
+
+Enable that existing implementation for Windows R8D2 as well. Keep the existing
+precise hardware, runtime ISA, thread-count, backing and tuning gates; other
+kernel specializations remain unchanged. The rental terminated at 9:13 AM EDT,
+with root volume, security group and local key cleanup verified. Evidence:
+local campaign `native-windows-amd-demand-fence/demand-fence/campaign/`.
