@@ -216,7 +216,7 @@ impl FixedArgon2id {
             ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM => unsafe {
-                self.fill_streaming_ring::<64, 3, false>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
@@ -236,7 +236,7 @@ impl FixedArgon2id {
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
-            ISA_AVX2_STREAM => unsafe { self.fill_streaming_ring_avx2::<8, 7>(memory_blocks) },
+            ISA_AVX2_STREAM => unsafe { self.fill_streaming_ring_avx2::<2, 3>(memory_blocks) },
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
             #[cfg(target_arch = "aarch64")]
             ISA_NEON_SHA3 => unsafe { self.fill_blocks_neon_sha3(memory_blocks) },
@@ -247,7 +247,9 @@ impl FixedArgon2id {
     }
 
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
-    // Periodic mode fences every ring wrap. R8/D2 and R64/D3–4 use the measured
+    // Periodic mode issues no fence before arena loads (same-core loads observe
+    // this core's NT stores) and an SFENCE every 32 blocks to bound
+    // write-combining occupancy. R8/D2 and R64/D3–6 use the measured
     // reference-demand policy: fence before reading an uncommitted arena block.
     // Recent references stay in the ring; finalization always fences.
     #[cfg(target_arch = "x86_64")]
@@ -278,10 +280,6 @@ impl FixedArgon2id {
             let base = slice * self.segment_length;
             for block in first..self.segment_length {
                 let cur = base + block;
-                if !DEMAND_FENCE && cur & mask == 0 {
-                    // MFENCE orders prior WC stores before subsequent arena loads.
-                    _mm_mfence();
-                }
                 let prev = &*cache.add((cur - 1) & mask);
                 let reference = if di {
                     self.data_independent_ref_indexes[cur]
@@ -335,18 +333,22 @@ impl FixedArgon2id {
                     let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
                     _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
                 }
+                if !DEMAND_FENCE && cur & 31 == 31 {
+                    std::arch::x86_64::_mm_sfence();
+                }
             }
         }
         _mm_mfence(); // Finalization consumes the final arena block.
     }
 
-    // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512 (Zen 3):
-    // an 8-block cached ring, non-temporal arena stores and a seven-block
+    // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512 (Zen 2/3):
+    // a 2-block cached ring, non-temporal arena stores and a three-block
     // whole-block prefetch while addresses are data independent. Same-core loads
     // observe this core's earlier NT stores to the same address, so arena reads
     // need no fence; a periodic SFENCE only bounds write-combining buffer
     // occupancy. Native EPYC 7443P: +48% vs AVX2 at 12 workers. Dropping the
     // prefetch gained 8.8% at 24 workers but lost 14.9% at 12, so it stays.
+    // Ring 2/depth 3 beat ring 8/depth 7 by 1-8% on EPYC 7R32 and 7R13.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn fill_streaming_ring_avx2<const RING: usize, const DEPTH: usize>(

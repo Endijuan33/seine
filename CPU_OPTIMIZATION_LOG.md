@@ -19,6 +19,10 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | `avx2-stream` beats `avx2` on a Zen 3 VM | EPYC 7R13 (c6a.8xlarge), 16 workers | 14.54 vs 11.62, +25% | confirms Zen 3 (shared-socket VM) |
 | `avx2-stream` beats `avx2` on Zen 2 | EPYC 7R32 (c5a.8xlarge), 16 / 28 workers | 17.16 vs 10.27 (**+67%**) / 15.98 vs 9.26 (+73%) | adopted for Zen 2 (family 17h, model ≥ 30h); full 2 GiB parity |
 | Prefetch depth 3 instead of 7 in `avx2-stream` | EPYC 7R32, 16 / 28 workers | +0.1% / −7.0% | rejected; depth 7 kept |
+| `avx2-stream` ring 2 (depth 7 / depth 3) instead of ring 8 / depth 7 | EPYC 7R13 (c6a.8xlarge), 16 / 28 workers | d7 +5.5% / +7.5%; d3 +7.0% / +8.4% | adopted ring 2 / depth 3 |
+| Same | EPYC 7R32 (c5a.8xlarge), 16 / 28 workers | d7 +1.4% / +7.5%; d3 +1.4% / +6.8% | confirms (neighbour cohort) |
+| Plain AVX-512 stream: ring 2 + SFENCE/32 instead of ring 64 + MFENCE per wrap | Ryzen 7 9700X, 8 / 12 / 16 workers | 0% / +2.0% / +2.8% | adopted |
+| Same, Zen 4 neighbour check | EPYC 9R14 (m7a.8xlarge), 16 / 32 workers | +0.8% (drift) / **+16.4%** (44.22 vs 38.01) | confirms; full 2 GiB parity |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a

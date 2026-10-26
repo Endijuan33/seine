@@ -21,7 +21,8 @@ pub enum CpuKernel {
     Avx512256StreamR64D4,
     /// Streaming stores with 64 cached blocks, depth six and demand fences.
     Avx512256StreamR64D6,
-    /// AVX2 compression with eight cached blocks and non-temporal arena stores.
+    /// AVX2 compression with two cached blocks, non-temporal arena stores and
+    /// three-block data-independent prefetch.
     Avx2Stream,
 }
 

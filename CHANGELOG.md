@@ -7,6 +7,12 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
+## Unreleased
+
+- **Up to about 16% faster CPU hashing on AMD Zen 4 servers** (measured on 32-core EPYC 9R14) for systems using the default memory-streaming kernel, and up to about 3% on Ryzen 9000 (measured on Ryzen 7 9700X).
+- **Up to about 8% faster CPU hashing on Linux with AMD Zen 2 and Zen 3 processors** (measured on EPYC 7R32 and EPYC 7R13).
+- `seine --bench` now measures the same CPU kernel that mining uses, so benchmark results match real mining speed on AMD Zen 2 to Zen 5.
+
 ## v0.2.37
 
 - **About 67% faster CPU hashing on Linux with AMD Zen 2 processors (measured on EPYC 7R32) and about 48% faster with Zen 3 (measured on EPYC 7443P)**, using a new memory-streaming kernel.
