@@ -7,6 +7,8 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 
 ## Unreleased
 
+- **Faster mining startup on 32-core AMD EPYC 9R14 systems:** Linux and Windows start from validated worker and kernel settings while continuing to tune. Linux also initializes supported huge-page memory faster.
+
 - **One miner fee everywhere:** a flat 2% dev fee on every pool and in solo mode replaces the previous 1% bntpool.com / 2.5% elsewhere rates. Upgrade to use the new rate.
 
 - **More useful failure reports:** optional telemetry preserves specific memory and pool connection failure reasons, Windows code locations, and the last observed stage of interrupted runs.

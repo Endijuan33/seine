@@ -3662,6 +3662,7 @@ cargo run --release -- --bench --bench-kind kernel --backend cpu --threads 1 --d
 cargo run --release -- --bench --bench-kind backend --backend cpu --threads 1 --disable-cpu-autotune-threads --bench-secs 12 --bench-rounds 4 --bench-warmup-rounds 1 --ui plain --bench-output <report.json>
 ```
 
+
 ## 2026-10-25 CPU kernel benchmark lifecycle accounting
 
 The native EPYC 9R14 fixed-kernel screen revealed that `--bench-kind kernel`
@@ -3691,3 +3692,218 @@ remain unchanged. Tests exercise each case and run the shell workflow with
 fixture executables, including both directions of a mixed-version pair. The
 CPU-only landing workspace passed 581 tests with eight hardware tests ignored; the
 three shell-workflow tests passed without allocating mining arenas.
+
+## 2026-10-25 experimental EPYC 9R14 full-core cold seed (not validated)
+
+The Longhorn comparison's first complete 900-second native Linux capture on
+an m7a.8xlarge (EPYC 9R14, family 19h/model 11h, 32 physical guest cores,
+no SMT, 128 GiB) starts Seine at 16 workers. It confirms streaming at 301s,
+24 workers at 595s, and 32 workers at 900s. These log observations motivate
+an experiment; the captured shares are still undergoing independent full-hash
+verification, and no performance claim or new shipping default is approved.
+
+The experimental candidate starts at the full count only for that CPU brand,
+numeric identity, Linux native runtime, 32-core topology and 120–130 GiB host
+memory range, with one CPU backend, automatic affinity and pages, and a
+32-worker memory/search ceiling. Compatible cached counts take precedence.
+Current available RAM and task-slot limits still clamp startup; zero available
+arenas still parks the backend. Efficiency mode retains its prior behavior.
+This changes no kernel or ISA gate, pressure handling, or confirmation threshold.
+The build fingerprint changes with the source, preserving cache separation.
+
+Gate tests cover adjacent CPU identities, a different brand, Windows/WSL,
+SMT/different core counts, smaller memory, explicit resource bounds, efficiency,
+manual pages/affinity, multiple backends, cached seeds and zero available RAM.
+The CPU-only workspace test suite passes. Native fixed-kernel screening and
+interleaved cold/warm comparisons remain required before landing this policy.
+
+
+### 2026-10-25: experimental Genoa streaming startup (not landed)
+
+The native Longhorn comparison repeatedly reaches the streaming path only
+after several minutes. At 32 workers, Seine's live comparison logs favor it
+over AVX-512 and AVX2; independent verification of the full captured work is
+still in progress. The old fixed-kernel screen includes allocation time and
+is retained only as lifecycle evidence.
+
+An experimental candidate starts streaming on the exact native Linux EPYC
+9R14, 32-physical-core, 128 GiB configuration already covered by the full-count
+seed experiment. It additionally requires exactly 32 active workers in one
+CPU backend and all 64 GiB backed by transparent huge pages. Other identities,
+worker counts, explicit-page modes, mixed backing and efficiency mode retain
+their previous starting policy. Cached winners still take precedence; normal
+repeated comparisons can replace the starting kernel. The cache fingerprint
+records this experimental policy separately.
+
+Three new tests cover host/ISA eligibility, backing and worker-count limits,
+and a losing startup kernel being replaced and cached after repeated trials.
+The CPU-only workspace passes 580 tests with eight hardware tests ignored at
+four test threads. A prior default-parallel run failed the existing 1 ms
+enqueue-timeout classification assertion; both logs are preserved. Native
+candidate measurements and reference-hash verification are required before
+this policy can land. No mining speedup is claimed yet.
+
+
+## 2026-10-25: native EPYC hint-before-populate allocation (experimental)
+
+The interleaved native EPYC 9R14 allocation-only probe used the same 2 GiB arenas
+and full measured THP coverage. Two 32-worker trials took 30.110/30.107 seconds
+with MAP_POPULATE before the hugepage hint, versus 1.851/1.803 seconds when the
+hint preceded MADV_POPULATE_WRITE. At 16 workers the corresponding observations
+were 14.814/15.549 versus 0.789/1.051 seconds. This is startup evidence, not a
+steady hashrate or energy result. Python probe measurements need in-miner validation.
+
+The unlanded candidate applies the alternative only to native Linux, AuthenticAMD
+family 0x19/model 0x11, exact EPYC 9R14, 32 physical/32 logical CPUs, 120–130 GiB
+RAM, Auto page mode and full-size 2 GiB arenas. Explicit HugeTLB is still attempted
+first. A failed hugepage hint or writable-prefault advice discards that mapping
+and retries the legacy MAP_POPULATE path; Regular remains explicitly non-THP.
+Host CPU inventory is used because workers have already been pinned. Cache build
+fingerprints change with this candidate. Other CPU identities and WSL are excluded.
+
+Validation: 578 CPU tests passed, nine ignored; the ignored full-size reference
+check was then run optimized and passed both the new advice and forced-fallback
+paths with dirty reuse. Native end-to-end comparison against v0.2.26 and Longhorn
+is pending. Do not land this default before that comparison validates it.
+
+Evidence: benchmark-evidence/longhorn-20261025/native-page-startup-summary.json,
+current-allocation-candidate-tests.log and allocation-full-parity.log.
+
+## 2026-10-26: EPYC cold-start evidence and integration review (not landed)
+
+The frozen `47089f8` candidate now has three independently verified cold
+comparisons against released v0.2.26 on the same m7a.8xlarge: EPYC 9R14,
+32 physical guest cores without SMT, 128 GiB RAM, one visible NUMA node,
+native Linux, and full THP backing. Each run measures 900 seconds from launch,
+including productive tuning and the observed developer-fee intervals. All
+captured hashes match the independent full-size C Argon2 reference.
+
+| Frozen build | Mean useful user hashes/second |
+| --- | ---: |
+| Seine v0.2.26 | 29.4404 |
+| Seine 47089f8 | 35.9863 |
+| Longhorn 2026.10.25-5667e12 | 40.9252 |
+
+The candidate improves this cold window by 22.23%; the mean paired improvement
+is 6.5459 H/s with a 95% paired Student-t interval of [6.4578, 6.6341]. It remains
+4.9389 H/s behind that Longhorn build, interval [-5.0576, -4.8202]. Three pairs
+are a small sample, and these observations are neither a sustained-throughput
+claim nor evidence for other EPYC models, Windows, power efficiency, or newer
+Longhorn versions. Warm repetitions are still running. The full-count seed,
+streaming start and prefault-order changes were measured together; their
+individual end-to-end contributions are not isolated by this comparison.
+
+This integration branch applies only those three changes to current master
+(`e921c19`). The cache-read conflict preserves master's rejection diagnostics
+and uses a valid cached seed before the new cold-start policy. Ring/depth,
+two-arena and shortened-trial research are excluded. Master also contains an
+unreleased flat 2% fee policy, so the numbers above describe the frozen
+measured builds, not an as-yet-unmeasured integrated release.
+
+Evidence: `benchmark-evidence/longhorn-20261025/native-linux-amd-current/`
+contains raw captures, per-capture verification and `series-summary.json`/CSV.
+Integration regression results go to `epyc-integration-tests.log`. Keep this
+branch unlanded until the remaining warm comparisons and integration review
+are complete; release and deployment remain separate actions.
+
+### Restart cache regression found during integration review
+
+The first completed warm `47089f8` run selected 31 workers and saved kernel
+winners for 32, 31 and 30 workers. The experimental startup-policy fingerprint
+incorrectly depended on `cfg.threads == 32`: restoring the confirmed 31-worker
+count on the next launch would change that fingerprint and reject the entire
+kernel cache. This was reproduced by an executed regression test before the
+fix. It is an unreleased candidate issue, not a v0.2.26 regression.
+
+The integration now separates host-policy eligibility from the runtime context.
+Changing the starting count no longer invalidates the same host's kernel cache;
+the automatic streaming start still requires the measured 32-worker context
+with full THP backing. Cached winners remain tied to the exact worker count,
+backing, host, build and supported ISA. The regression test confirms a saved
+31-worker winner survives restart and that a fresh 31-worker context does not
+receive the 32-worker startup hint.
+
+Existing native warm repetitions each restore the immutable cold-run cache
+whose selected count is 32, so this finding does not invalidate those captures.
+It prevents a later restart from discarding the additional evidence they learn.
+No extra hashrate gain is claimed for this correction. Evidence:
+`comparison-diagnostics/genoa-cache-seed-restart.json`,
+`epyc-cache-seed-regression-red-exact.log`,
+`epyc-cache-seed-regression-green.log`, and `epyc-cache-seed-adaptive-tests.log`
+under the campaign evidence directory.
+
+
+### Completed cold and warm validation
+
+All three cold and three warm triplets for the frozen `47089f8` candidate,
+shipping v0.2.26 and Longhorn `2026.10.25-5667e12` are complete and independently
+verified. Warm runs each restore their miner's immutable third cold-run cache;
+they include further productive tuning of previously unseen worker contexts.
+They do not measure only the final selected kernel.
+
+| Frozen build | Cold useful H/s | Warm useful H/s |
+| --- | ---: | ---: |
+| Seine v0.2.26 | 29.4404 | 34.6441 |
+| Seine 47089f8 | 35.9863 | 36.6659 |
+| Longhorn 2026.10.25-5667e12 | 40.9252 | 40.9070 |
+
+The candidate improves the cold launch window by 22.23% and the warm launch
+window by 5.84% over shipping Seine. The warm paired improvement is 2.0219 H/s,
+with a 95% Student-t interval of [1.9365, 2.1072]. Its warm deficit to Longhorn
+remains 4.2411 H/s, interval [-4.3916, -4.0906]. These small-sample intervals
+apply only to this native Linux EPYC 9R14 cohort and the exact frozen builds.
+The complete raw captures, verification reports and JSON/CSV remain in
+`benchmark-evidence/longhorn-20261025/native-linux-amd-current/` in the workspace.
+
+A post-hoc 600–850-second window in each warm candidate run contains no logged
+tuning activity. Independently verified gross throughput averages 38.104 H/s
+versus Longhorn's 41.7387 H/s in the matching windows. This diagnostic motivates
+a separate fixed-kernel experiment; it is not a new headline, confidence
+interval, or proof that all of the residual deficit belongs to the kernel.
+See `comparison-diagnostics/warm-residual.json` and its reproducible exporter.
+
+The integration's frozen `6c70b4d` Linux build is now undergoing a separate
+native comparison against the shorter-trial experiment. It retains the current
+master fee policy and the corrected cache fingerprint. Source-equivalent
+Windows parent `f61107f` fixes a platform import; Windows startup-policy changes
+are a separate, unlanded experiment. Keep the older cohort's rates attributed
+to its measured builds. No release or deployment follows automatically from
+these results.
+## 2026-10-26 — Windows EPYC 9R14 startup experiment (unreleased)
+
+Three independently verified native Windows cold captures (62,576 captured hashes, ordinary pages, 32 physical cores / 128 GiB) consistently start at 16 workers and discover streaming winners at 16, 24 and 32. In the third capture, the tuner begins the 32-worker comparison at 612.6 seconds and confirms 32 at 867.4 seconds. Its internal 32-worker streaming samples are 32.9–33.7 H/s, versus 27.13 for AVX-512 and 26.83 for AVX2. These internal samples diagnose discovery cost; they are not standalone benchmark results. Evidence: `../benchmark-evidence/longhorn-20261025/comparison-diagnostics/windows-startup-policy-evidence.json`.
+
+This separate research candidate starts the exact native Windows EPYC 9R14 32-core / 120–130 GiB host at 32 workers when resources permit, preserving existing count caches and limits. It starts streaming only on a single 32-worker backend with entirely ordinary-page backing and runtime-supported instructions. Efficiency profiles, other CPUs/topologies, large/mixed pages and manual overrides retain the existing rules. Confirmed kernel winners take precedence, and ordinary repeated comparisons can replace the startup choice. The policy fingerprint is independent of the cached initial count. Linux behavior is unchanged from parent `6c70b4d`; the shorter-trial experiment is not included.
+
+Validation: 83 adaptive CPU/kernel tests passed, 3 hardware tests ignored, including Windows backing/host gates, cache precedence and a startup hint losing to another kernel. The native MSVC release build and paired screen below subsequently passed.
+
+
+### Native Windows startup screen and integration decision
+
+On the same native Windows EPYC 9R14 host (32 physical cores, 128 GiB,
+ordinary pages), frozen parent `f61107f` and candidate `6c34e62` completed one
+900-second cold pair using identical kernels and fee policy. Independently
+verified useful throughput was 17.9800 versus 29.3722 H/s (+63.36%); gross
+throughput was 18.4089 versus 30.0422 H/s. All 16,570 parent and 27,039 candidate
+captured hashes passed full-size independent reference verification, with no
+invalid hashes or duplicates. Native MSVC release builds used Rust 1.93.0.
+
+The parent started at 16 workers and encountered noisy kernel/count comparisons.
+The candidate began with 32 workers and applied the streaming hint once arena
+backing was known. This single pair supports the narrowly scoped startup policy;
+it does not establish a precise repeatable percentage, sustained kernel gain,
+or performance against Longhorn. No confidence interval or marketing headline
+is claimed. Evidence and frozen artifact hashes are retained in
+`../benchmark-evidence/longhorn-20261025/native-windows-amd-startup-screen/`
+and `windows-startup-build/`.
+
+The integrated Linux parent `6c70b4d` also completed its separate 900-second cold
+screen: 33,369 independently verified captured hashes, no invalid hashes or
+duplicates, and 36.2600 useful H/s. This build uses the current fee policy and
+corrected cache fingerprint. The shorter-trial candidate remains separate.
+
+Integration proceeds on the existing evidence and targeted regression checks;
+another long Windows confirmation is not required to make this decision. The
+startup choice remains limited to the measured host/backing contexts, preserves
+confirmed caches and explicit settings, and can lose to productive autotuning.
+Release and deployment remain separate actions.

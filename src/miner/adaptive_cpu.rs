@@ -97,6 +97,53 @@ fn seed_threads(
         .clamp(floor, max.min(available))
 }
 
+// Validated cold-start policy for native Linux/Windows 32-core/128 GiB
+// EPYC 9R14 hosts. Keep off other identities, topologies and profiles.
+// This changes only the initial count; normal resource shedding and repeated
+// count/kernel comparisons still decide the sustained setting.
+pub(super) fn full_count_cold_start(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    max: usize,
+    memory_capacity: usize,
+) -> bool {
+    identity.vendor.as_deref() == Some("AuthenticAMD")
+        && identity.family == Some(0x19)
+        && identity.model == Some(0x11)
+        && host.cpu_brand.as_deref() == Some("AMD EPYC 9R14")
+        && matches!(host.os.as_str(), "linux" | "windows")
+        && host.runtime_environment == "native"
+        && host.logical_cores == 32
+        && host.physical_cores == Some(32)
+        && (120 * 1024_u64.pow(3)..=130 * 1024_u64.pow(3)).contains(&host.total_memory_bytes)
+        && cfg.backend_specs.len() == 1
+        && instances(cfg) == 1
+        && cfg.backend_specs[0]
+            .cpu_affinity
+            .is_none_or(|affinity| affinity == crate::config::CpuAffinityMode::Auto)
+        && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
+        && cfg.cpu_page_mode == crate::config::CpuPageMode::Auto
+        && cfg.cpu_affinity == crate::config::CpuAffinityMode::Auto
+        && max == 32
+        && memory_capacity >= 32
+}
+
+fn initial_threads(
+    record: Option<&CpuAutotuneRecord>,
+    min: usize,
+    max: usize,
+    available: usize,
+    memory_capacity: usize,
+    full_count: bool,
+) -> usize {
+    if record.is_none() && full_count {
+        max.min(memory_capacity).min(available)
+    } else {
+        seed_threads(record, min, max, available, memory_capacity)
+    }
+}
+
 // Threads already running (including the API's Tokio worker pool) are charged
 // in pids.current. Reserve only later work. DNS/blocking and GPU driver threads
 // are demand-driven, so the margin is best effort; startup also handles spawn
@@ -181,7 +228,22 @@ fn prepare_with_resources(
             None
         }
     };
-    let threads = seed_threads(seed.as_ref(), min, max, available, memory_capacity);
+    let full_count = seed.is_none()
+        && full_count_cold_start(
+            cfg,
+            &cpu_autotune_host_fingerprint(),
+            &crate::runtime_identity::cpu_identity(),
+            max,
+            memory_capacity,
+        );
+    let threads = initial_threads(
+        seed.as_ref(),
+        min,
+        max,
+        available,
+        memory_capacity,
+        full_count,
+    );
     // Zero is intentional here. A parked CPU backend stays connected and can
     // recover when a whole arena plus the configured reserve fits again.
     cfg.threads = threads;
@@ -2232,6 +2294,86 @@ mod tests {
         assert_eq!(seed_threads(Some(&r), 1, 6, 16, 6), 6);
         assert_eq!(seed_threads(None, 8, 16, 3, 16), 3);
         assert_eq!(seed_threads(None, 1, 16, 16, 16), 8);
+    }
+
+    #[test]
+    fn genoa_full_count_seed_requires_exact_native_host_and_configuration() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            stepping: Some(1),
+        };
+        assert!(full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        let mut windows = host.clone();
+        windows.os = "windows".into();
+        assert!(full_count_cold_start(&cfg, &windows, &identity, 32, 32));
+        for (vendor, family, model) in [
+            ("GenuineIntel", 0x19, 0x11),
+            ("AuthenticAMD", 0x1a, 0x11),
+            ("AuthenticAMD", 0x19, 0x10),
+        ] {
+            let mut other = identity.clone();
+            other.vendor = Some(vendor.into());
+            other.family = Some(family);
+            other.model = Some(model);
+            assert!(!full_count_cold_start(&cfg, &host, &other, 32, 32));
+        }
+        for field in ["brand", "os", "runtime", "logical", "physical", "memory"] {
+            let mut other = host.clone();
+            match field {
+                "brand" => other.cpu_brand = Some("AMD EPYC 9354P".into()),
+                "os" => other.os = "macos".into(),
+                "runtime" => other.runtime_environment = "wsl2".into(),
+                "logical" => other.logical_cores = 64,
+                "physical" => other.physical_cores = Some(16),
+                "memory" => other.total_memory_bytes = 64 * 1024_u64.pow(3),
+                _ => unreachable!(),
+            }
+            assert!(
+                !full_count_cold_start(&cfg, &other, &identity, 32, 32),
+                "{field}"
+            );
+        }
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 24, 32));
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 24));
+        cfg.cpu_profile = CpuPerformanceProfile::Efficiency;
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_profile = CpuPerformanceProfile::Throughput;
+        assert!(full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_page_mode = CpuPageMode::Regular;
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.cpu_page_mode = CpuPageMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = Some(crate::config::CpuAffinityMode::Off);
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 32));
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.backend_specs.push(cfg.backend_specs[0].clone());
+        assert!(!full_count_cold_start(&cfg, &host, &identity, 32, 32));
+    }
+
+    #[test]
+    fn full_count_seed_preserves_cache_and_transient_resource_limits() {
+        let cfg = super::super::tests::test_config();
+        let cached = record(&cfg, 24);
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, true), 32);
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, false), 16);
+        assert_eq!(initial_threads(Some(&cached), 1, 32, 32, 32, true), 24);
+        assert_eq!(initial_threads(Some(&cached), 1, 32, 8, 32, true), 8);
+        assert_eq!(initial_threads(None, 1, 32, 8, 32, true), 8);
+        assert_eq!(initial_threads(None, 1, 32, 32, 8, true), 8);
+        assert_eq!(initial_threads(None, 1, 32, 0, 32, true), 0);
     }
 
     fn record(cfg: &Config, selected_threads: usize) -> CpuAutotuneRecord {

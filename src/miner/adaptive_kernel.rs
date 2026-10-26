@@ -107,6 +107,60 @@ fn startup_kernel_for(
     .then_some(CpuKernel::Avx512256Stream)
 }
 
+// Host eligibility must not depend on the initial worker count: a cached count
+// can differ on the next launch without changing the kernel policy. The actual
+// startup action remains restricted to the measured 32-worker/full-THP context
+// below. Normal repeated comparisons can still replace the starting kernel.
+fn genoa_stream_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    candidates: &[CpuKernel],
+) -> bool {
+    host.os == "linux"
+        && candidates.contains(&CpuKernel::Avx512256Stream)
+        && super::adaptive_cpu::full_count_cold_start(
+            cfg,
+            host,
+            identity,
+            32,
+            cfg.cpu_auto_threads_cap,
+        )
+}
+
+fn genoa_stream_context(context: &Context) -> bool {
+    context.members.len() == 1
+        && context.workers == [32]
+        && context.backing == [[0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]]
+}
+
+// Validated startup policy from native Windows cold captures and a paired
+// startup screen. Discovering 32 workers took almost the entire 900-second
+// window. Start there while retaining exact backing, ISA, resource and
+// repeated-comparison gates. See CPU_OPTIMIZATION_LOG.md for measurement scope.
+fn windows_genoa_stream_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    candidates: &[CpuKernel],
+) -> bool {
+    host.os == "windows"
+        && candidates.contains(&CpuKernel::Avx512256Stream)
+        && super::adaptive_cpu::full_count_cold_start(
+            cfg,
+            host,
+            identity,
+            32,
+            cfg.cpu_auto_threads_cap,
+        )
+}
+
+fn windows_genoa_stream_context(context: &Context) -> bool {
+    context.members.len() == 1
+        && context.workers == [32]
+        && context.backing == [[0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0]]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct Context {
     // Indices in the controller's stable CPU backend list. Different survivors
@@ -298,6 +352,8 @@ pub(super) struct Tuner {
     settle_started: u64,
     // Identity-validated starting path for uncached contexts, if any.
     startup: Option<CpuKernel>,
+    genoa_startup: bool,
+    windows_genoa_startup: bool,
 }
 
 impl Tuner {
@@ -318,7 +374,13 @@ impl Tuner {
         // Native hardware tests must exercise the shipping identity and ISA
         // gates. Only synthetic fixtures opt into an identity-neutral tuner.
         let candidates = candidates_for(identity, &supported_kernels());
-        let startup = startup_kernel_for(identity, &candidates);
+        let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
+        let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
+        let startup = if genoa_startup || windows_genoa_startup {
+            Some(CpuKernel::Avx512256Stream)
+        } else {
+            startup_kernel_for(identity, &candidates)
+        };
         let short_trials = short_trials_for(identity, &candidates, cfg.cpu_autotune_secs);
         let mut configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
@@ -337,6 +399,12 @@ impl Tuner {
         );
         if short_trials {
             configuration.push_str(";sample_policy=turin-10s-256-v1");
+        }
+        if genoa_startup {
+            configuration.push_str(";startup=genoa-32-thp-v1");
+        }
+        if windows_genoa_startup {
+            configuration.push_str(";startup=genoa-windows-32-regular-v1");
         }
         let mut name = cfg.cpu_autotune_config_path.as_os_str().to_owned();
         name.push(".kernels.json");
@@ -365,6 +433,8 @@ impl Tuner {
             settling: None,
             settle_started: 0,
             startup,
+            genoa_startup,
+            windows_genoa_startup,
         }
     }
 
@@ -564,10 +634,16 @@ impl Tuner {
                 }
                 if let Some(kernel) = self.startup.filter(|k| {
                     self.candidates.contains(k)
-                        && context
-                            .workers
-                            .iter()
-                            .all(|&w| w >= STARTUP_STREAM_MIN_WORKERS)
+                        && if self.genoa_startup {
+                            genoa_stream_context(&context)
+                        } else if self.windows_genoa_startup {
+                            windows_genoa_stream_context(&context)
+                        } else {
+                            context
+                                .workers
+                                .iter()
+                                .all(|&w| w >= STARTUP_STREAM_MIN_WORKERS)
+                        }
                         && !snapshots.iter().all(|s| s.kernel == *k)
                 }) {
                     // Compare the remaining paths against it promptly; only a
@@ -577,8 +653,15 @@ impl Tuner {
                     self.settling = Some(kernel);
                     self.settle_started = now;
                     return Action {
-                        hold_counts: true, kernel: Some(kernel), reset_scores: true, interrupted: false,
-                        message: Some(format!("starting {kernel} path validated for this CPU; comparing other paths against it")),
+                        hold_counts: true,
+                        kernel: Some(kernel),
+                        reset_scores: true,
+                        interrupted: false,
+                        message: Some(if self.genoa_startup || self.windows_genoa_startup {
+                            format!("starting validated {kernel} path for matched EPYC context; comparing other paths against it")
+                        } else {
+                            format!("starting {kernel} path validated for this CPU; comparing other paths against it")
+                        }),
                     };
                 }
             }
@@ -1326,6 +1409,260 @@ mod tests {
         assert_eq!(t.cache.winners[0].candidate, "avx2");
         assert!(t.pending.is_empty());
         let _ = fs::remove_file(&t.path);
+    }
+
+    #[test]
+    fn genoa_kernel_cache_survives_a_different_confirmed_starting_count() {
+        if !CpuKernel::Avx512256Stream.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-genoa-cache-seed-{}.json",
+            std::process::id()
+        ));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        let mut first = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&first.path);
+        let context = Context {
+            members: vec![0],
+            workers: vec![31],
+            backing: vec![[0, 0, 31 * CPU_LANE_MEMORY_BYTES, 0, 0]],
+        };
+        first.cache.winners = vec![Winner {
+            context: context.clone(),
+            kernel: "avx512-256-stream".into(),
+            timestamp: unix_secs(),
+            base: "avx512-256-stream".into(),
+            candidate: "avx2".into(),
+            samples: vec![sample(100); 3],
+        }];
+        fs::write(&first.path, serde_json::to_vec(&first.cache).unwrap()).unwrap();
+
+        // A completed 32-worker-start run can confirm 31 workers for the next
+        // launch. Its exact-context kernel evidence must remain reusable.
+        cfg.threads = 31;
+        let restored = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let same_policy = first.cache.configuration == restored.cache.configuration;
+        let restored_winner = restored
+            .cache
+            .winner(&context, unix_secs(), &restored.candidates);
+        let _ = fs::remove_file(&first.path);
+        assert!(
+            same_policy,
+            "the seed count must not change the host policy fingerprint"
+        );
+        assert_eq!(restored_winner, Some(CpuKernel::Avx512256Stream));
+
+        // No cached winner means a 31-worker context still needs ordinary
+        // comparisons: the measured automatic streaming start remains 32 only.
+        let mut fresh = Tuner::for_identity(&cfg, host, &identity);
+        let mut s = snapshot();
+        s.threads = 31;
+        s.backing_bytes = context.backing[0];
+        s.kernel = CpuKernel::Avx512;
+        let action = fresh.tick(1, &[s], true, true);
+        assert_eq!(action.kernel, None);
+        assert!(action.hold_counts);
+        assert!(!genoa_stream_context(&context));
+    }
+
+    #[test]
+    fn experimental_genoa_startup_requires_full_count_host_and_supported_path() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let mut host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            stepping: Some(1),
+        };
+        let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
+        assert!(genoa_stream_startup(&cfg, &host, &identity, &paths));
+        assert!(!genoa_stream_startup(&cfg, &host, &identity, &paths[..1]));
+        cfg.threads = 24;
+        assert!(genoa_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 24;
+        assert!(!genoa_stream_startup(&cfg, &host, &identity, &paths));
+        cfg.cpu_auto_threads_cap = 32;
+        host.runtime_environment = "wsl2".into();
+        assert!(!genoa_stream_startup(&cfg, &host, &identity, &paths));
+    }
+
+    #[test]
+    fn experimental_genoa_context_requires_one_full_thp_32_worker_backend() {
+        let context = Context {
+            members: vec![0],
+            workers: vec![32],
+            backing: vec![[0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]],
+        };
+        assert!(genoa_stream_context(&context));
+        let mut changed = context.clone();
+        changed.workers[0] = 24;
+        assert!(!genoa_stream_context(&changed));
+        changed = context.clone();
+        changed.backing[0] = [0, 0, 31 * CPU_LANE_MEMORY_BYTES, CPU_LANE_MEMORY_BYTES, 0];
+        assert!(!genoa_stream_context(&changed));
+        changed.backing[0] = [32 * CPU_LANE_MEMORY_BYTES, 0, 0, 0, 0];
+        assert!(!genoa_stream_context(&changed));
+        changed = context.clone();
+        changed.members.push(1);
+        changed.workers.push(32);
+        changed.backing.push(context.backing[0]);
+        assert!(!genoa_stream_context(&changed));
+    }
+
+    #[test]
+    fn windows_genoa_startup_keeps_host_backing_and_cache_boundaries() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        let mut host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "windows".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
+        assert!(windows_genoa_stream_startup(&cfg, &host, &identity, &paths));
+        assert!(!genoa_stream_startup(&cfg, &host, &identity, &paths));
+        assert!(!windows_genoa_stream_startup(
+            &cfg,
+            &host,
+            &identity,
+            &paths[..1]
+        ));
+        host.os = "linux".into();
+        assert!(!windows_genoa_stream_startup(
+            &cfg, &host, &identity, &paths
+        ));
+        host.os = "windows".into();
+        cfg.cpu_profile = CpuPerformanceProfile::Efficiency;
+        assert!(!windows_genoa_stream_startup(
+            &cfg, &host, &identity, &paths
+        ));
+        cfg.cpu_profile = CpuPerformanceProfile::Throughput;
+
+        let context = Context {
+            members: vec![0],
+            workers: vec![32],
+            backing: vec![[0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0]],
+        };
+        assert!(windows_genoa_stream_context(&context));
+        for backing in [
+            [32 * CPU_LANE_MEMORY_BYTES, 0, 0, 0, 0],
+            [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0],
+            [CPU_LANE_MEMORY_BYTES, 0, 0, 31 * CPU_LANE_MEMORY_BYTES, 0],
+        ] {
+            let mut other = context.clone();
+            other.backing[0] = backing;
+            assert!(!windows_genoa_stream_context(&other));
+        }
+        let mut other = context.clone();
+        other.workers[0] = 31;
+        assert!(!windows_genoa_stream_context(&other));
+        other = context.clone();
+        other.members.push(1);
+        assert!(!windows_genoa_stream_context(&other));
+
+        if !CpuKernel::Avx512256Stream.is_supported() {
+            return;
+        }
+        cfg.threads = 32;
+        let mut t = Tuner::for_identity(&cfg, host.clone(), &identity);
+        cfg.threads = 31;
+        let restarted = Tuner::for_identity(&cfg, host, &identity);
+        assert_eq!(t.cache.configuration, restarted.cache.configuration);
+        assert!(t.windows_genoa_startup && !t.genoa_startup);
+        t.cache.winners = vec![Winner {
+            context: context.clone(),
+            kernel: "avx512".into(),
+            timestamp: unix_secs(),
+            base: "avx512-256-stream".into(),
+            candidate: "avx512".into(),
+            samples: [100, 130, 100, 100, 130, 100].map(sample).to_vec(),
+        }];
+        let mut s = snapshot();
+        s.threads = 32;
+        s.backing_bytes = context.backing[0];
+        s.kernel = CpuKernel::Avx512;
+        let action = t.tick(1, &[s], true, true);
+        assert_eq!(
+            action.kernel, None,
+            "confirmed winner precedes startup hint"
+        );
+        assert!(!action.hold_counts);
+    }
+
+    #[test]
+    fn experimental_genoa_startup_can_lose_and_cache_a_different_kernel() {
+        for windows in [false, true] {
+            let mut t = three_path_tuner();
+            t.genoa_startup = !windows;
+            t.windows_genoa_startup = windows;
+            t.startup = Some(CpuKernel::Avx512256Stream);
+            let mut s = snapshot();
+            s.threads = 32;
+            s.backing_bytes = if windows {
+                [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0]
+            } else {
+                [0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]
+            };
+            s.kernel = CpuKernel::Avx512;
+            let action = t.tick(1, &[s], true, true);
+            assert_eq!(action.kernel, Some(CpuKernel::Avx512256Stream));
+            assert!(t.cache.winners.is_empty());
+            s.kernel = CpuKernel::Avx512256Stream;
+            s.kernel_generation += 1;
+            let mut now = 2;
+            run_comparison(&mut t, &mut s, &mut now, &[100, 130, 100, 100, 130, 100]);
+            assert_eq!(s.kernel, CpuKernel::Avx512);
+            run_comparison(&mut t, &mut s, &mut now, &[130, 120, 130]);
+            assert_eq!(t.cache.winners.len(), 1);
+            assert_eq!(t.cache.winners[0].kernel, "avx512");
+            let _ = fs::remove_file(&t.path);
+        }
     }
 
     #[test]
