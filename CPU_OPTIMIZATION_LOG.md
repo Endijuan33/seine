@@ -4437,3 +4437,27 @@ Full local evidence: `native-linux-intel-startup/` and
 
 Evidence: local campaign `native-linux-intel-latest/series-summary.json` and
 `comparison-diagnostics/intel-latest-startup-decomposition.json`.
+
+## 2026-10-26: Zen 5 demand-fence interaction is positive but very small
+
+Current shipping kernels were compared on native Linux EPYC 9R45 / m8a.8xlarge,
+32 physical cores and 128 GiB RAM, 32 workers with full 64-GiB THP backing.
+The frozen capture driver at 9606516 calls production kernel dispatch unchanged.
+Two alternating 20-second screen pairs suggested +0.8676% for demand-fence
+ring8/depth2 over periodic ring64/depth3. Three fresh 30-second confirmation
+pairs shrank that to **+0.06318%**, 49.4581 -> 49.4893 H/s, paired bootstrap
+95% interval **[+0.04807%, +0.07486%]**, three of three faster. The earlier
+periodic-ring result was -1.17%; this is a distinct implementation comparison.
+
+All **13,055 timed hashes** independently verified against libargon2, including
+62 newly computed references on the idle M4 Max; 12 full-size RustCrypto parity
+checks preceded timing. There were no invalid hashes or missing references.
+The $0.2712 compute-upper-bound rental was terminated immediately, with root
+volume/security-group cleanup verified. Evidence is retained in local campaign
+`native-linux-amd-zen5-demand/ring-publication/campaign/`.
+
+The runner accepted this narrow confirmation. Preserve the positive result,
+but do not advertise the larger screen effect or infer a meaningful miner-level
+win from 0.06% on one host. Automatic ring promotion is deferred: its extra
+productive search cost needs justification, and the existing streaming path is
+already nearly tied. The existing explicit ring option remains available.
