@@ -3988,3 +3988,41 @@ Evidence: workspace `benchmark-evidence/longhorn-20261025/native-linux-amd-ring-
 (`series-summary.json` / `.csv` and per-case full verification), with cleanup
 verified in `amd-ring-retry-prep/cleanup.json`. The separate Windows ring and
 shorter-window interaction candidates remain research until their own results.
+
+
+### Native Windows ring candidate (research)
+
+Extend the exact EPYC 9R14 / 32-core / 128 GiB automatic ring candidate to
+Windows for an isolated native comparison. The startup hint requires 32 workers
+and ordinary-page backing; explicit large pages, other hosts and confirmed local
+cache precedence remain unchanged. This is a separate hypothesis from the
+already validated Windows full-core startup gain: Linux kernel speed does not
+establish Windows speed. The targeted adaptive suite passes 99 tests with five
+hardware tests ignored. Native MSVC build and paired full-capture validation are
+pending; do not land this Windows gate based solely on the Linux result.
+
+
+### Native Windows ring result and scoped integration
+
+The same-host native Windows EPYC 9R14 / 32-core / 128 GiB cold pair completed
+with ordinary pages. Frozen `789cbe8` delivered 32.1244 useful user H/s versus
+31.4356 H/s for `9ac37d5`, a 2.19% gain over 900 seconds including productive
+tuning and the observed fee schedule. All 29,542 candidate and 28,929 baseline
+captured hashes independently matched libargon2; none were invalid or duplicated.
+
+The candidate also bracketed the old streaming path during productive tuning:
+at 32 workers the new path measured 34.33 / 34.35 H/s around the old path's
+33.30 H/s, and at 31 workers 33.33 / 33.20 H/s around 32.33 H/s. These internal
+samples support the direction of the modest cold-pair gain; they are not
+independent publication runs or a confidence interval. The kernel change is
+therefore retained behind the exact Windows host and ordinary-page startup
+gate, preserving valid caches and productive comparisons. No broad Windows
+performance claim or README/site headline change follows from this single pair.
+
+Native MSVC builds and the 99-test adaptive suite passed. The integration
+reapplies the exact measured source onto v0.2.27; only the engineering journal
+conflicted, and the Rust/kernel/telemetry trees match frozen `789cbe8` exactly.
+Evidence: workspace `benchmark-evidence/longhorn-20261025/native-windows-amd-ring-screen/`,
+`windows-ring-build/` and `comparison-diagnostics/windows-ring-integration.json`.
+The rental terminated immediately after the pair; cleanup is verified in
+`windows-ring-prep/cleanup.json`.

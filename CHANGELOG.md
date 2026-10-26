@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+- **Improved CPU hashing on 32-core AMD EPYC 9R14 Windows systems using ordinary memory pages.** Saved tuning remains usable, and Seine continues comparing settings while mining.
+
 ## v0.2.27
 
 - **Faster CPU mining on 32-core AMD EPYC 9R14 Linux systems with transparent huge pages.** Seine starts from the improved hashing path, preserves confirmed local tuning, and continues checking for faster settings.

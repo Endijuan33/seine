@@ -381,8 +381,9 @@ impl Tuner {
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
         // Native ring/depth screen: retain the old streaming path as a challenger.
         // Only this measured host gets the new automatic candidate; the startup
-        // action still checks the exact 32-worker/full-THP context.
-        let ring_startup = genoa_startup && supported.contains(&CpuKernel::Avx512256StreamR8D2);
+        // action still checks exact worker count and platform-specific backing.
+        let ring_startup = (genoa_startup || windows_genoa_startup)
+            && supported.contains(&CpuKernel::Avx512256StreamR8D2);
         if ring_startup {
             candidates.insert(0, CpuKernel::Avx512256StreamR8D2);
         }
@@ -1520,7 +1521,6 @@ mod tests {
             Some(CpuKernel::Avx512256StreamR8D2)
         );
         for (os, environment, brand) in [
-            ("windows", "native", "AMD EPYC 9R14"),
             ("linux", "wsl2", "AMD EPYC 9R14"),
             ("linux", "native", "AMD EPYC 9355P"),
         ] {
@@ -1539,6 +1539,54 @@ mod tests {
             Some(CpuKernel::Avx512256StreamR8D2)
         );
         let _ = fs::remove_file(&exact.path);
+    }
+
+    #[test]
+    fn windows_ring_candidate_starts_only_on_regular_backing() {
+        if !CpuKernel::Avx512256StreamR8D2.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path =
+            std::env::temp_dir().join(format!("seine-win-ring-{}.json", std::process::id()));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "windows".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        for regular in [true, false] {
+            let mut tuner = Tuner::for_identity(&cfg, host.clone(), &identity);
+            let _ = fs::remove_file(&tuner.path);
+            assert!(tuner.candidates.contains(&CpuKernel::Avx512256StreamR8D2));
+            let mut state = snapshot();
+            state.threads = 32;
+            state.kernel = CpuKernel::Avx512;
+            state.backing_bytes = [0; 5];
+            state.backing_bytes[if regular { 3 } else { 2 }] = 32 * CPU_LANE_MEMORY_BYTES;
+            let action = tuner.tick(1, &[state], true, true);
+            assert_eq!(
+                action.kernel,
+                regular.then_some(CpuKernel::Avx512256StreamR8D2)
+            );
+        }
+        cfg.cpu_page_mode = crate::config::CpuPageMode::Large;
+        assert!(!Tuner::for_identity(&cfg, host, &identity)
+            .candidates
+            .contains(&CpuKernel::Avx512256StreamR8D2));
     }
 
     #[test]
