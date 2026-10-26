@@ -156,3 +156,11 @@ Autotuning owns the search algorithm, RAM owns capacity and benchmarks own repea
 | start miner automatically Windows; Blocknet Task Scheduler | `/blog/start-miner-automatically-windows/` | Configure and verify sign-in startup for an already working Windows miner |
 
 Windows setup owns installation; server setup owns Linux systemd; updating owns release replacement. No existing URL is retargeted.
+
+## Configuration and address changes (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| seine configuration file; saved mining settings; launch overrides | `/blog/configure-seine-miner/` | Choose the configuration file, edit persistent connection fields and distinguish them from runtime launch arguments |
+
+Updating owns binary replacement, Windows startup owns Task Scheduler, tuning owns performance decisions. This article owns configuration precedence and persistence. The pool guide owns address-transition accounting. No URL is retargeted.

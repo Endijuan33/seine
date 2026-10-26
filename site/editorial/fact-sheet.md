@@ -627,3 +627,7 @@ actual command output, capture provenance and failure-case checks.
   Pool history groups by address/name; old shares keep their original name after
   renaming. Rewards are accounted by address, not separate balances per rig.
 - Primary links and pinned pool source: [batch research](research/windows-startup-and-multiple-miners-2026-10-26.md).
+
+## Configuration persistence (verified October 26, 2026)
+
+v0.2.36 reads `seine.config.json` under `--data-dir` (default `./seine-data`, relative to the working directory). Its saved schema contains connection fields, not every CLI option. Explicit connection flags override existing saved values without rewriting them; missing-file bootstrap writes the initial inputs. Preserve other fields when editing, including the generated `dev_fee_pool_worker`. Dashboard thread changes are session-only. See `research/configuration-and-address-2026-10-26.md` for source functions and pool destination semantics.
