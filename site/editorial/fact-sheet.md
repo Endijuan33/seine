@@ -584,3 +584,16 @@ actual command output, capture provenance and failure-case checks.
   `expectedDifficultyFromParent` and `nextDifficultyLocked`. Target division:
   `crypto-rs/src/pow.rs:blocknet_difficulty_to_target`.
 - Full evidence and publication notes: `research/update-and-difficulty-2026-10-26.md`.
+
+## Local benchmark procedure and reward maturity (October 26, 2026)
+
+- Public seine v0.2.36 `--bench` runs locally without pool or daemon. Warmup
+  rounds are excluded from measured summaries; preparation and in-flight work
+  can extend elapsed time beyond requested intervals. Compare like modes and
+  preserve JSON reports, environment, cache policy and all repeated pairs.
+- The pool's confirmation depth is current chain height minus found-block height,
+  starting at zero, with a separate node hash identity check. The public setting
+  checked October 26 is 60 blocks and the minimum payment is 0.1 BNT. The wallet
+  coinbase maturity rule also uses a depth of 60; a later payout transaction has
+  its own receipt and spendability state. Five hours is target arithmetic only.
+- Full source pins and verification: `research/benchmarks-and-confirmations-2026-10-26.md`.

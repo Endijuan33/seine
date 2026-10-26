@@ -132,3 +132,11 @@ Installation guides own first setup; the antivirus guide owns archive verificati
 | seine automatic CPU tuning; mining autotune | `/blog/seine-automatic-cpu-tuning/` | Understand productive CPU count/kernel comparisons, cache reuse and memory responses | Blocknet mining, seine, bntpool |
 
 Dashboard owns panel interpretation; RAM owns capacity planning; huge pages owns OS reservation. This article owns automatic tuning decisions and manual overrides. No URL is retargeted.
+
+## Benchmarks and confirmations (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job | Supporting phrases |
+|---|---|---|---|
+| benchmark Blocknet miner; seine benchmark | `/blog/benchmark-seine-miner/` | Run repeatable local measurements, save JSON reports and compare matched workloads | Blocknet mining, seine, bntpool |
+
+Hardware owns chip selection and measured rankings; autotuning owns runtime decisions; hashrate on bntpool owns units and pool estimation. This article owns the benchmark procedure and comparison record. No URL is retargeted.
