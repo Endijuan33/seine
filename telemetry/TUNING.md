@@ -33,10 +33,18 @@ discard them because they cannot establish a gain. Record the actual decision an
 applied arm; execution failure may have no applied arm and an empty after-context.
 
 Policy includes revision, minimum hashes, minimum sample duration, maximum baseline
-drift, fixed gain margin and quantization rule. `three_window_hash` uses one hash
+drift, fixed gain margin and quantization rule. Optional `short_sample_ms` and
+`short_minimum_hashes` must appear together. Each window must satisfy either the
+full duration/hash rule or the shorter duration/higher-hash rule; never mix one
+rule's duration with the other's hash threshold. For example, 10 seconds/256 hashes
+or 30 seconds/32 hashes permits a 10-second/300-hash baseline and a 30-second/
+64-hash candidate in the same trial, but rejects a 10-second/32-hash window.
+Omitting both optional fields preserves single-rule policies such as 45 seconds/
+2048 hashes. `three_window_hash` uses one hash
 of resolution from each A/B/A window; a zero fixed margin does not disable that
-guard. Policies form separate cohorts. Analysis independently requires at least
-128 hashes per window. Do not change runtime acceptance rules to fit telemetry.
+guard. Policies form separate cohorts. Analysis applies the recorded alternative
+rules per window and requires a nonzero measured baseline. Do not change runtime
+acceptance rules to fit telemetry.
 
 Costs are optional measured milliseconds. Switching, per-window settling and
 observed no-job idle must not overlap each other or counted measurement time.

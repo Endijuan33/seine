@@ -41,6 +41,12 @@ WITH reports AS (
            (sample->>'hashes')::bigint AS hashes,
            (sample->>'elapsed_ms')::bigint AS elapsed_ms,
            (sample->>'hashes')::double precision / NULLIF((sample->>'elapsed_ms')::double precision, 0) AS rate,
+           ((sample->>'hashes')::bigint >= greatest(1, (outcome #>> '{policy,minimum_hashes}')::bigint)
+            AND (sample->>'elapsed_ms')::bigint >= (outcome #>> '{policy,minimum_sample_ms}')::bigint
+            OR coalesce(
+                (sample->>'hashes')::bigint >= (outcome #>> '{policy,short_minimum_hashes}')::bigint
+                AND (sample->>'elapsed_ms')::bigint >= (outcome #>> '{policy,short_sample_ms}')::bigint,
+                false)) AS sufficient,
            (NOT (sample->>'changed')::boolean
             AND sample->>'arm' = CASE WHEN position % 3 = 2 THEN 'candidate' ELSE 'baseline' END
             AND sample #> '{context,members}' = CASE WHEN position % 3 = 2 THEN outcome->'candidate' ELSE outcome->'baseline' END
@@ -50,7 +56,7 @@ WITH reports AS (
 ), health AS (
     SELECT installation_id, run_id, trial_id, count(*) AS windows,
            bool_and(stable) AS stable,
-           min(hashes) AS minimum_hashes, min(elapsed_ms) AS minimum_sample_ms
+           bool_and(sufficient) AS sufficient
     FROM windows GROUP BY 1,2,3
 ), cycles AS (
     SELECT a.installation_id, a.run_id, a.trial_id,
@@ -80,8 +86,7 @@ WITH reports AS (
     WHERE outcome->>'decision' IN ('gain','no_confirmed_gain')
       AND outcome->>'reason' = 'completed'
       AND h.windows IN (3,6) AND m.cycles * 3 = h.windows AND h.stable
-      AND h.minimum_hashes >= greatest(128, (outcome #>> '{policy,minimum_hashes}')::bigint)
-      AND h.minimum_sample_ms >= (outcome #>> '{policy,minimum_sample_ms}')::bigint
+      AND h.sufficient
       AND m.maximum_baseline_drift <= (outcome #>> '{policy,maximum_baseline_drift_bps}')::double precision / 10000
       AND m.ratio IS NOT NULL AND m.ratio > 0
       AND outcome->'baseline' <> outcome->'candidate'

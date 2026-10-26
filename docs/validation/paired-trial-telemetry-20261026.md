@@ -62,3 +62,20 @@ schema-6 miners. It accepts older schemas without a database migration or a pool
 daemon restart. Runtime integration must record actual measured context and costs,
 not reconstruct desired settings. Research hints require matching native validation
 and independently verified host evidence; none is eligible as an automatic default.
+
+## Alternative window policy follow-up
+
+Runtime integration identified an acceptance rule that is an OR of two complete
+duration/hash pairs: 10 seconds/256 hashes or 30 seconds/32 hashes. Added optional
+paired `short_sample_ms` / `short_minimum_hashes` fields while preserving existing
+single-rule schema-6 payloads. SQL now checks each window against either complete
+rule, removing the unrelated 128-hash floor. Quantization and native validation
+requirements remain; this is faithful policy evidence, not a weaker runtime rule.
+
+Validated on master `30ece1c`: 11 schema tests, one server test, 10 hardware
+recorder tests and seven paired SQL tests passed. The disposable real collector
+integration also passed, including mixed 10-second/300-hash baseline and 30-second/
+64-hash candidate windows and rejection of a partially specified alternative.
+SQL tests reject crossed thresholds, insufficient hashes and insufficient time,
+and keep distinct alternative policies in separate cohorts. The collector and
+temporary database were cleaned up. No UI flow, deployment or release changed.

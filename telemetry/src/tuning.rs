@@ -127,6 +127,12 @@ pub struct TrialPolicy {
     pub revision: u32,
     pub minimum_hashes: u64,
     pub minimum_sample_ms: u64,
+    /// Optional shorter window with a higher hash threshold. Both fields must
+    /// be present together; each counted window may satisfy either whole rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_sample_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_minimum_hashes: Option<u64>,
     pub quantization: TrialQuantization,
     pub maximum_baseline_drift_bps: u32,
     pub required_gain_bps: u32,
@@ -229,6 +235,20 @@ impl TrialOutcome {
             && self.policy.revision > 0
             && self.policy.minimum_hashes <= 1_000_000_000_000_000
             && self.policy.minimum_sample_ms <= MAX_TRIAL_MS
+            && match (
+                self.policy.short_sample_ms,
+                self.policy.short_minimum_hashes,
+            ) {
+                (None, None) => true,
+                (Some(ms), Some(hashes)) => {
+                    ms > 0
+                        && ms <= self.policy.minimum_sample_ms
+                        && hashes > 0
+                        && hashes >= self.policy.minimum_hashes
+                        && hashes <= 1_000_000_000_000_000
+                }
+                _ => false,
+            }
             && self.policy.maximum_baseline_drift_bps <= 10000
             && self.policy.required_gain_bps <= 10000
             && members_valid(&self.baseline)
@@ -375,5 +395,30 @@ mod tests {
         t.decision = TrialDecision::Inconclusive;
         t.reason = TrialReason::ContextChanged;
         assert!(t.validate()); // Analysis, not ingestion, excludes it from hints.
+    }
+
+    #[test]
+    fn alternate_window_rule_is_optional_paired_and_bounded() {
+        let mut report = fixture();
+        let t = &mut report.tuning.as_mut().unwrap().trials[0].outcome;
+        assert!(t.policy.short_sample_ms.is_none()); // Original schema-6 fixture.
+        assert!(t.validate());
+        t.policy.minimum_sample_ms = 30_000;
+        t.policy.minimum_hashes = 32;
+        t.policy.short_sample_ms = Some(10_000);
+        assert!(!t.validate());
+        t.policy.short_minimum_hashes = Some(256);
+        assert!(t.validate());
+        t.policy.short_sample_ms = None;
+        assert!(!t.validate());
+        t.policy.short_sample_ms = Some(0);
+        assert!(!t.validate());
+        t.policy.short_sample_ms = Some(30_001);
+        assert!(!t.validate());
+        t.policy.short_sample_ms = Some(10_000);
+        t.policy.short_minimum_hashes = Some(31);
+        assert!(!t.validate());
+        t.policy.short_minimum_hashes = Some(1_000_000_000_000_001);
+        assert!(!t.validate());
     }
 }

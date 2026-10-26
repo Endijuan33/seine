@@ -157,6 +157,43 @@ class TuningSQLTests(unittest.TestCase):
             self.seed(lambda p, i: mutation(p) if i < 2 else None)
             self.assertEqual(self.analysis()['ranked_hints'], [])
 
+    def test_each_window_can_use_either_complete_acceptance_rule(self):
+        def mixed(p, _):
+            t = p['tuning']['trials'][0]['outcome']
+            t['policy'].update(minimum_sample_ms=30000, minimum_hashes=32,
+                               short_sample_ms=10000, short_minimum_hashes=256)
+            t.update(decision='no_confirmed_gain', applied='baseline')
+            t['context_after'] = copy.deepcopy(t['context_before'])
+            t['samples'] = t['samples'][:3]
+            for s in t['samples']:
+                s.update(elapsed_ms=30000 if s['arm'] == 'candidate' else 10000,
+                         hashes=64 if s['arm'] == 'candidate' else 300)
+        self.seed(mixed)
+        result = self.analysis()
+        self.assertEqual(result['qualified_trials'], 5)
+        hint, = result['ranked_hints']
+        self.assertAlmostEqual(hint['median_ratio'], (64/30000)/(300/10000))
+        self.assertFalse(hint['automatic_default_eligible'])
+        for duration, hashes in [(10000, 32), (30000, 31), (5000, 500)]:
+            with self.subTest(duration=duration, hashes=hashes):
+                self.query('TRUNCATE telemetry_reports')
+                def rejected(p, i):
+                    mixed(p, i)
+                    p['tuning']['trials'][0]['outcome']['samples'][1].update(
+                        elapsed_ms=duration, hashes=hashes)
+                self.seed(rejected)
+                self.assertEqual(self.analysis()['qualified_trials'], 0)
+        # Optional alternative thresholds are part of the exact policy cohort.
+        self.query('TRUNCATE telemetry_reports')
+        def split(p, i):
+            mixed(p, i)
+            if i < 2:
+                p['tuning']['trials'][0]['outcome']['policy']['short_minimum_hashes'] = 257
+        self.seed(split)
+        result = self.analysis()
+        self.assertEqual(result['qualified_trials'], 5)
+        self.assertEqual(result['ranked_hints'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

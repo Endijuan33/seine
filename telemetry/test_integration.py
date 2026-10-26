@@ -251,3 +251,23 @@ for mutate in (
 assert analysis('tuning_report.sql')['unique_trials'] == 1
 assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
 print('PASS: schema 6 paired trials, raw samples and policy persistence, strict rejection and analysis')
+
+alternative = json.loads(json.dumps(tuning))
+alternative['installation_id'] = uuid.uuid4().hex
+alternative['report_id'] = uuid.uuid4().hex
+trial = alternative['tuning']['trials'][0]['outcome']
+trial['policy'].update(minimum_sample_ms=30000, minimum_hashes=32,
+                       short_sample_ms=10000, short_minimum_hashes=256)
+trial.update(decision='no_confirmed_gain', applied='baseline')
+trial['context_after'] = json.loads(json.dumps(trial['context_before']))
+trial['samples'] = trial['samples'][:3]
+for sample in trial['samples']:
+    sample.update(elapsed_ms=30000 if sample['arm'] == 'candidate' else 10000,
+                  hashes=64 if sample['arm'] == 'candidate' else 300)
+assert send(alternative) == 204
+assert analysis('tuning_report.sql')['qualified_trials'] == 2
+alternative['installation_id'] = uuid.uuid4().hex
+alternative['report_id'] = uuid.uuid4().hex
+del trial['policy']['short_minimum_hashes']
+assert send(alternative) == 422
+print('PASS: schema 6 mixed short/full window rules and incomplete alternative rejection')
