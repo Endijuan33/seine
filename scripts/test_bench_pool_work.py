@@ -3,24 +3,32 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import textwrap
 import unittest
+from types import SimpleNamespace
+
+from bench_pool_work import miner_command
 
 
 class ReceiverTests(unittest.TestCase):
-    def run_case(self, grace, rotate=True, reset=False, malformed=False, fee_switch=False):
+    def run_case(self, grace, rotate=True, reset=False, malformed=False, fee_switch=False,
+                 tls=False, wrong_tls_name=False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         fake = root / 'fixture-miner'
         fake.write_text('#!' + sys.executable + '\n' + textwrap.dedent('''
-            import json,os,socket,struct,sys,time
+            import json,os,socket,ssl,struct,sys,time
             from urllib.parse import urlsplit
             endpoint=urlsplit(sys.argv[sys.argv.index('--pool-url')+1])
             address=sys.argv[sys.argv.index('--address')+1]
             connection=socket.create_connection((endpoint.hostname,endpoint.port))
+            if '--tls-name' in sys.argv:
+                context=ssl.create_default_context(cafile=os.environ['FIXTURE_TEST_CA'])
+                connection=context.wrap_socket(connection, server_hostname=sys.argv[sys.argv.index('--tls-name')+1])
             stream=connection.makefile('r')
             def send(value):
                 connection.sendall((json.dumps(value)+'\\n').encode())
@@ -68,6 +76,29 @@ class ReceiverTests(unittest.TestCase):
                    '--output', str(root / 'result'), '--miner', 'seine', '--executable', str(fake),
                    '--seconds', '1', '--warmup', '0', '--window-origin', 'launch',
                    '--stale-grace', str(grace), '--job-secs', '0.1' if rotate else '0']
+        env = dict(os.environ)
+        if tls:
+            if shutil.which('openssl') is None:
+                self.skipTest('TLS receiver test requires openssl to generate a disposable certificate')
+            cert, key = root/'fixture.crt', root/'fixture.key'
+            ca, ca_key, csr = root/'ca.crt', root/'ca.key', root/'fixture.csr'
+            extensions = root/'extensions.cnf'
+            extensions.write_text('subjectAltName=DNS:localhost\nbasicConstraints=critical,CA:FALSE\n'
+                                  'keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
+            for openssl_args in [
+                ['req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(ca_key),
+                 '-out',str(ca),'-days','1','-subj','/CN=Disposable fixture CA',
+                 '-addext','basicConstraints=critical,CA:TRUE'],
+                ['req','-new','-newkey','rsa:2048','-nodes','-keyout',str(key),
+                 '-out',str(csr),'-subj','/CN=localhost'],
+                ['x509','-req','-in',str(csr),'-CA',str(ca),'-CAkey',str(ca_key),
+                 '-CAcreateserial','-out',str(cert),'-days','1','-extfile',str(extensions)],
+            ]:
+                subprocess.run(['openssl',*openssl_args],check=True,capture_output=True,timeout=15)
+            env['FIXTURE_TEST_CA'] = str(ca)
+            command[command.index('--miner')+1] = 'ntmminer'
+            command += ['--tls-cert',str(cert),'--tls-key',str(key),
+                        '--tls-name','wrong.invalid' if wrong_tls_name else 'localhost']
         if reset:
             command += ['--', '--reset']
         elif malformed:
@@ -86,13 +117,50 @@ class ReceiverTests(unittest.TestCase):
                 'raise SystemExit(bench_pool_work.main())'
             )
             command = [sys.executable, '-c', wrapper, *command[2:]]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10, env=env)
+        self.assertEqual(result.returncode, 1 if wrong_tls_name else 0, result.stderr + result.stdout)
         work = json.loads((root / 'result/work.json').read_text())
         wire = [json.loads(line) for line in (root / 'result/wire.jsonl').read_text().splitlines()]
+        if tls and not wrong_tls_name:
+            transport = [row for row in wire if row['direction'] == 'transport']
+            self.assertEqual(len(transport), 1)
+            self.assertEqual(transport[0]['tls_version'], 'TLSv1.3')
         acks = {row['message']['id']: row['message']['result'] for row in wire
                 if row['direction'] == 'out' and row['message'].get('id') in [2,3,4,5]}
         return work, acks
+
+    def test_tls13_fixture_collects_claims_with_certificate_validation(self):
+        work, _ = self.run_case(0, rotate=False, tls=True)
+        self.assertEqual(work['protocol_errors'], [])
+        self.assertEqual(len(work['shares']), 1)
+        self.assertTrue(work['shares'][0]['user_work'])
+        self.assertEqual(work['transport']['tls_version'], 'TLSv1.3')
+        self.assertNotIn('--mode', work['command'])
+
+    def test_wrong_certificate_identity_cannot_produce_receipts(self):
+        work, _ = self.run_case(0, rotate=False, tls=True, wrong_tls_name=True)
+        self.assertEqual(work['shares'], [])
+        self.assertTrue(work['protocol_errors'])
+
+    def test_existing_plaintext_launch_commands_remain_unchanged(self):
+        for miner in ['seine','longhorn']:
+            args=SimpleNamespace(miner=miner,tls_cert=None,executable='/miner/tool',
+                                 args=['--','--threads','2'])
+            self.assertEqual(miner_command(args,'fixture-address',3333),
+                ['/miner/tool','--mode','pool','--address','fixture-address',
+                 '--pool-url','stratum+tcp://127.0.0.1:3333','--pool-worker','fixture',
+                 '--threads','2'])
+
+    def test_incomplete_tls_configuration_fails_before_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for extra in [[], ['--tls-cert','missing.crt'], ['--tls-key','missing.key']]:
+                result = subprocess.run([sys.executable,
+                    str(Path(__file__).with_name('bench_pool_work.py')),
+                    '--output',str(Path(directory)/'unused'),'--miner','ntmminer',
+                    '--executable','must-never-launch',*extra],capture_output=True,text=True,timeout=5)
+                self.assertEqual(result.returncode,2)
+                self.assertIn('TLS',result.stderr)
+                self.assertFalse((Path(directory)/'unused').exists())
 
     def test_replacement_preserves_old_header_but_rejects_stale_work(self):
         work, acks = self.run_case(0)

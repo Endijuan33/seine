@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+import ssl
 import subprocess
 import threading
 import time
@@ -33,6 +34,20 @@ def fixture_address():
     return "1" * (len(raw) - len(raw.lstrip(b"\0"))) + encoded
 
 
+def miner_command(args, address, port):
+    tls = args.tls_cert is not None
+    command = [args.executable]
+    if args.miner != "ntmminer":
+        command += ["--mode", "pool"]
+    command += ["--address", address, "--pool-url",
+                f"stratum+{'ssl' if tls else 'tcp'}://127.0.0.1:{port}",
+                "--pool-worker", "fixture"]
+    if args.miner == "ntmminer":
+        command += ["--tls-name", args.tls_name]
+    extra = args.args[1:] if args.args[:1] == ["--"] else args.args
+    return command + extra
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -47,10 +62,20 @@ def main():
                         help="Accept superseded work for this many seconds in job-change tests")
     parser.add_argument("--window-origin", choices=["launch", "first-share"], default="first-share")
     parser.add_argument("--seed", default="seine-longhorn-parity-v1")
-    parser.add_argument("--miner", choices=["seine", "longhorn"], required=True)
+    parser.add_argument("--miner", choices=["seine", "longhorn", "ntmminer"], required=True)
+    parser.add_argument("--tls-cert", type=Path,
+                        help="Fixture certificate chain; listener remains loopback-only")
+    parser.add_argument("--tls-key", type=Path,
+                        help="Private key for the disposable fixture certificate, never a production key")
+    parser.add_argument("--tls-name", default="localhost",
+                        help="Expected certificate identity passed to NTMminer")
     parser.add_argument("--executable", required=True)
     parser.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if (args.tls_cert is None) != (args.tls_key is None):
+        parser.error("TLS requires both --tls-cert and --tls-key")
+    if args.miner == "ntmminer" and args.tls_cert is None:
+        parser.error("NTMminer requires a local TLS fixture")
     if args.seconds <= 0 or args.warmup < 0 or args.startup_timeout <= 0:
         parser.error("invalid timing bounds")
     if not 0 <= args.listen_port <= 65535:
@@ -61,6 +86,12 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     if (args.output / "wire.jsonl").exists():
         parser.error("output already contains a run; use a new directory")
+    tls_context = None
+    if args.tls_cert is not None:
+        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls_context.minimum_version = ssl.TLSVersion.TLSv1_3
+        tls_context.maximum_version = ssl.TLSVersion.TLSv1_3
+        tls_context.load_cert_chain(args.tls_cert, args.tls_key)
     header = hashlib.shake_256(args.seed.encode()).digest(92).hex()
     address = fixture_address()
     started = time.monotonic()
@@ -133,6 +164,12 @@ def main():
                 issue_job(time.monotonic())
 
         try:
+            if tls_context is not None:
+                conn.settimeout(5)
+                conn = tls_context.wrap_socket(conn, server_side=True)
+                record({"connection": connection_id, "direction": "transport",
+                        "tls_version": conn.version(), "cipher": conn.cipher()})
+                conn.settimeout(0.25)
             while not stop.is_set():
                 rotate_due()
                 try:
@@ -209,9 +246,7 @@ def main():
 
     listener = threading.Thread(target=accept, daemon=True)
     listener.start()
-    extra = args.args[1:] if args.args[:1] == ["--"] else args.args
-    command = [args.executable, "--mode", "pool", "--address", address,
-               "--pool-url", f"stratum+tcp://127.0.0.1:{port}", "--pool-worker", "fixture"] + extra
+    command = miner_command(args, address, port)
     output = (args.output / "miner.log").open("w")
     if os.name == "nt":
         from windows_job import WindowsJobProcess
@@ -252,7 +287,9 @@ def main():
         server.close()
         listener.join(timeout=2)
         for thread in connections:
-            thread.join(timeout=2)
+            # A client may still be inside the bounded TLS handshake when the
+            # measurement ends. Finish recording its outcome before closing wire.
+            thread.join(timeout=6 if tls_context else 2)
         output.close()
         wire.close()
     anchor = started if args.window_origin == "launch" else (first_share[0] if first_share else None)
@@ -262,6 +299,10 @@ def main():
     result = {"schema": 1, "miner": args.miner, "command": command, "header_base": header,
               "window_origin": args.window_origin,
               "listen_port": port,
+              "transport": {"tls": tls_context is not None,
+                            "tls_version": "TLSv1.3" if tls_context else None,
+                            "certificate_sha256": hashlib.sha256(args.tls_cert.read_bytes()).hexdigest()
+                            if args.tls_cert else None},
               "job_interval_seconds": args.job_secs, "stale_grace_seconds": args.stale_grace,
               "target": "ff"*32, "seed": args.seed, "termination_reason": reason,
               "exit_code": process.returncode, "launch_to_first_share_seconds": first_share[0]-started if first_share else None,
