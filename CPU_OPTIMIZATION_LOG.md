@@ -4668,3 +4668,47 @@ Public evidence and reproduction:
 Local complete campaign, including inconclusive D5:
 `native-linux-amd-zen5-deeper-prefetch/ring-publication/campaign/`.
 Hold this with the other validated changes for the next combined release.
+
+## 2026-10-26 Windows ten-second kernel trials — promising but noisy
+
+One predeclared 660-second cold baseline/candidate pair on native Windows
+Server 2025 / m7a.8xlarge, EPYC 9R14, 32 physical cores, 128 GiB RAM and
+ordinary pages. Baseline `f3c8175` versus research candidate `3f422c1`:
+shorten kernel samples only at 31–32 workers from 30 to 10 seconds when at
+least 256 hashes are available. Preserve the A/B/A drift guard, two-cycle
+promotion requirement, repeated comparisons and confirmed caches.
+
+All **43,671 captured hashes** match independent libargon2 references, with
+zero invalid or duplicate hashes. Both windows include the first fee phase:
+gross throughput **32.95455 → 33.21212 H/s (+0.78161%)** and user throughput
+**31.99091 → 32.26212 H/s (+0.84778%)**. These are observed differences from
+one cold pair, not a confidence-qualified sustained or long-run fee claim.
+
+The changed condition was exercised: kernel comparisons shortened from
+95.3–96.3 seconds to 35.1–36.3 seconds. Both runs retained the demand-fence
+R8/D2 kernel and 32-worker setting. However, three of the candidate's four
+kernel comparisons hit the baseline-drift guard, versus zero of two baseline
+comparisons. The first confirmed worker-count decision moved from 303.8 to
+519.1 seconds. A failed 31-worker comparison entered the existing retry delay
+and kept the joint search unresolved longer despite productive mining.
+
+**Promising throughput, unresolved tuning stability.** Preserve this gain and
+its mechanism; do not classify it as a regression, or ship the ten-second
+policy unchanged. The next separately budgeted candidate uses 20-second
+samples with at least 512 hashes, retaining the full 30-second fallback for
+slow contexts. This tests whether lower window noise can retain reduced
+comparison cost without the repeated drift failures. Do not rerun the same
+ten-second comparison until it passes, and do not loosen the drift gate.
+
+The original preparation attempt failed before mining because a staging ZIP
+checksum was stale; it was terminated, and the corrected attempt used a new
+output directory and explicit staging-map checks. Its measured pair completed
+unchanged. Both rentals, root volumes, temporary security groups and keys were
+cleaned up; no idle expiry wait was used.
+
+Local evidence: `windows-short-trials-retry-prep/series-plan.json`,
+`native-windows-amd-short-trials-retry/`, and
+`comparison-diagnostics/windows-short-trials-result.json` under the October 25
+campaign directory. The prepared integration passed 122 adaptive tests (five
+existing heavyweight tests ignored) and a default-feature release build, but
+remains unlanded pending a satisfactory native follow-up.
