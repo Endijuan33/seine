@@ -28,8 +28,13 @@
       "name": "AMD EPYC 9R14",
       "sub": "Zen 4 Genoa \u00b7 32 threads",
       "category": "amd",
-      "hps": 38.175,
-      "source": "experiments/readme-hardware-20261025/summary.json (m7a.8xlarge, streaming kernel)"
+      "hps": 43.88720112225301,
+      "source": "experiments/genoa-ring-20261026/summary.json",
+      "source_revision": "3641add46977813091229b3ddd228d8b9d18526a",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "hashing_time",
+      "page_backing": "transparent_huge_pages",
+      "repetitions": 3
     },
     {
       "name": "AMD EPYC 7R13",
@@ -130,16 +135,22 @@
       "repetitions": 4
     },
     {
+      "name": "AMD EPYC \u00b7 Zen 4",
+      "sub": "EPYC 9R14 server \u00b7 32 threads",
+      "category": "amd",
+      "hps": 43.88720112225301,
+      "source": "experiments/genoa-ring-20261026/summary.json",
+      "source_revision": "3641add46977813091229b3ddd228d8b9d18526a",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "hashing_time",
+      "page_backing": "transparent_huge_pages",
+      "repetitions": 3
+    },
+    {
       "name": "Arm server",
       "sub": "AWS Graviton4 \u00b7 32 threads",
       "category": "arm",
       "hps": 39.287
-    },
-    {
-      "name": "AMD EPYC \u00b7 Zen 4",
-      "sub": "EPYC 9R14 server \u00b7 32 threads",
-      "category": "amd",
-      "hps": 38.175
     },
     {
       "name": "Apple M4 Max",
