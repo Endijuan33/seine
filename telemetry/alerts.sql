@@ -6,7 +6,10 @@ WITH reports AS (
     SELECT installation_id, received_at, payload,
            payload->>'miner_version' AS version,
            (payload->'hardware') #- '{resources,available_memory_gib}' AS hardware,
-           jsonb_build_array(payload->'build_target', payload->'build_features') AS build,
+           -- Compare releases within one workload mode. Exact source identity
+           -- intentionally differs across releases, unlike absolute-rate cohorts.
+           jsonb_build_array(payload->'build_target', payload->'build_features',
+                             payload #> '{diagnostics,mode}') AS build,
            CASE WHEN received_at >= now() - interval '36 hours' THEN 'recent' ELSE 'baseline' END AS period
     FROM telemetry_reports
     WHERE received_at >= now() - interval '7 days'

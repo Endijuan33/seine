@@ -8,6 +8,7 @@ WITH reports AS (
            payload->>'miner_version' AS version,
            payload #>> '{hardware,cpu_model}' AS cpu,
            payload #>> '{hardware,os}' AS os,
+           coalesce(payload #>> '{diagnostics,reason}', 'periodic') = 'periodic' AS performance_window,
            jsonb_build_object(
                'os_version', payload #> '{hardware,os_version}',
                'runtime_environment', payload #> '{hardware,runtime_environment}',
@@ -19,6 +20,9 @@ WITH reports AS (
                'cpu_model_id', payload #> '{hardware,cpu_model_id}',
                'build_target', payload->'build_target',
                'build_features', payload->'build_features',
+               'build_commit', payload #> '{diagnostics,build_commit}',
+               'source_fingerprint', payload #> '{diagnostics,source_fingerprint}',
+               'mode', payload #> '{diagnostics,mode}',
                'resources', NULLIF(payload #> '{hardware,resources}', 'null'::jsonb) - 'available_memory_gib'
            ) AS context,
            payload->'backends' AS backends
@@ -51,7 +55,8 @@ WITH reports AS (
            (sample->>'hashes')::double precision /
              NULLIF((sample->>'observed_secs')::double precision, 0) AS hps
     FROM reports CROSS JOIN LATERAL jsonb_array_elements(backends) AS sample
-    WHERE NOT (sample->>'settings_changed')::boolean
+    WHERE performance_window
+      AND NOT (sample->>'settings_changed')::boolean
       AND (sample->>'observed_secs')::double precision >= 60
 ), per_report AS (
     -- Identical devices in one report must not inflate independent observations.

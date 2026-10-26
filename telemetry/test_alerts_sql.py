@@ -87,12 +87,23 @@ class AlertSQLTests(unittest.TestCase):
             lambda p: p['backends'][0].update(observed_secs=10),
             lambda p: p.update(debug_build=True),
             lambda p: p.update(diagnostics={'reason': 'failure'}),
+            lambda p: p.update(diagnostics={'reason': 'periodic', 'mode': 'daemon'}),
         ]
         for mutation in mutations:
             with self.subTest(mutation=mutation):
                 self.query('TRUNCATE telemetry_reports;')
                 self.seed(mutate=lambda p, i, h: mutation(p) if h < 36 else None)
                 self.assertEqual(self.analysis()['performance_cohorts'], [])
+
+    def test_release_comparison_allows_source_changes_within_one_mode(self):
+        self.seed(mutate=lambda p, i, h: p.update(diagnostics={
+            'reason': 'periodic', 'mode': 'pool',
+            'build_commit': 'a' * 12 if h < 36 else 'b' * 12,
+            'source_fingerprint': 'c' * 16 if h < 36 else 'd' * 16,
+        }))
+        cohort, = self.analysis()['performance_cohorts']
+        self.assertEqual(cohort['median_ratio'], .5)
+        self.assertEqual(cohort['installations'], 5)
 
     def test_healthy_comparison_and_empty_ingestion(self):
         self.assertIsNone(self.analysis()['minutes_since_last_report'])

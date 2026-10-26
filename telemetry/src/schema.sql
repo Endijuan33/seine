@@ -37,11 +37,15 @@ WITH samples AS (
                'cpu_model_id', payload #> '{hardware,cpu_model_id}',
                'build_target', payload->'build_target',
                'build_features', payload->'build_features',
+               'build_commit', payload #> '{diagnostics,build_commit}',
+               'source_fingerprint', payload #> '{diagnostics,source_fingerprint}',
+               'mode', payload #> '{diagnostics,mode}',
                'resources', NULLIF(payload #> '{hardware,resources}', 'null'::jsonb) - 'available_memory_gib'
            ) AS context,
            (sample->>'hashes')::double precision / NULLIF((sample->>'observed_secs')::double precision, 0) AS hps
     FROM telemetry_reports CROSS JOIN LATERAL jsonb_array_elements(payload->'backends') AS sample
     WHERE NOT (payload->>'debug_build')::boolean
+      AND coalesce(payload #>> '{diagnostics,reason}', 'periodic') = 'periodic'
       AND NOT (sample->>'settings_changed')::boolean
       AND (sample->>'observed_secs')::double precision >= 60
 ), per_report AS (

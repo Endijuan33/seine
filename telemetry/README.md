@@ -239,7 +239,10 @@ The window is seven days, debug builds are excluded, and inventory uses each
 installation's latest report. Performance groups match version, CPU, OS/version,
 native/WSL runtime,
 RAM/core counts, build target/features, resource limits and backend settings
-(including measured CPU backing). Missing legacy fields form separate groups.
+(including measured CPU backing), plus exact build commit/source fingerprint and
+pool/daemon mode where reported. Missing legacy fields form separate groups.
+Shutdown and failure reports remain in inventory and diagnostics but cannot
+contribute performance samples, even when their final window exceeds a minute.
 Free memory is diagnostic only and does not split cohorts on every report. Each
 installation contributes one median; identical devices
 in one report do not count as additional observations. A cohort must contain at
@@ -285,14 +288,18 @@ GROUP BY 1 ORDER BY 2 DESC;
 Popularity counts installations, not messages or necessarily people. Performance
 first takes each installation's median, then reports population median/p10/p90
 for matching version, CPU, environment, resources and backend settings. Debug
-builds, unstable windows and samples shorter than a minute are excluded. Results
+builds, unstable windows, shutdown/failure reports and samples shorter than a
+minute are excluded. Exact source builds and pool/daemon modes form separate
+absolute-rate groups. Release-regression alerts match workload mode while
+allowing source identity to change between the compared releases. Results
 describe reporting installations and may not represent all miners.
 
 ## Verification and showcase
 
 ```sh
 python3 -m unittest discover -s telemetry -p 'test_a*.py'
-# Includes disposable PostgreSQL alert SQL tests when PostgreSQL 16 is installed.
+python3 -m unittest discover -s telemetry -p 'test_performance_sql.py'
+# Includes disposable PostgreSQL cohort/alert tests when PostgreSQL 16 is installed.
 cargo +1.93.0 test -p seine-telemetry --features server
 cargo +1.93.0 test --bin seine --no-default-features hardware_telemetry
 cargo +1.93.0 check --workspace --all-targets --features seine-telemetry/server,amd
