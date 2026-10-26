@@ -89,8 +89,8 @@ startup. Full addresses work without contacting the resolver.
 
 ## Dev fee
 
-Seine's dev fee is **1% when mining on bntpool.com** and 2.5% on other pools and in
-solo mode. It funds continued miner development.
+Seine's dev fee is a flat **2% of mining time**, on every pool and in solo mode.
+It funds continued miner development. The first 10 minutes of each run are fee-free.
 
 ## Control API
 

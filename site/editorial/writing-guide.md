@@ -62,7 +62,7 @@ fails the build on most of them.
 - No AMD GPU, Windows ARM64 or production Metal support claims.
 - seine's term is **threads** (the `--threads` flag), never "workers". On the pool, a "worker
   name" is fine because that's what the pool calls it.
-- Don't lead with fees. Mention seine's dev fee (1% on bntpool.com, 2.5% elsewhere) only where
+- Don't lead with fees. Mention seine's dev fee (flat 2% on every pool and in solo mode) only where
   a reader can't act without it.
 
 ## House style

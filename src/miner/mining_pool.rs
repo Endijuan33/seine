@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::backend::{DynamicShareTarget, MiningSolution, ShareBindingId};
 use crate::config::{Config, WorkAllocation};
 use crate::daemon_api::{is_unauthorized_error, ApiClient};
-use crate::dev_fee::{effective_pool_dev_fee_percent, DevFeeTracker, DEV_ADDRESS, DEV_FEE_PERCENT};
+use crate::dev_fee::{DevFeeTracker, DEV_ADDRESS};
 use crate::pool::{
     PoolClient, PoolEvent, PoolJob, PoolSubmitAck, PoolSubmitRetry,
     POOL_NOTIFICATION_MINER_BLOCK_FOUND, POOL_NOTIFICATION_POOL_BLOCK_SOLVED,
@@ -738,17 +738,7 @@ pub(super) fn run_pool_mining_loop(
     let mut epoch = 0u64;
     let mut last_hash_poll = Instant::now();
     let mut tui = init_tui_display(tui_state, Arc::clone(&shutdown), Arc::clone(&history));
-    let dev_fee_percent = effective_pool_dev_fee_percent(&user_connection.pool_url);
-    if (dev_fee_percent - DEV_FEE_PERCENT).abs() > f64::EPSILON {
-        success(
-            "POOL",
-            format!(
-                "bntpool.com detected; dev fee reduced to {:.1}% (default {:.1}%)",
-                dev_fee_percent, DEV_FEE_PERCENT
-            ),
-        );
-    }
-    let mut dev_fee_tracker = DevFeeTracker::with_percent(dev_fee_percent);
+    let mut dev_fee_tracker = DevFeeTracker::new();
     let mut dev_fee_round_started = Instant::now();
     let _ = dev_fee_tracker.begin_round();
     let mut active_mode = if dev_fee_tracker.is_dev_round() {

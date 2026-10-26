@@ -273,17 +273,11 @@ All facts checked 2026-10-25. Writers may state only what is listed here. Every 
   - Source: `seine@master:README.md:5-14`, `Cargo.toml:3`; `gh release list -R zpalmtree/seine` (checked 2026-10-25)
 - Name styling: the wordmark is always lowercase, `seine.` with a lime full stop. README prose capitalizes "Seine" at sentence start.
   - Source: `seine@master:docs/BRAND.md:43-44`, `README.md:24` (checked 2026-10-25)
-- **Dev fee (code):**
-  - 2.5% by default
-  - **1.0% when the pool host is `bntpool.com` or any `*.bntpool.com`**
-  - charged as a share of mining time (time-sliced dev rounds to a hard-coded dev address)
-  - no dev time is owed during the first **10 minutes**
-  - Source: `seine@master:src/dev_fee.rs:3-13`, `:37-50`, `:87-100` (checked 2026-10-25)
-- **Dev fee (docs):** "1% when mining on bntpool.com and 2.5% on other pools and in solo mode."
-  - Source: `seine@master:docs/guides/configuration.md:92-93`; `README.md:29-30` (checked 2026-10-25)
-  - Code agrees: solo/daemon mode uses `DevFeeTracker::new()` = 2.5% (`src/miner/mining.rs:1268`). If the daemon rejects the dev-fee reward address, the dev fee is turned off for that run (`mining.rs:620`).
-- **Total cost on bntpool.com = 2.5% pool fee + 1% seine dev fee.** The README's "Lowest fee on bntpool.com" refers only to the dev fee. Never write "1% fee on bntpool.com" without that context.
-  - Source: https://bntpool.com/api/info; `seine@master:README.md:29` (checked 2026-10-25)
+- **Dev fee (current source, pending release):** flat **2% of mining time** on every pool and in solo mode. There is no pool-host discount. Older releases retain their previous rates.
+  - Charged as time-sliced dev rounds to a hard-coded dev address, after a **10-minute** fee-free grace period.
+  - Source: `src/dev_fee.rs`, `src/miner/mining_pool.rs`, `docs/guides/configuration.md`.
+  - Solo/daemon mode uses the same tracker. If the daemon rejects the dev-fee reward address, the existing fallback disables the dev fee for that run.
+- **Pool fee transition:** the requested bntpool.com fee is **0%**, pending production configuration/deployment. Confirm the live `/api/info` value before describing it as active. With a 0% pool fee and the new Seine release, the combined fee is **2%**; older miners retain their own dev fee.
 - **Release archives:**
 
   | Platform | Archive | GPU support |
@@ -448,7 +442,7 @@ From owner preferences for seine marketing:
 - Source: owner preference, stated 2026-10-24/25
 
 Added by this sheet from the evidence:
-- Don't say the seine fee on bntpool.com is the total fee. The pool also charges **2.5%** (live `/api/info`).
+- Distinguish the miner dev fee from the pool fee. Check live `/api/info` and the miner version before quoting a combined rate.
 - Don't write "no dev fee" or "no dev tax" about seine.
   - The tagline "No premine. No dev tax." (`taglines.md:30`) is true of the **protocol** only. Seine charges 1% or 2.5%.
 - Don't write "ASIC-proof" or "botnet-proof". The code claims design intent only ("resist ASICs", "impractical", `pow.rs:1-4`). "Designed to resist ASICs" is the safe wording.

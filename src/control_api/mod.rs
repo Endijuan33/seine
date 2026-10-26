@@ -24,7 +24,7 @@ use crate::config::{
     read_token_from_cookie_file, BackendKind, BackendSpec, Config, CpuAffinityMode, CpuPageMode,
     CpuPerformanceProfile, MiningMode, UiMode, WorkAllocation,
 };
-use crate::dev_fee::{effective_pool_dev_fee_percent, DEV_ADDRESS, DEV_FEE_PERCENT};
+use crate::dev_fee::{DEV_ADDRESS, DEV_FEE_PERCENT};
 use crate::miner::session::SessionHistory;
 use crate::miner::thread_control::{ThreadChangeRequest, ThreadControl};
 use crate::miner::ui::{set_log_sink, UiLogEvent};
@@ -417,19 +417,6 @@ impl MinerSupervisor {
             .state
             .lock()
             .expect("supervisor state lock poisoned during snapshot");
-        let active_cfg = state
-            .effective_config
-            .as_ref()
-            .or(state.staged_config.as_ref());
-        let dev_fee_percent = active_cfg
-            .and_then(|cfg| {
-                if cfg.mode != MiningMode::Pool {
-                    return None;
-                }
-                cfg.pool_url.as_deref().map(effective_pool_dev_fee_percent)
-            })
-            .unwrap_or(DEV_FEE_PERCENT);
-
         RuntimeStateSnapshot {
             lifecycle: state.lifecycle,
             run_id: state.run_id,
@@ -442,7 +429,7 @@ impl MinerSupervisor {
             last_error: state.last_error.clone(),
             pending_wallet_password: state.pending_wallet_password.is_some(),
             pending_nvidia_count: state.pending_nvidia_count,
-            dev_fee_percent,
+            dev_fee_percent: DEV_FEE_PERCENT,
             dev_fee_mode: state.dev_fee_mode.clone(),
             dev_fee_address: DEV_ADDRESS,
             effective_config: state
@@ -2433,6 +2420,24 @@ mod tests {
             map.insert(name.clone(), value.parse().unwrap());
         }
         map
+    }
+
+    #[test]
+    fn snapshot_reports_flat_dev_fee_for_every_pool_and_solo() {
+        for (mode, pool_url) in [
+            (MiningMode::Pool, Some("stratum+tcp://bntpool.com:3333")),
+            (MiningMode::Pool, Some("stratum+tcp://eu.bntpool.com:3333")),
+            (MiningMode::Pool, Some("stratum+tcp://example.com:3333")),
+            (MiningMode::Daemon, None),
+        ] {
+            let mut cfg = crate::miner::tests::test_config();
+            cfg.mode = mode;
+            cfg.pool_url = pool_url.map(str::to_string);
+            let supervisor = MinerSupervisor::new(cfg.clone(), Arc::new(AtomicBool::new(false)));
+            assert_eq!(supervisor.snapshot().dev_fee_percent, 2.0);
+            supervisor.state.lock().unwrap().effective_config = Some(cfg);
+            assert_eq!(supervisor.snapshot().dev_fee_percent, 2.0);
+        }
     }
 
     #[test]
