@@ -273,3 +273,11 @@ and remains required before treating hardware validation as complete.
 Evidence: workspace `benchmark-evidence/longhorn-20261025/cuda-loader-probe/`;
 `result.json`, `windows-result.json`, generated synthetic fixture, build logs and
 `nvidia-tests.log`. This records compatibility evidence, not a hashrate gain.
+
+The full Seine target also passes Windows GNU cross-compilation. Native Windows
+NVRTC 12.8 compilation of the unchanged full CUDA kernel produces byte-identical
+CUBINs under both binding selections for Pascal `sm_61` and Blackwell `sm_120`,
+using the shipping compile options for those architectures. The compiler runs
+on the CPU; this checks bundled-runtime loading and generated code without
+claiming GPU execution. See `nvrtc-compilation-comparison.json`. The real-GPU
+differential check remains queued behind unrelated work.
