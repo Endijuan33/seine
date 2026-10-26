@@ -4112,3 +4112,35 @@ also slower and is retained separately. Keep automatic selection scoped to
 the measured Genoa contexts; this is a demonstrated regression, not merely
 an inconclusive improvement gate. Evidence: workspace campaign
 `native-linux-amd-zen5-ring/ring-publication/campaign/campaign.json`.
+
+
+## 2026-10-26: paired arenas help a constrained comparison, not maximum Genoa throughput
+
+Native Linux AMD EPYC 9R14, 32 physical cores and 128 GiB, full transparent
+hugepage backing, ring 8/depth 2, OS scheduling. A frozen research binary
+(`b4e5645`, SHA256 `1ab50326861c23f80c9c10219f3ae728cabfa9c57b072655a75e5bc2371922dd`)
+compared matched 64 GiB allocations through `benchctl campaign`.
+
+After a separate two-pair screen, three fresh interleaved confirmation pairs
+measured 16 sequential workers at 27.3474 H/s and 16 paired workers at
+29.5173 H/s: +7.9216% paired geometric gain, bootstrap 95% interval
+[6.1316%, 8.9278%], three of three pairs faster. However, a separate two-pair
+screen measured 32 single-arena workers at 43.8882 H/s versus 16 paired workers
+at 29.7860 H/s: -32.1322%, interval [-32.1779%, -32.0865%]. That contrast was
+rejected without redundant confirmation.
+
+All 10,606 timed hash claims independently match cached libargon2 outputs;
+96 full-size RustCrypto parity checks also passed. Allocation and warmup are
+excluded. These are offline fixed-kernel rates, not pool, startup, energy or
+fee-adjusted throughput. The +7.9% result does not establish a gain over
+ordinary 16 single-arena workers, which were not measured. Preserve the
+conditional research but do not select paired arenas as the 32-core default.
+A future CPU-slot-limited host with spare memory would require its own matched
+single-versus-paired comparison and an integration-level check.
+
+Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
+`native-linux-amd-pair-ring-retry/ring-publication/campaign/`, including
+`independent-verification.json`, raw reports, stage tables and confidence
+intervals. The preceding Spot attempt lost raw captures to an AWS interruption;
+its provisional status output is excluded. Both rentals were terminated and
+cleanup verified.
