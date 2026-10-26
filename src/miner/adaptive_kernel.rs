@@ -197,6 +197,29 @@ fn genoa_frontier_context(context: &Context) -> bool {
     genoa_short_context(context) && matches!(context.workers.as_slice(), [31 | 32])
 }
 
+// Research candidate: native Windows 9R14 captures repeatedly reject AVX512
+// and AVX2 by about 20% at 31/32 workers. Validate stream-first startup natively
+// before promotion. Subsequent periodic sweeps remain exhaustive.
+fn windows_genoa_frontier_for(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    candidates: &[CpuKernel],
+) -> bool {
+    cfg.cpu_autotune_secs == 6
+        && candidates.contains(&CpuKernel::Avx512256StreamR8D2)
+        && windows_genoa_stream_startup(cfg, host, identity, candidates)
+}
+
+fn windows_genoa_frontier_context(context: &Context) -> bool {
+    let [workers] = context.workers.as_slice() else {
+        return false;
+    };
+    context.members == [0]
+        && matches!(*workers, 31 | 32)
+        && context.backing == [[0, 0, 0, *workers as u64 * CPU_LANE_MEMORY_BYTES, 0]]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct Context {
     // Indices in the controller's stable CPU backend list. Different survivors
@@ -434,8 +457,9 @@ impl Tuner {
         };
         let short_trials = short_trials_for(identity, &candidates, cfg.cpu_autotune_secs);
         let genoa_short_trials = genoa_short_trials_for(cfg, &host, identity, &candidates);
-        let genoa_startup_frontier =
-            genoa_short_trials && candidates.contains(&CpuKernel::Avx512256StreamR8D2);
+        let genoa_startup_frontier = (genoa_short_trials
+            && candidates.contains(&CpuKernel::Avx512256StreamR8D2))
+            || windows_genoa_frontier_for(cfg, &host, identity, &candidates);
         let configuration_for = |paths: &[CpuKernel], use_genoa_short: bool, frontier: bool| {
             let mut configuration = format!(
             "profile={:?};pages={:?};affinity={:?};cpu={:?};batch={};control={};flush={:?};kernels={:?}",
@@ -459,7 +483,11 @@ impl Tuner {
                 configuration.push_str(";sample_policy=genoa-thp-30-32-10s-256-v1");
             }
             if frontier {
-                configuration.push_str(";frontier_policy=genoa-thp31-32-stream-first-v1");
+                configuration.push_str(if windows_genoa_startup {
+                    ";frontier_policy=genoa-windows-regular31-32-stream-first-v1"
+                } else {
+                    ";frontier_policy=genoa-thp31-32-stream-first-v1"
+                });
             }
             if genoa_startup {
                 configuration.push_str(";startup=genoa-32-thp-v1");
@@ -804,7 +832,11 @@ impl Tuner {
             }
             if self.pending.is_empty() {
                 let frontier = self.genoa_startup_frontier
-                    && genoa_frontier_context(&context)
+                    && if self.windows_genoa_startup {
+                        windows_genoa_frontier_context(&context)
+                    } else {
+                        genoa_frontier_context(&context)
+                    }
                     && !self.cache.winners.iter().any(|w| w.context == context);
                 self.pending = self
                     .candidates
@@ -1899,6 +1931,157 @@ mod tests {
             }
             let _ = fs::remove_file(&t.path);
         }
+    }
+
+    #[test]
+    fn windows_frontier_keeps_backing_count_and_periodic_search_boundaries() {
+        for (workers, regular, enabled, expected) in [
+            (32, true, true, CpuKernel::Avx512256Stream),
+            (31, true, true, CpuKernel::Avx512256Stream),
+            (30, true, true, CpuKernel::Avx512),
+            (32, false, true, CpuKernel::Avx512),
+            (32, true, false, CpuKernel::Avx512),
+        ] {
+            let mut t = tuner();
+            t.windows_genoa_startup = true;
+            t.genoa_startup_frontier = enabled;
+            t.candidates = vec![
+                CpuKernel::Avx512,
+                CpuKernel::Avx2,
+                CpuKernel::Avx512256Stream,
+                CpuKernel::Avx512256StreamR8D2,
+            ];
+            let mut state = snapshot();
+            state.threads = workers;
+            state.kernel = CpuKernel::Avx512256StreamR8D2;
+            state.backing_bytes = [0; 5];
+            state.backing_bytes[if regular { 3 } else { 2 }] =
+                workers as u64 * CPU_LANE_MEMORY_BYTES;
+            let context = Context::from_snapshots(&[state]);
+            t.tick(1, &[state], true, true);
+            assert_eq!(t.trial.as_ref().unwrap().candidate, expected);
+            if expected == CpuKernel::Avx512256Stream {
+                assert!(t.pending.is_empty());
+                let trial = t.trial.take().unwrap();
+                t.cache.winners.push(Winner {
+                    context: context.clone(),
+                    kernel: "avx512-256-stream-r8d2".into(),
+                    timestamp: unix_secs(),
+                    base: "avx512-256-stream-r8d2".into(),
+                    candidate: "avx512-256-stream".into(),
+                    samples: vec![sample(100); 3],
+                });
+                t.checked = Some(trial.context);
+                t.next_check = 0;
+                t.tick(RECHECK_SECS + 2, &[state], true, true);
+                assert_eq!(t.trial.as_ref().unwrap().candidate, CpuKernel::Avx512);
+                assert!(t.pending.contains(&CpuKernel::Avx2));
+            }
+            let _ = fs::remove_file(&t.path);
+        }
+        let mut context = Context {
+            members: vec![0],
+            workers: vec![32],
+            backing: vec![[0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0]],
+        };
+        context.backing[0][0] = CPU_LANE_MEMORY_BYTES;
+        context.backing[0][3] -= CPU_LANE_MEMORY_BYTES;
+        assert!(!windows_genoa_frontier_context(&context));
+        context.backing[0] = [0, 0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0];
+        context.members[0] = 1;
+        assert!(!windows_genoa_frontier_context(&context));
+    }
+
+    #[test]
+    fn windows_frontier_policy_and_previous_confirmed_cache_are_scoped() {
+        let mut cfg = super::super::tests::test_config();
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_autotune_secs = 6;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-windows-frontier-cache-{}.json",
+            std::process::id()
+        ));
+        let mut host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R14".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "windows".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let mut identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x19),
+            model: Some(0x11),
+            ..Default::default()
+        };
+        let paths = [CpuKernel::Avx512256Stream, CpuKernel::Avx512256StreamR8D2];
+        assert!(windows_genoa_frontier_for(&cfg, &host, &identity, &paths));
+        assert!(!windows_genoa_frontier_for(
+            &cfg,
+            &host,
+            &identity,
+            &paths[..1]
+        ));
+        assert!(!windows_genoa_frontier_for(
+            &cfg,
+            &host,
+            &identity,
+            &paths[1..]
+        ));
+        identity.model = Some(0x02);
+        assert!(!windows_genoa_frontier_for(&cfg, &host, &identity, &paths));
+        identity.model = Some(0x11);
+        host.runtime_environment = "wsl2".into();
+        assert!(!windows_genoa_frontier_for(&cfg, &host, &identity, &paths));
+        host.runtime_environment = "native".into();
+        cfg.cpu_autotune_secs = 12;
+        assert!(!windows_genoa_frontier_for(&cfg, &host, &identity, &paths));
+        cfg.cpu_autotune_secs = 6;
+        if !CpuKernel::Avx512256StreamR8D2.is_supported() {
+            return;
+        }
+        let initial = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&initial.path);
+        assert!(initial.genoa_startup_frontier);
+        let context = Context {
+            members: vec![0],
+            workers: vec![31],
+            backing: vec![[0, 0, 0, 31 * CPU_LANE_MEMORY_BYTES, 0]],
+        };
+        let mut old = Cache {
+            schema: CACHE_SCHEMA,
+            host: host.clone(),
+            configuration: initial.cache.configuration.replace(
+                ";frontier_policy=genoa-windows-regular31-32-stream-first-v1",
+                "",
+            ),
+            winners: vec![Winner {
+                context: context.clone(),
+                kernel: "avx512-256-stream-r8d2".into(),
+                timestamp: unix_secs(),
+                base: "avx512-256-stream-r8d2".into(),
+                candidate: "avx2".into(),
+                samples: vec![sample(100); 3],
+            }],
+        };
+        for valid in [true, false] {
+            if !valid {
+                old.winners[0].timestamp = 0;
+            }
+            fs::write(&initial.path, serde_json::to_vec(&old).unwrap()).unwrap();
+            let restored = Tuner::for_identity(&cfg, host.clone(), &identity);
+            assert_eq!(
+                restored
+                    .cache
+                    .winner(&context, unix_secs(), &restored.candidates),
+                valid.then_some(CpuKernel::Avx512256StreamR8D2)
+            );
+        }
+        let _ = fs::remove_file(&initial.path);
     }
 
     #[test]

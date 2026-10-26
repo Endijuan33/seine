@@ -4144,3 +4144,23 @@ Evidence: workspace `benchmark-evidence/longhorn-20261025/` under
 intervals. The preceding Spot attempt lost raw captures to an AWS interruption;
 its provisional status output is excluded. Both rentals were terminated and
 cleanup verified.
+
+
+## 2026-10-26: Windows Genoa first-sweep frontier (native test pending)
+
+Native EPYC 9R14 Windows ordinary-page captures repeatedly reject AVX512 and
+AVX2 at 31 and 32 workers: roughly 27 H/s versus 34 H/s on streaming. The
+current v0.2.29 cold comparison spends most of its first 600 seconds on these
+comparisons. An isolated candidate extends the already validated Linux first-
+sweep policy only to native Windows 9R14, 32-core/128-GiB automatic throughput
+contexts with ordinary pages, at 31/32 workers and default sample settings.
+It starts from the existing validated kernel, compares the two streaming paths
+first, and restores the full candidate set for periodic retuning. It does not
+change the Windows sample duration or any kernel implementation.
+
+The cache policy has a separate Windows fingerprint and preserves compatible
+previous confirmed winners; context, age and sample-proof checks remain in force.
+105 focused adaptive tests passed, five ignored, including neighboring identity,
+unsupported path, mixed backing, count, periodic full-search and cache-boundary
+checks. A frozen native MSVC baseline/candidate 600-second cold comparison is
+planned before landing. No performance gain is claimed yet.
