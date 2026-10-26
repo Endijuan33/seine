@@ -16,6 +16,7 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Same, high count | 7443P, 24 workers | 13.54 vs 8.23, +65% | confirms |
 | Replace demand MFENCE with SFENCE every 32 blocks | 7443P, 12 / 24 workers | ±0.5% / +0.9% | adopted for `avx2-stream` (same-core NT store→load parity verified) |
 | Drop software prefetch in `avx2-stream` | 7443P, 12 / 24 / 30 workers | −14.9% / +8.8% / +6% | rejected: best-point gain ~3% at 2× RAM |
+| `avx2-stream` beats `avx2` on a Zen 3 VM | EPYC 7R13 (c6a.8xlarge), 16 workers | 14.54 vs 11.62, +25% | confirms Zen 3 (shared-socket VM) |
 | `avx2-stream` beats `avx2` on Zen 2 | EPYC 7R32 (c5a.8xlarge), 16 / 28 workers | 17.16 vs 10.27 (**+67%**) / 15.98 vs 9.26 (+73%) | adopted for Zen 2 (family 17h, model ≥ 30h); full 2 GiB parity |
 | Prefetch depth 3 instead of 7 in `avx2-stream` | EPYC 7R32, 16 / 28 workers | +0.1% / −7.0% | rejected; depth 7 kept |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
