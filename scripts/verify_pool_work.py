@@ -53,12 +53,24 @@ def reference_hasher(library_path=None):
     return name, hash_nonce
 
 
+def reference_key(work, share):
+    nonce = share['params']['nonce']
+    if type(nonce) is not int or not 0 <= nonce < (1 << 64):
+        raise ValueError('invalid nonce')
+    header = bytes.fromhex(share.get('header_base', work['header_base']))
+    if len(header) != 92:
+        raise ValueError('wrong header length')
+    return header, nonce, header.hex() + ':' + str(nonce)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("work", type=Path)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--reference-library", type=Path,
                         help="Explicit independently built libargon2, when it is not installed system-wide")
+    parser.add_argument("--cache-only", action="store_true",
+                        help="Require all independent reference values in the cache; never compute missing hashes")
     args = parser.parse_args()
     raw = args.work.read_bytes()
     work = json.loads(raw)
@@ -69,22 +81,24 @@ def main():
     if start is not None and (not math.isfinite(start) or not math.isfinite(end)
                              or not math.isclose(end-start, duration, abs_tol=1e-6)):
         raise ValueError('measurement bounds do not match duration')
-    name, hash_nonce = reference_hasher(args.reference_library)
     cache_guard = lock_cache(args.cache)
-    cache = json.loads(args.cache.read_text()) if args.cache.exists() else {}
+    cache_raw = args.cache.read_bytes() if args.cache.exists() else b'{}'
+    cache = json.loads(cache_raw)
+    if args.cache_only:
+        missing = {reference_key(work, share)[2] for share in work['shares']} - cache.keys()
+        if missing:
+            parser.error(f'cache-only verification requires {len(missing)} missing independent reference values')
+        name, hash_nonce = 'independent libargon2 cache (no hashing performed)', None
+    else:
+        name, hash_nonce = reference_hasher(args.reference_library)
     seen = set()
     results = []
     started = time.monotonic()
     for index, share in enumerate(work["shares"]):
         params = share["params"]
-        nonce = params["nonce"]
-        if type(nonce) is not int or not 0 <= nonce < (1 << 64):
-            raise ValueError(f"invalid nonce at share {index}")
-        header = bytes.fromhex(share.get("header_base", work["header_base"]))
-        if len(header) != 92:
-            raise ValueError("wrong header length")
-        key = header.hex()+":"+str(nonce)
+        header, nonce, key = reference_key(work, share)
         if key not in cache:
+            assert hash_nonce is not None, 'Cache-only verification must not hash'
             cache[key] = hash_nonce(header, nonce)
             temp = args.cache.with_suffix(".tmp")
             temp.write_text(json.dumps(cache, sort_keys=True)+"\n")
@@ -112,6 +126,8 @@ def main():
     counted = [r for r in results if r["valid"] and not r["duplicate"] and r["in_window"]]
     useful = [r for r in counted if r['eligible']]
     summary = {"schema": 1, "work_sha256": hashlib.sha256(raw).hexdigest(),
+               "cache_only": args.cache_only,
+               "initial_cache_sha256": hashlib.sha256(cache_raw).hexdigest(),
                "measurement_complete": work["termination_reason"] == "measurement_complete",
                "reference": name, "argon2": {"type": "id", "version": 19, "memory_kib": 2097152,
                                             "iterations": 1, "parallelism": 1, "output_bytes": 32},

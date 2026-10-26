@@ -26,11 +26,11 @@ class EvidenceTests(unittest.TestCase):
                                  'job': {'job_id': 'fixture', 'header_base': HEADER,
                                          'nonce_start': 0, 'nonce_end': 10}}]}
 
-    def run_verifier(self):
+    def run_verifier(self, *arguments):
         work = self.path / 'work.json'
         work.write_text(json.dumps(self.work))
         result = subprocess.run([sys.executable, str(Path(__file__).with_name('verify_pool_work.py')),
-                                 str(work), '--cache', str(self.path / 'cache.json')], capture_output=True, text=True)
+                                 str(work), '--cache', str(self.path / 'cache.json'), *arguments], capture_output=True, text=True)
         report = self.path / 'verification.json'
         return result.returncode, json.loads(report.read_text()) if report.exists() else None
 
@@ -39,6 +39,25 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(report['verified_unique_hps'], 1)
         self.assertEqual(report['verified_user_hps'], 1)
+
+    def test_cache_only_needs_no_library_and_keeps_correctness_checks(self):
+        arguments = ['--cache-only', '--reference-library', str(self.path / 'absent-library')]
+        code, report = self.run_verifier(*arguments)
+        self.assertEqual(code, 0)
+        self.assertTrue(report['cache_only'])
+        self.assertEqual(len(report['initial_cache_sha256']), 64)
+        self.work['shares'][0]['params']['claimed_hash'] = '00'*32
+        code, report = self.run_verifier(*arguments)
+        self.assertEqual(code, 1)
+        self.assertEqual(report['invalid'], 1)
+
+    def test_cache_only_refuses_missing_values_without_writing_cache_or_receipt(self):
+        cache = self.path / 'cache.json'
+        cache.write_text('{}')
+        code, report = self.run_verifier('--cache-only')
+        self.assertEqual(code, 2)
+        self.assertIsNone(report)
+        self.assertEqual(cache.read_text(), '{}')
 
     def test_duplicate_never_inflates_throughput_or_passes(self):
         self.work['shares'].append(copy.deepcopy(self.work['shares'][0]))
