@@ -307,6 +307,9 @@ package or whole-system energy separately when trustworthy counters exist.
 
 ## Queue, screen, and confirm experiments
 
+For the reusable competitor optimization objective and iteration policy, see
+[Competitor performance optimization goal](COMPETITOR_PERFORMANCE_GOAL.md).
+
 `benchctl campaign` executes a serial, resumable queue of trusted local commands.
 It builds each candidate once, checks correctness, screens out clear regressions,
 and gives the survivors a separate confirmation run. It does not edit source,
