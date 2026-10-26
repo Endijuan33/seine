@@ -2,18 +2,13 @@
 // Shared page shell. Owns every SEO tag: canonical, hreflang alternates, Open Graph/Twitter,
 // robots and JSON-LD. `path` is the unlocalized site path ("/", "/blog/<slug>/"); every page
 // exists in every locale, so the alternates are derived from it.
-import '@fontsource/instrument-sans/latin-400.css';
-import '@fontsource/instrument-sans/latin-500.css';
-import '@fontsource/instrument-sans/latin-600.css';
-import '@fontsource/instrument-sans/latin-700.css';
-import '@fontsource/ibm-plex-mono/latin-400.css';
-import '@fontsource/ibm-plex-mono/latin-500.css';
-// Polish, Turkish, Vietnamese and the like; other scripts use the system fonts in site.css.
-import '@fontsource/instrument-sans/latin-ext-400.css';
-import '@fontsource/instrument-sans/latin-ext-600.css';
-import '@fontsource/instrument-sans/latin-ext-700.css';
-import '@fontsource/ibm-plex-mono/latin-ext-400.css';
-import '@fontsource/ibm-plex-mono/cyrillic-400.css';
+// Weight entrypoints include unicode-range: each page fetches only the scripts it uses.
+import '@fontsource/instrument-sans/400.css';
+import '@fontsource/instrument-sans/500.css';
+import '@fontsource/instrument-sans/600.css';
+import '@fontsource/instrument-sans/700.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import '../styles/site.css';
 import { LOCALES, localeDef, localizePath, type Locale } from '../i18n/locales';
 import { useTranslations } from '../i18n/ui';
