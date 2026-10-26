@@ -9,6 +9,10 @@ supported hardware only.
 
 ## Unreleased
 
+## v0.2.36
+
+- About 1% faster CPU hashing on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages, while retaining automatic tuning and saved settings.
+
 ## v0.2.35
 
 - Faster mining startup on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages. Seine initializes memory faster and starts from validated worker and kernel settings while continuing to tune automatically.

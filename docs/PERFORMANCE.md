@@ -75,7 +75,7 @@ fixed-kernel speedups or measurements of fully converged throughput.
 
 | CPU | Generation | Instance | Threads | Kernel | H/s |
 |---|---|---|---:|---|---:|
-| AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming | 49.39 |
+| AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming ring 64 / depth 3 | 49.95 |
 | AMD EPYC 9R14 | Zen 4 Genoa | m7a.8xlarge | 32 | streaming ring 8 / depth 2 | 45.30 |
 | AMD EPYC 7R13 | Zen 3 Milan | c6a.8xlarge | 16 | AVX2 | 11.63 |
 | AMD EPYC 7R32 | Zen 2 Rome | c5a.8xlarge | 16 | AVX2 | 10.96 |
@@ -89,6 +89,14 @@ fixed-kernel speedups or measurements of fully converged throughput.
 | AWS Graviton4 | Neoverse V2 | m8g.8xlarge | 32 | NEON + SHA3 | 39.29 |
 | AWS Graviton3 | Neoverse V1 | m7g.8xlarge | 32 | NEON + SHA3 | 27.70 |
 | AWS Graviton2 | Neoverse N1 | m6g.8xlarge | 30 | NEON | 18.63 |
+
+The EPYC 9R45 row uses 32 threads and full transparent huge-page backing.
+Three fresh alternating confirmation pairs measured **49.95 H/s versus 49.45 H/s**
+with the previous fence policy: **+1.01%**, with a paired 95% bootstrap interval
+of +0.39% to +1.64%. All 13,103 timed hashes across screening and confirmation
+verified independently. This fixed-kernel measurement excludes allocation,
+warmup and teardown; startup, pool throughput and energy are separate results.
+[Turin confirmation, frozen sources and raw reports](../experiments/turin-fences-20261026/README.md).
 
 The EPYC 9R14 row uses 32 threads and full transparent huge-page backing. Three
 alternating 30-second confirmation pairs measured **45.30 H/s versus 44.18 H/s**

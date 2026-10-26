@@ -4498,3 +4498,38 @@ Local evidence: `native-linux-amd-turin-startup/` and
 112 integrated adaptive tests, seven Turin-specific tests including saved-cache migration,
 and three prefault tests passed; the expensive local full-size test remained
 ignored, with full-size hash proof supplied by the native captured work.
+
+## 2026-10-26: Turin demand fences retain the original depth and ring
+
+Native m8a.8xlarge / EPYC 9R45 (family 1Ah, model 02h), Linux, 32 physical
+cores, 128 GiB, 32 workers and full 64 GiB THP backing. Frozen baseline9606516
+and candidateed7466, existing benchctl screen2x20s then fresh confirm3x30s:
+
+- Demand fences, ring64/depth3: screen +1.2970%; confirmation
+  **49.45196 -> 49.95097 H/s (+1.00794%)**, paired95% bootstrap interval
+  **[+0.38664%,+1.63641%]**, three of three pairs faster. Keep.
+- Demand fences, ring8/depth3: screen -0.0232% with an interval crossing zero;
+  fresh confirmation **-1.60939%**, interval [-2.36356%,-0.54163%], all three
+  pairs slower. Reject this alternative; retain its raw evidence.
+
+All **26,040 timed hashes** across both experiments independently verified;
+24 native full-size RustCrypto checks passed. Nine previously absent references
+were computed with the separate Mac libargon2 verifier; no claimed miner hash
+was used as a reference. Rental termination, root-volume and SG cleanup verified.
+
+Integrate the distinct `avx512-256-stream-r64d3` path. Generic streaming remains
+periodic; Genoa R8/D2 remains unchanged. Automatic eligibility requires the exact
+native Linux9R45 host/configuration already validated for Turin startup; ISA/OS
+support is checked separately. The startup hint requires32workers/fullTHP.
+Saved prior winners seed productive comparison of only the newly available path.
+Efficiency and manual configuration retain their existing policies. Candidate-set
+fingerprints distinguish the new path while strict host/context/age/proof checks
+preserve usable prior winners. Local checks:113 adaptive tests passed5ignored;
+eight kernel tests including dirty reuse, guards and all-path parity passed.
+The integrated complete loop equals the measured research algorithm after
+constant-branch resolution; this does not assert identical assembly.
+
+Public positive-result evidence: `experiments/turin-fences-20261026/`.
+Full local campaign including the rejected interaction:
+`native-linux-amd-zen5-demand-depth/ring-publication/campaign/`.
+Kernel throughput excludes startup/warmup/teardown; no energy or fee claim.

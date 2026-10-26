@@ -31,6 +31,8 @@ const ISA_AVX512_256_STREAM: u8 = 5;
 const ISA_NEON_SHA3: u8 = 6;
 #[allow(dead_code)]
 const ISA_AVX512_256_STREAM_R8D2: u8 = 7;
+#[allow(dead_code)]
+const ISA_AVX512_256_STREAM_R64D3: u8 = 8;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -62,6 +64,7 @@ const fn isa_label(isa: u8) -> &'static str {
         ISA_NEON => "neon",
         ISA_NEON_SHA3 => "neon-sha3",
         ISA_AVX512_256_STREAM_R8D2 => "avx512-256-stream-r8d2",
+        ISA_AVX512_256_STREAM_R64D3 => "avx512-256-stream-r64d3",
         _ => "scalar",
     }
 }
@@ -81,6 +84,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Neon => ISA_NEON,
         CpuKernel::NeonSha3 => ISA_NEON_SHA3,
         CpuKernel::Avx512256StreamR8D2 => ISA_AVX512_256_STREAM_R8D2,
+        CpuKernel::Avx512256StreamR64D3 => ISA_AVX512_256_STREAM_R64D3,
     }
 }
 
@@ -98,6 +102,7 @@ pub fn compiled_isa_variants() -> &'static [&'static str] {
             "avx512-256",
             "avx512-256-stream",
             "avx512-256-stream-r8d2",
+            "avx512-256-stream-r64d3",
         ]
     }
     #[cfg(target_arch = "aarch64")]
@@ -202,6 +207,10 @@ impl FixedArgon2id {
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
                 self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }>(memory_blocks)
             },
+            #[cfg(target_arch = "x86_64")]
+            ISA_AVX512_256_STREAM_R64D3 => unsafe {
+                self.fill_streaming_ring::<64, 3, true>(memory_blocks)
+            },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
             #[cfg(target_arch = "aarch64")]
@@ -213,7 +222,7 @@ impl FixedArgon2id {
     }
 
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
-    // Periodic mode fences every ring wrap. Linux R8/D2 uses the measured
+    // Periodic mode fences every ring wrap. R8/D2 and R64/D3 use the measured
     // reference-demand policy: fence before reading an uncommitted arena block.
     // Recent references stay in the ring; finalization always fences.
     #[cfg(target_arch = "x86_64")]

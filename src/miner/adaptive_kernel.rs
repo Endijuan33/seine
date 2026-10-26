@@ -164,6 +164,16 @@ fn turin_stream_startup(
         )
 }
 
+fn turin_demand_startup(
+    cfg: &Config,
+    host: &CpuAutotuneHostFingerprint,
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> bool {
+    supported.contains(&CpuKernel::Avx512256StreamR64D3)
+        && turin_stream_startup(cfg, host, identity, supported)
+}
+
 fn genoa_stream_context(context: &Context) -> bool {
     context.members.len() == 1
         && context.workers == [32]
@@ -481,6 +491,12 @@ impl Tuner {
             candidates.push(CpuKernel::Avx512256Stream);
         }
         let turin_startup = turin_stream_startup(cfg, &host, identity, &supported);
+        // Native 32-core Linux 9R45: demand fences retain the proven R64/D3
+        // lookahead. Actual startup still requires full THP backing.
+        let turin_demand = turin_demand_startup(cfg, &host, identity, &supported);
+        if turin_demand {
+            candidates.insert(0, CpuKernel::Avx512256StreamR64D3);
+        }
         let genoa_startup = genoa_stream_startup(cfg, &host, identity, &candidates);
         let windows_genoa_startup = windows_genoa_stream_startup(cfg, &host, identity, &candidates);
         // Native ring/depth screen: retain the old streaming path as a challenger.
@@ -493,6 +509,8 @@ impl Tuner {
         }
         let startup = if ring_startup {
             Some(CpuKernel::Avx512256StreamR8D2)
+        } else if turin_demand {
+            Some(CpuKernel::Avx512256StreamR64D3)
         } else if genoa_startup || windows_genoa_startup || sapphire_startup || turin_startup {
             Some(CpuKernel::Avx512256Stream)
         } else {
@@ -550,11 +568,16 @@ impl Tuner {
             configuration_for(&candidates, genoa_short_trials, genoa_startup_frontier);
         let prior_startup_configuration =
             turin_startup.then(|| configuration.replace(";startup=turin9r45-32-thp-v1", ""));
-        let prior_configuration = ring_startup.then(|| {
+        let prior_configuration = (ring_startup || turin_demand).then(|| {
             let prior_paths: Vec<_> = candidates
                 .iter()
                 .copied()
-                .filter(|k| *k != CpuKernel::Avx512256StreamR8D2)
+                .filter(|k| {
+                    !matches!(
+                        k,
+                        CpuKernel::Avx512256StreamR8D2 | CpuKernel::Avx512256StreamR64D3
+                    )
+                })
                 .collect();
             configuration_for(&prior_paths, false, false)
         });
@@ -588,10 +611,14 @@ impl Tuner {
                     record.configuration = configuration.clone();
                     Some(record)
                 } else {
-                    if prior_configuration
-                        .as_ref()
-                        .is_some_and(|prior| record.compatible(&host, prior))
-                    {
+                    if prior_configuration.as_ref().is_some_and(|prior| {
+                        record.compatible(&host, prior)
+                            || (turin_demand
+                                && record.compatible(
+                                    &host,
+                                    &prior.replace(";startup=turin9r45-32-thp-v1", ""),
+                                ))
+                    }) {
                         startup_cache = Some(record);
                     }
                     None
@@ -828,7 +855,12 @@ impl Tuner {
                     .candidates
                     .iter()
                     .copied()
-                    .filter(|k| *k != CpuKernel::Avx512256StreamR8D2)
+                    .filter(|k| {
+                        !matches!(
+                            k,
+                            CpuKernel::Avx512256StreamR8D2 | CpuKernel::Avx512256StreamR64D3
+                        )
+                    })
                     .collect();
                 if let Some(kernel) = self
                     .startup_cache
@@ -837,7 +869,7 @@ impl Tuner {
                 {
                     self.checked = Some(context);
                     self.next_check = now;
-                    self.pending = vec![CpuKernel::Avx512256StreamR8D2];
+                    self.pending = self.startup.into_iter().collect();
                     let switching = !snapshots.iter().all(|s| s.kernel == kernel);
                     if switching {
                         self.settling = Some(kernel);
@@ -2417,6 +2449,76 @@ mod tests {
     }
 
     #[test]
+    fn turin_demand_preserves_prior_winner_and_compares_new_path() {
+        if !CpuKernel::Avx512256Stream.is_supported() {
+            return;
+        }
+        let mut cfg = super::super::tests::test_config();
+        cfg.threads = 32;
+        cfg.cpu_auto_threads_cap = 32;
+        cfg.cpu_affinity = crate::config::CpuAffinityMode::Auto;
+        cfg.backend_specs[0].cpu_affinity = None;
+        cfg.cpu_autotune_config_path = std::env::temp_dir().join(format!(
+            "seine-turin-demand-cache-{}.json",
+            std::process::id()
+        ));
+        let host = CpuAutotuneHostFingerprint {
+            cpu_brand: Some("AMD EPYC 9R45".into()),
+            logical_cores: 32,
+            physical_cores: Some(32),
+            total_memory_bytes: 128 * 1024_u64.pow(3),
+            os: "linux".into(),
+            runtime_environment: "native".into(),
+            ..Default::default()
+        };
+        let identity = crate::runtime_identity::CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x02),
+            ..Default::default()
+        };
+        let fresh = Tuner::for_identity(&cfg, host.clone(), &identity);
+        let _ = fs::remove_file(&fresh.path);
+        let context = Context {
+            members: vec![0],
+            workers: vec![32],
+            backing: vec![[0, 0, 32 * CPU_LANE_MEMORY_BYTES, 0, 0]],
+        };
+        let old = Cache {
+            schema: CACHE_SCHEMA,
+            host: host.clone(),
+            configuration: fresh
+                .cache
+                .configuration
+                .replace("Avx512256StreamR64D3, ", ""),
+            winners: vec![Winner {
+                context: context.clone(),
+                kernel: "avx512".into(),
+                timestamp: unix_secs(),
+                base: "avx512".into(),
+                candidate: "avx2".into(),
+                samples: vec![sample(100); 3],
+            }],
+        };
+        assert_ne!(old.configuration, fresh.cache.configuration);
+        fs::write(&fresh.path, serde_json::to_vec(&old).unwrap()).unwrap();
+        let mut upgraded = Tuner::for_identity(&cfg, host, &identity);
+        assert_eq!(upgraded.cache.configuration, fresh.cache.configuration);
+        assert!(upgraded.cache.winners.is_empty());
+        assert_eq!(upgraded.startup_cache.as_ref().unwrap().winners.len(), 1);
+        let mut state = snapshot();
+        state.threads = 32;
+        state.backing_bytes = context.backing[0];
+        state.kernel = CpuKernel::Avx2;
+        assert_eq!(
+            upgraded.tick(1, &[state], true, true).kernel,
+            Some(CpuKernel::Avx512)
+        );
+        assert_eq!(upgraded.pending, [CpuKernel::Avx512256StreamR64D3]);
+        let _ = fs::remove_file(&fresh.path);
+    }
+
+    #[test]
     fn experimental_turin_startup_requires_full_count_host_and_supported_path() {
         let mut cfg = super::super::tests::test_config();
         cfg.threads = 32;
@@ -2441,6 +2543,33 @@ mod tests {
         let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
         assert!(turin_stream_startup(&cfg, &host, &identity, &paths));
         assert!(!turin_stream_startup(&cfg, &host, &identity, &paths[..1]));
+        let demand_paths = [CpuKernel::Avx512256Stream, CpuKernel::Avx512256StreamR64D3];
+        assert!(turin_demand_startup(&cfg, &host, &identity, &demand_paths));
+        assert!(!turin_demand_startup(
+            &cfg,
+            &host,
+            &identity,
+            &demand_paths[..1]
+        ));
+        let mut neighbor = identity.clone();
+        neighbor.model = Some(0x11);
+        assert!(!turin_demand_startup(&cfg, &host, &neighbor, &demand_paths));
+        let mut windows = host.clone();
+        windows.os = "windows".into();
+        assert!(!turin_demand_startup(
+            &cfg,
+            &windows,
+            &identity,
+            &demand_paths
+        ));
+        if CpuKernel::Avx512256StreamR64D3.is_supported() {
+            let tuner = Tuner::for_identity(&cfg, host.clone(), &identity);
+            assert!(tuner.candidates.contains(&CpuKernel::Avx512256StreamR64D3));
+            assert_eq!(tuner.startup, Some(CpuKernel::Avx512256StreamR64D3));
+            let other = Tuner::for_identity(&cfg, host.clone(), &neighbor);
+            assert!(!other.candidates.contains(&CpuKernel::Avx512256StreamR64D3));
+        }
+
         cfg.threads = 24;
         assert!(turin_stream_startup(&cfg, &host, &identity, &paths));
         cfg.threads = 32;
@@ -2460,7 +2589,8 @@ mod tests {
         ] {
             let mut t = three_path_tuner();
             t.turin_startup = true;
-            t.startup = Some(CpuKernel::Avx512256Stream);
+            t.candidates.push(CpuKernel::Avx512256StreamR64D3);
+            t.startup = Some(CpuKernel::Avx512256StreamR64D3);
             let mut s = snapshot();
             s.threads = 32;
             s.backing_bytes = backing;
@@ -2468,7 +2598,8 @@ mod tests {
             let action = t.tick(1, &[s], true, true);
             assert_eq!(
                 action.kernel,
-                (backing[2] == 32 * CPU_LANE_MEMORY_BYTES).then_some(CpuKernel::Avx512256Stream)
+                (backing[2] == 32 * CPU_LANE_MEMORY_BYTES)
+                    .then_some(CpuKernel::Avx512256StreamR64D3)
             );
             assert!(
                 t.cache.winners.is_empty(),

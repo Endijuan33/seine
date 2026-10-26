@@ -21,8 +21,13 @@
       "name": "AMD EPYC 9R45",
       "sub": "Zen 5 Turin \u00b7 32 threads",
       "category": "amd",
-      "hps": 49.393,
-      "source": "experiments/readme-hardware-20261025/summary.json (m8a.8xlarge, streaming kernel)"
+      "hps": 49.95096944509143,
+      "source": "experiments/turin-fences-20261026/summary.json",
+      "source_revision": "ed7466cd262224a00d2a8ba85e5e553fae00b848",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "hashing_time",
+      "page_backing": "transparent_huge_pages",
+      "repetitions": 3
     },
     {
       "name": "AMD EPYC 9R14",

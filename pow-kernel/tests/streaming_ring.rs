@@ -36,6 +36,8 @@ fn streaming_boundaries_dirty_reuse_and_guards_match_reference() {
                 CpuKernel::Avx512256Stream,
                 CpuKernel::Avx512256StreamR8D2,
                 CpuKernel::Avx512256StreamR8D2,
+                CpuKernel::Avx512256StreamR64D3,
+                CpuKernel::Avx512256StreamR64D3,
                 CpuKernel::Avx512256Stream,
             ]
             .into_iter()

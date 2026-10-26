@@ -15,10 +15,12 @@ pub enum CpuKernel {
     NeonSha3,
     /// Streaming stores with eight cached blocks and two-block prefetch lookahead.
     Avx512256StreamR8D2,
+    /// Streaming stores with 64 cached blocks, depth three and demand fences.
+    Avx512256StreamR64D3,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Scalar,
         Self::Avx2,
         Self::Avx512,
@@ -27,6 +29,7 @@ impl CpuKernel {
         Self::Avx512256Stream,
         Self::NeonSha3,
         Self::Avx512256StreamR8D2,
+        Self::Avx512256StreamR64D3,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -39,6 +42,7 @@ impl CpuKernel {
             Self::Avx512256Stream => "avx512-256-stream",
             Self::NeonSha3 => "neon-sha3",
             Self::Avx512256StreamR8D2 => "avx512-256-stream-r8d2",
+            Self::Avx512256StreamR64D3 => "avx512-256-stream-r64d3",
         }
     }
 
@@ -53,7 +57,10 @@ impl CpuKernel {
                     && std::arch::is_x86_feature_detected!("avx512vl")
             }
             #[cfg(target_arch = "x86_64")]
-            Self::Avx512256 | Self::Avx512256Stream | Self::Avx512256StreamR8D2 => {
+            Self::Avx512256
+            | Self::Avx512256Stream
+            | Self::Avx512256StreamR8D2
+            | Self::Avx512256StreamR64D3 => {
                 std::arch::is_x86_feature_detected!("avx2")
                     && std::arch::is_x86_feature_detected!("avx512f")
                     && std::arch::is_x86_feature_detected!("avx512vl")
@@ -89,7 +96,7 @@ impl std::str::FromStr for CpuKernel {
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
             .ok_or_else(|| {
-                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, neon, or neon-sha3"
+                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, neon, or neon-sha3"
                     .to_string()
             })
     }
