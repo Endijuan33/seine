@@ -12,6 +12,11 @@ def messages():
         {'version': 'v0.2.24', 'sustained_inventory_only_installations': 99},
         {'version': 'v0.2.26', 'sustained_inventory_only_installations': 5},
     ]}})
+    unclean, _ = evaluate({'diagnostics': {
+        'recent_error_versions': [], 'recent_unclean_versions': [
+            {'version': 'v0.2.35', 'affected_installations': 3, 'reporting_versions': ['v0.2.36']},
+            {'version': 'unknown', 'affected_installations': 3, 'reporting_versions': ['v0.2.26']},
+        ]}})
     cases = {
         'legacy': ('FIRING', quality[0]),
         'warning': ('FIRING', quality[1]),
@@ -20,6 +25,10 @@ def messages():
         'critical': ('FIRING', issue('infrastructure', 'fixture', 'Collector infrastructure check failed.')),
         'setup': ('SETUP TEST', issue('setup', 'fixture', 'Delivery test only; this is not an incident.')),
         'old-state': ('CLEARED', issue('quality', 'fixture', 'Previously reported missing samples.')),
+        'unclean-upgrade': ('FIRING', unclean[0]),
+        'unclean-unknown': ('FIRING', unclean[1]),
+        'unclean-reminder': ('REMINDER', unclean[0]),
+        'unclean-cleared': ('CLEARED', unclean[0]),
     }
     return {name: format_message(transition, record, now)
             for name, (transition, record) in cases.items()}

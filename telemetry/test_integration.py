@@ -209,3 +209,23 @@ for _ in range(5):
 assert analysis('data_quality.sql')['status'] == 'ok'
 assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
 print('PASS: schema 4 diagnostics, early failures, private-data rejection, installation-weighted incident thresholds and periodic/final separation')
+
+recovered = json.loads(Path(__file__).with_name('reliability-fixture.json').read_text())
+recovered['installation_id'] = uuid.uuid4().hex
+recovered['report_id'] = uuid.uuid4().hex
+assert send(recovered) == 204
+stored = json.loads(query(f"SELECT payload #> '{{diagnostics,previous_run}}' FROM telemetry_reports WHERE report_id='{recovered['report_id']}'"))
+assert stored['miner_version'] == 'v0.2.35-fixture'
+assert stored['recent_events'][0]['source'] == 'deps/cudarc-0.19.2/src/lib.rs'
+for mutate in (
+    lambda p: p.update(schema_version=4),
+    lambda p: p['diagnostics']['previous_run']['recent_events'][0].update(message='PRIVATE WALLET'),
+    lambda p: p['diagnostics']['previous_run']['recent_events'][0].update(source='/home/private/src/lib.rs'),
+):
+    bad = json.loads(json.dumps(recovered))
+    bad['installation_id'] = uuid.uuid4().hex
+    bad['report_id'] = uuid.uuid4().hex
+    mutate(bad)
+    assert send(bad) == 422
+assert query("SELECT count(*) FROM telemetry_reports WHERE payload::text LIKE '%PRIVATE WALLET%'") == '0'
+print('PASS: schema 5 recovered evidence, previous version, downgrade and private-field rejection')

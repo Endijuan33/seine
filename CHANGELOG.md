@@ -10,6 +10,7 @@ supported hardware only.
 ## Unreleased
 
 - Slightly faster CPU hashing on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages, with saved tuning preserved.
+- Better diagnostics for interrupted mining runs and startup failures, helping identify reliability issues while keeping raw logs and panic contents private.
 
 ## v0.2.36
 

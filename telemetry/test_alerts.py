@@ -109,6 +109,16 @@ class AlertsTests(unittest.TestCase):
         results['performance']['minutes_since_last_report'] = None
         self.assertIn('ingestion', {i['category'] for i in alerts.evaluate(results)[0]})
 
+    def test_unclean_alert_labels_interrupted_release_and_unknown_explicitly(self):
+        active, _ = alerts.evaluate({'diagnostics': {
+            'recent_error_versions': [], 'recent_unclean_versions': [
+                {'version': 'v0.2.35', 'affected_installations': 3, 'reporting_versions': ['v0.2.36']},
+                {'version': 'unknown', 'affected_installations': 4, 'reporting_versions': ['v0.2.26']},
+            ]}})
+        self.assertIn('Previous run v0.2.35', active[0]['summary'])
+        self.assertNotIn('v0.2.36:', active[0]['summary'])
+        self.assertIn('Unknown previous version', active[1]['summary'])
+
     def test_regression_requires_breadth_not_one_bad_rig(self):
         cohort = dict(version='v2', baseline_version='v1', hardware={'cpu_model': 'CPU'},
                       build=[], settings={'backend': 'cpu'}, installations=5,

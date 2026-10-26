@@ -65,7 +65,13 @@ def evaluate(results):
             for row in diagnostics[field]:
                 count = row['affected_installations']
                 if count >= 3:
-                    active.append(issue('diagnostics', [field, row['version']], f'{label(row["version"])}: {count} installations with {title} in 24 hours. Run telemetry/agent_report.py for issue clusters.'))
+                    version = label(row['version'])
+                    attribution = ''
+                    if field == 'recent_unclean_versions':
+                        version = ('Unknown previous version' if row['version'] == 'unknown'
+                                   else f'Previous run {version}')
+                        attribution = ' The restarting version is not assumed to be the interrupted version.'
+                    active.append(issue('diagnostics', [field, row['version']], f'{version}: {count} installations with {title} in 24 hours.{attribution} Run telemetry/agent_report.py for issue clusters.'))
     performance = results.get('performance')
     if performance is not None:
         known.add('ingestion')

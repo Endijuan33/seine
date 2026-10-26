@@ -492,7 +492,7 @@ fn start_with_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    static WORKER_TEST: Mutex<()> = Mutex::new(());
+    use crate::diagnostics::TEST_LOCK as WORKER_TEST;
 
     #[test]
     fn early_failure_is_reported_and_failed_delivery_is_retained_without_restart_storms() {

@@ -37,9 +37,13 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://telemetry.seineminer.com/healt
 
 Expect HTTP 204. This public endpoint alone does not verify the database.
 
-Schema 4 miners require the upgraded collector; deploy it before the miner release.
-The upgraded collector still accepts schemas 1–3. Deploy updated `diagnostics.sql`
-and `agent_report.py` with it to expose typed causes and interrupted-run context.
+Schema 5 miners require the upgraded collector; deploy it before the miner release.
+The upgraded collector still accepts schemas 1–4. Deploy updated `diagnostics.sql`,
+`alerts.py` and `agent_report.py` with it to expose recovered diagnostics and correct
+interrupted-release attribution. The collector must be rebuilt; scripts alone cannot
+accept schema 5. No database migration or pool/daemon restart is required.
+Old checkpoints with an unambiguous observed build mapping can be attributed now;
+missing release/evidence fields cannot be recovered from existing payloads.
 Existing records remain readable; missing cause details cannot be reconstructed. After this upgrade, the
 completeness check may continue failing for old pool miners until they upgrade
 or their inventory-only reports leave the six-hour window. Use the agent
@@ -87,7 +91,10 @@ The runner evaluates these independent categories:
 - Sample quality: five installations of one version with three inventory-only
   reports spanning two hours within the last six hours.
 - Reliability: errors/quarantines or unclean previous runs on three distinct
-  installations of one version in 24 hours. An unclean run is not proof of a crash.
+  installations of one version in 24 hours. Interrupted runs use their previous
+  release, resolved from the checkpoint or an unambiguous observed build mapping.
+  Unattributed runs use an explicitly unknown-version bucket. The restart version
+  is never substituted. An unclean run is not proof of a crash.
 - Performance: matching installation, hardware/environment, build target/features
   and backend settings across the recent 36 hours versus the preceding part of
   the seven-day window. Each period/version requires three reports spanning 24
@@ -126,6 +133,7 @@ Preview the real formatter's synthetic payloads locally (no Discord sends):
 python3 telemetry/showcase/serve.py --port 9081
 # http://localhost:9081/alerts.json
 # Select ?state=legacy|warning|reminder|cleared|critical|setup|old-state
+# Interrupted runs: ?state=unclean-upgrade|unclean-unknown|unclean-reminder|unclean-cleared
 ```
 
 The preview labels the current source revision. It shows actual webhook JSON,

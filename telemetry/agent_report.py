@@ -84,6 +84,11 @@ def main():
         'phase of the previous run, not a crash cause; checkpoints can lag or be absent. '
         'Hashing in a restart report establishes work after restart, not recovery from every issue. '
         'Several events can describe one failure.'
+        ' Unclean versions identify the interrupted release using its checkpoint version or an '
+        'unambiguous observed build mapping; unknown stays unknown. reporting_versions identify '
+        'the restarting clients. Previous-run event clusters are checkpoint context, may duplicate '
+        'earlier uploads, and do not establish a termination cause. Hardware in those clusters is '
+        'observed after restart. Dependency source IDs come from a fixed allowlist.'
     )
     if diagnostics.get('status') == 'attention':
         failed = True
