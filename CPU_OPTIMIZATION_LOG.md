@@ -4249,3 +4249,42 @@ verified. Raw reports, memory observations, source identities and verification
 receipts are retained in workspace
 `benchmark-evidence/longhorn-20261025/native-windows-amd-ring-grid/ring-grid/campaign/`.
 No public headline or release follows from these rejected candidates.
+
+## 2026-10-26: Genoa spare-memory pairing and deeper lookahead screens
+
+Native Linux EPYC 9R14 / m7a.8xlarge, 32 physical cores and 128 GiB RAM,
+tested three further hypotheses with the existing benchctl campaign. Each
+screen used two interleaved 20-second pairs after a five-second warmup,
+excluding allocation, with measured THP backing and the OS scheduler.
+
+The spare-memory experiment compared 32 single workers using 64 GiB against
+28 paired workers using 112 GiB. Before each run, admission required at least
+120 GiB MemAvailable and no swap: 112 GiB for the larger candidate plus an
+8 GiB reserve. This intentionally spends more RAM; it is not a same-memory
+comparison. The paired binary remains frozen at research revision `b4e5645`,
+SHA-256 `1ab50326861c23f80c9c10219f3ae728cabfa9c57b072655a75e5bc2371922dd`.
+
+Depth experiments retained ring 8, 32 single workers and 64 GiB, comparing
+depths 3 and 4 against depth 2. Frozen research revision `633752a` has binary
+SHA-256 `640104a55bb6367f4aa0d39b33afdfeb3e054b667c8c0128339dbbaefa637f49`.
+
+| Candidate | Paired difference | Paired bootstrap 95% interval |
+|---|---:|---:|
+| 28 paired workers / 112 GiB vs 32 single / 64 GiB | -18.677% | [-18.695%, -18.659%] |
+| Ring 8 / depth 3 vs depth 2 | -0.194% | [-0.344%, -0.045%] |
+| Ring 8 / depth 4 vs depth 2 | -0.247% | [-0.283%, -0.211%] |
+
+Both pairs were slower for every candidate, so no confirmation was scheduled.
+The tiny depth differences describe this short exact-host screen; they are not
+claims about every machine or operating system. Keep the existing 8/2 default.
+Depth 8 was compiled but deferred before the rental and remains unmeasured.
+
+All **10,495 timed hashes** independently matched cached libargon2 outputs,
+and all **72 native full-size RustCrypto parity checks** passed before timing.
+The local full-size smoke was deferred before execution because WSL lacked its
+memory reserve; native correctness checks supplied the required evidence.
+The rental was terminated promptly and disk/security-group cleanup verified.
+Raw reports, memory admission, source identities and independent verification
+are retained under workspace
+`benchmark-evidence/longhorn-20261025/native-linux-amd-headroom-depth/ring-publication/campaign/`.
+No code/default change, release or public performance headline follows.
