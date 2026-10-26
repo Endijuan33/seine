@@ -9,6 +9,8 @@ supported hardware only.
 
 ## Unreleased
 
+- Slightly faster CPU hashing on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages, with saved tuning preserved.
+
 ## v0.2.36
 
 - About 1% faster CPU hashing on 32-core AMD EPYC 9R45 Linux systems with 128 GiB RAM and transparent huge pages, while retaining automatic tuning and saved settings.

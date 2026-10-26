@@ -4544,3 +4544,46 @@ same pair-specific rule. Tests exercise a1% productive promotion, two-cycle
 requirement, saved-winner restoration, low-count/short-window refusal, quantized
 ties and drift. No extra native hash run is required for this policy-only change;
 the hash loop and independently verified native captures are unchanged.
+
+## 2026-10-26 Turin demand-fence prefetch depth — depth four accepted
+
+On native Linux EPYC 9R45 / m8a.8xlarge (32 physical cores, 128 GiB RAM,
+32 full-THP 2 GiB arenas, OS scheduling), compare two neighbors against the
+confirmed R64/D3 demand-fence path. Frozen baseline `ed7466c`, candidate
+`2bcb02c`; use the existing benchctl screen/confirm driver. Each sample excludes
+allocation, five seconds of warmup and teardown, and includes in-flight hash
+completion. Screen and confirmation use distinct alternating pairs.
+
+- **Depth two rejected:** two 20-second screen pairs, 49.95044 → 49.22382 H/s,
+  paired -1.45585%, bootstrap interval [-2.27447%, -0.63038%], both slower.
+  Preserve all 4,066 verified timed hashes; no confirmation was warranted.
+- **Depth four accepted:** screen +0.56837%; three fresh 30-second pairs,
+  50.29349 → 50.46967 H/s, paired **+0.35033%**, bootstrap interval
+  [+0.21890%, +0.42964%], all three faster. All **13,302 timed hashes** matched
+  independent libargon2, plus 12 native full-size RustCrypto parity/dirty-reuse/
+  guard checks. The complete campaign verified 17,368 timed hashes and 24
+  native full-size checks with no invalid outputs.
+
+The candidate changes only data-independent prefetch depth, retaining the
+64-block ring and demand-fence policy. Integrated as `avx512-256-stream-r64d4`,
+with exact-host automatic eligibility and actual THP startup checks. The old
+D3 path remains a challenger. Compatible old caches retain their proved winner
+and compare only the new path immediately; normal full rechecks remain.
+The existing small-gain A/B/A policy covers the measured Turin streaming paths:
+30 seconds and 1,024 hashes per sample, 1% maximum baseline drift, hash-count
+quantization allowance, and two successful cycles before promotion/caching.
+All other comparisons retain their existing margin.
+
+Public raw reports, independent reference subset, frozen source archives and
+reproduction commands: [turin-prefetch-20261026](experiments/turin-prefetch-20261026/README.md).
+The integrated complete loop matches the native-tested research algorithm after
+resolving constant branches. This is not a whole-miner performance comparison,
+and rates from different rentals are not combined into a cumulative gain.
+This improvement is held for the next combined release per the requested cadence.
+
+Integration validation: 117 adaptive tests passed (five existing heavyweight
+tests ignored), all five compiled kernel reference/compression tests passed,
+and the default-feature release build passed. Public evidence audit verifies
+all 13,302 captured hashes and all 40 artifact checksums. The new 0.33%
+synthetic A/B/A case exercises both promotion cycles and saved-cache proof;
+old periodic and demand-fence cache upgrades retain their confirmed winners.
