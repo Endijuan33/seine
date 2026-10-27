@@ -698,3 +698,7 @@ See `research/faraday-official-post-2026-10-27.md` for the refresh scope.
 ## Desktop wallet interface reference
 
 The visual guide uses GUI v0.22.0 (`661fff98e047f395489a0d2eba88f572c2a89935`), verified October 27, 2026 (EDT). Its Send action first requests a dry-run fee preview; Confirm Send authorizes the payment separately. Dashboard distinguishes node sync, wallet scan and spendable/pending balances. The new-wallet flow requests backup and confirmation of 12 recovery words. These are versioned interface facts, not promises about future releases. See [desktop-wallet research](batches/2026-10-desktop-wallet/research.md) for pinned source locations and screenshot methodology.
+
+## First-receipt visual reference
+
+The first-BNT guide uses the same pinned GUI v0.22.0 as the desktop walkthrough. History opens a transaction detail with its hash, status, block, confirmations and the wallet-owned received amount; Dashboard supplies the spendable reading after sync and scanning. The 1.25 BNT receipt, fee, hash and chain readings in the captures are labeled local demo data. No new payout constants or receipt timing guarantees are introduced. See [first-BNT research](batches/2026-10-first-blocknet/research.md).

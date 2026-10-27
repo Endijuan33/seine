@@ -261,3 +261,11 @@ This guide owns the software-role decision before setup. `blocknet-wallet-for-mi
 | Blocknet desktop wallet; how to use Blocknet wallet; Blocknet wallet screenshots | `/blog/blocknet-desktop-wallet/` | Follow the desktop interface from create/open and recovery backup through synchronization, receiving, send review and transaction history |
 
 This page owns the visual desktop procedure, using the released interface with labeled demo data. `blocknet-wallet-for-mining` owns initial wallet/payout setup and CLI commands, `send-receive-blocknet` owns general payment mechanics and its CLI procedure, and `blocknet-wallet-node-miner` owns software selection. Keep detailed recovery, fee calculations and synchronization troubleshooting at their existing URLs. Demand is inferred from the normal newcomer journey, not measured search volume.
+
+## First Blocknet receipt (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| how to get Blocknet; get first BNT; receive or mine Blocknet | `/blog/get-first-blocknet/` | Choose receiving a transfer or mining with an existing computer, then identify the first incoming wallet payment and spendable balance |
+
+This is the acquisition starting-point guide. Desktop wallet owns interface setup, sending/receiving owns the payment procedure, and mining owns installation and accepted shares. The new article routes to those owners, adds a simple first-receipt checklist and follows a single labeled demo payment through History and Dashboard. Pool payout rules and troubleshooting remain on bntpool.com. No existing URL is retargeted. Demand is inferred from the newcomer journey; no measured query-volume claim is made.

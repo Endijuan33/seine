@@ -6,6 +6,8 @@ Prioritize ordinary newcomer questions and broader Blocknet fundamentals: choosi
 
 Published: `blocknet-wallet-node-miner` explains the software roles and which applications must stay running. Published: `blocknet-desktop-wallet` adds the ordinary desktop create/open, backup, receive, send-review and history journey with released-interface screenshots and labeled demo data.
 
+Published: `get-first-blocknet` guides newcomers through choosing a transfer or mining, then identifying the first receipt and spendable balance.
+
 Researched topics not yet written, in priority order. Batch 1 (2026-10-25) took the hardware,
 Mac, Argon2id, what-is-Blocknet, Blocknet ID and privacy topics; pool-side topics went to the
 bntpool.com blog. Each owns one search job; check
