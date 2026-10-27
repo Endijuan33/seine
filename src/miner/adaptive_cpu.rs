@@ -207,19 +207,20 @@ fn initial_threads(
     }
 }
 
-// Cold start for CPUs whose cohort mines on a streaming kernel (AMD Zen 2-5).
-// Native hosts reach or plateau near their peak by the physical core count
-// (Ryzen 7 9700X, EPYC 7443P/7R32/9R14), while the generic midpoint estimate
-// started a 32-core Zen 5 host at 14 of 28 workers and took ~16 minutes and
-// ~20% of early hashrate to climb. Repeated count trials still decide.
-fn cohort_cold_start(cfg: &Config, host: &CpuAutotuneHostFingerprint) -> Option<usize> {
+// Cold start for CPUs whose cohort mines on a streaming kernel (AMD Zen 2-5):
+// every allowed logical CPU, bounded by RAM and current availability. SMT
+// hides memory latency on many-channel servers: EPYC 9355 mined 58.0 H/s at
+// 32 workers and 74.7 at 64, and competitors default to all logical CPUs.
+// The physical-core start left a 32-core/64-thread Turin host ~29% short, and
+// the generic midpoint started a 32-core Zen 5 VM at 14 of 28 workers.
+// Repeated count trials still decide the sustained setting.
+fn cohort_cold_start(cfg: &Config, max: usize) -> Option<usize> {
     // Unit tests stay host-independent; `initial_threads` covers the policy.
     (!cfg!(test)
         && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
         && super::adaptive_kernel::cohort_kernel().is_some())
-    .then_some(host.physical_cores)
-    .flatten()
-    .filter(|&cores| cores > 0)
+    .then_some(max)
+    .filter(|&workers| workers > 0)
 }
 
 // Threads already running (including the API's Tokio worker pool) are charged
@@ -328,7 +329,7 @@ fn prepare_with_resources(
         ));
     let cohort_start = seed
         .is_none()
-        .then(|| cohort_cold_start(cfg, &cpu_autotune_host_fingerprint()))
+        .then(|| cohort_cold_start(cfg, max))
         .flatten();
     let threads = initial_threads(
         seed.as_ref(),
@@ -358,7 +359,7 @@ fn prepare_with_resources(
     } else if seed.is_some() {
         "cached starting point"
     } else if cohort_start.is_some() && !full_count {
-        "physical cores for this CPU family"
+        "all logical CPUs that fit in RAM for this CPU family"
     } else {
         "initial estimate"
     };
