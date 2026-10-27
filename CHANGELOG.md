@@ -7,6 +7,10 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
+## Unreleased
+
+- **Mining starts hashing in seconds instead of up to half a minute on Linux** (measured on a 32-core EPYC 9355: 21 s to 1.5 s), adding about 2% more hashes in the first 15 minutes.
+
 ## v0.2.40
 
 - **About 40-50% faster CPU hashing on Windows with AMD Zen 2 and Zen 3 processors** (measured on EPYC 7R13): the memory-streaming kernel is now used on Windows too.
