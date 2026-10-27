@@ -513,6 +513,7 @@ impl Recorder {
 /// sharing a data directory must not label each other as crashed or delete state.
 pub(crate) struct Store {
     _lock: File,
+    finished: Mutex<bool>,
     marker: PathBuf,
     pending: PathBuf,
     attempt: PathBuf,
@@ -576,6 +577,7 @@ impl Store {
         Some((
             Self {
                 _lock: lock,
+                finished: Mutex::new(false),
                 marker,
                 checkpoint_path,
                 previous_run,
@@ -631,10 +633,15 @@ impl Store {
         }
         fs::write(&self.attempt, installation_id).is_ok()
     }
-    pub(crate) fn heartbeat(&self, installation_id: &str) {
+    // Production callers hold `finished` across the complete checkpoint write.
+    fn heartbeat(&self, installation_id: &str) {
         let _ = fs::write(&self.marker, installation_id);
     }
     pub(crate) fn checkpoint(&self, installation_id: &str, run: PreviousRun) {
+        let finished = self.finished.lock().unwrap_or_else(|e| e.into_inner());
+        if *finished {
+            return;
+        }
         if !run.validate() {
             return;
         }
@@ -658,6 +665,10 @@ impl Store {
         }
     }
     pub(crate) fn finish(&self) {
+        // Completion may arrive from the mining thread while the uploader is
+        // checkpointing. No later checkpoint may recreate this run's marker.
+        let mut finished = self.finished.lock().unwrap_or_else(|e| e.into_inner());
+        *finished = true;
         let _ = fs::remove_file(&self.checkpoint_path);
         let _ = fs::remove_file(self.checkpoint_path.with_extension("tmp"));
         let _ = fs::remove_file(&self.marker);
