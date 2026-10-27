@@ -92,9 +92,11 @@ fn candidates_for(
 /// Zen 3 (family 19h without AVX-512) and Zen 2 (family 17h, model 30h and up)
 /// use the AVX2 path: native EPYC 7443P +48% and EPYC 7R32 +67% over AVX2.
 /// Zen 1/Zen+ (17h below 30h) is unmeasured, and so is the AVX2 path outside
-/// Linux. Callers always intersect with runtime-detected kernels, so ISA
+/// Linux and Windows. Callers always intersect with runtime-detected kernels, so ISA
 /// support is never assumed.
-const AVX2_STREAM_OS: bool = cfg!(any(target_os = "linux", test));
+// Native Linux and Windows evidence: EPYC 7R13 on Windows Server 2025 measured
+// avx2-stream +39%/+50% over avx2 at 16/24 workers with full 2 GiB parity.
+const AVX2_STREAM_OS: bool = cfg!(any(target_os = "linux", target_os = "windows", test));
 
 fn cohort_stream_kernel(
     identity: &crate::runtime_identity::CpuIdentity,
