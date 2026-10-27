@@ -8,6 +8,8 @@
 param([int]$Secs = 900, [string]$Miners = 'seine,ntmminer,longhorn')
 $ErrorActionPreference = 'Continue'
 $W = 'C:\cohort'
+# Defender quarantined the NTM executable on one disposable guest; exclude the work tree.
+Add-MpPreference -ExclusionPath $W -ErrorAction SilentlyContinue
 $R = "$W\results\live-compete-$Secs"
 New-Item -ItemType Directory -Force "$R\tls" | Out-Null
 if (-not (Test-Path "$W\python\python.exe")) {
