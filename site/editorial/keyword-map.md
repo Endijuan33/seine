@@ -206,3 +206,12 @@ Hashrate units and pool estimation belong to bntpool; CPU usage owns utilization
 | run Blocknet node; Blocknet node setup | `/blog/run-blocknet-node/` | Install a managed mainnet core and inspect peers, sync progress, logs and update policy |
 
 The coin overview and privacy articles own current fundamentals; Faraday owns the dated upgrade plan and role-specific preparation. Wallet setup owns keys and addresses; checkpoints owns sync acceleration details on bntpool. Node operation owns the background process, network health and lifecycle. Neither article retargets an existing URL.
+
+## Payments and explorer (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| send and receive Blocknet; how to send BNT | `/blog/send-receive-blocknet/` | Complete a fixed-amount wallet payment and follow its ID into the receiving wallet's history |
+| Blocknet explorer; look up Blocknet transaction | `/blog/blocknet-explorer-guide/` | Search public identifiers and interpret a transaction, containing block and network readings |
+
+Wallet setup owns creation and recovery, fees owns calculation, payment links owns request construction, and memos owns memo syntax. Sending owns the end-to-end payment procedure. Confirmations on bntpool owns maturity; privacy owns cryptographic mechanisms; node operation owns a local core. The explorer guide owns public-page navigation with dated real screenshots and the boundary between public inclusion and wallet receipt. No existing URL is retargeted.

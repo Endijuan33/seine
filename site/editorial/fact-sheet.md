@@ -651,3 +651,7 @@ A running miner's current/session/device/pool measurements have different scopes
 ## Faraday plan and node lifecycle (October 26, 2026)
 
 The official Faraday page describes a future network upgrade, with tentative activation around February 16, 2027 and a proposed one-year wallet migration period ending around February 16, 2028. Old-format coins would become unspendable after that window. Do not describe planned cryptography, mining rules or speedups as shipped behavior. CLI v1.2.0 manages a background core separately from attach; setup schedules updates, and outer status can trigger automatic update checks that restart unpinned managed cores. Attach status is distinct. Pinned sources and scope are recorded in `research/faraday-and-node-2026-10-26.md`.
+
+## Payment and explorer workflow (October 27, 2026)
+
+CLI v1.2.0 at `948af4de8b7a3e3cddc86a329c7d2d003cb3fd6b` previews fixed-amount sends before explicit confirmation, then prints the transaction ID and explorer link. History combines incoming outputs and recorded outgoing sends. The public explorer searches block height/hash or transaction hash, shows public fees and transaction structure, and leaves ordinary transfer amounts private. Mempool means zero confirmations; included count is current height minus containing height plus one. Private receipt is checked in the wallet. These are dated source/UI observations; details, screenshots and source locations are in [payments-and-explorer-2026-10-27.md](research/payments-and-explorer-2026-10-27.md).
