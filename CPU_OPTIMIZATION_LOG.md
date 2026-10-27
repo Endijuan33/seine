@@ -28,6 +28,7 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Same, Zen 2 neighbour check | EPYC 7R32, 16 / 28 workers | +0.3% / +0.2% | neutral; adopted for the shared kernel |
 | 16-byte or 64-byte NT stores in the AVX-512 streaming kernel | Ryzen 7 9700X, 8 / 12 / 16 workers | 16-byte ±0.5%; 64-byte −0.4 to −1.3% | rejected; 32-byte stays |
 | Drop the periodic SFENCE in `avx2-stream` | EPYC 7R13, 16 / 24 workers | +0.8% / −0.2% | rejected (neutral); SFENCE stays |
+| Same-host check vs a non-temporal-store competitor after ring 2 / 16-byte stores | EPYC 7443P bare metal, 12 / 24 workers | 17.19 vs 15.78 (+8.9%) / 18.26 vs 18.97 (−3.7%; bench drops ~4% late hashes at 24) | Zen 3 gross parity; this morning's default was 10.32 H/s. perf: IPC 1.05 vs 1.14, dTLB misses 1.7× at 24 workers (open lead) |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
