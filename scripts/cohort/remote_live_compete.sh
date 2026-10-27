@@ -17,12 +17,14 @@ mkdir -p "$R/tls"
 TLS_NAME=
 if [[ " $MINERS " == *" ntmminer "* ]]; then
   TLS_NAME=$(curl -s --max-time 10 https://checkip.amazonaws.com)
-  if [ ! -x "$W/lego" ]; then
-    curl -sL --max-time 120 -o "$W/lego.tgz" https://github.com/go-acme/lego/releases/download/v4.25.2/lego_v4.25.2_linux_amd64.tar.gz
-    sha256sum "$W/lego.tgz" > "$R/lego.sha256"; tar -C "$W" -xzf "$W/lego.tgz" lego
+  if [ ! -x "$W/lego" ]; then  # lego v5 registers by account id, without an email address
+    curl -sL --max-time 120 -o "$W/lego.tgz" https://github.com/go-acme/lego/releases/download/v5.5.2/lego_v5.5.2_linux_amd64.tar.gz
+    tar -C "$W" -xzf "$W/lego.tgz" lego
+    echo "c7ccc528bb254bec3e8ca998a8994dab9653c3e1aa083fd3bfaaa0b75b527b62  $W/lego" | sha256sum -c --quiet || rm -f "$W/lego"
   fi
-  "$W/lego" --server https://acme-v02.api.letsencrypt.org/directory --path "$W/acme" --accept-tos \
-    --domains "$TLS_NAME" --http --http.port :80 run --profile shortlived > "$R/lego.log" 2>&1
+  [ -x "$W/lego" ] && timeout 300 "$W/lego" run --server https://acme-v02.api.letsencrypt.org/directory --path "$W/acme" \
+    --account-id seine-disposable-benchmark --http-timeout 30 --domains "$TLS_NAME" --accept-tos \
+    --http --http.address 0.0.0.0:80 --ipv4only --profile shortlived > "$R/lego.log" 2>&1
   crt=$(find "$W/acme/certificates" -name "$TLS_NAME.crt" | head -1)
   key=$(find "$W/acme/certificates" -name "$TLS_NAME.key" | head -1)
   if [ -n "$crt" ] && [ -n "$key" ]; then cp "$crt" "$R/tls/cert.pem"; cp "$key" "$R/tls/key.pem"
@@ -42,7 +44,7 @@ for m in $MINERS; do
   sync; echo 3 > /proc/sys/vm/drop_caches
   unshare -n -m bash -c 'ip link set lo up && mount --bind "$0" /etc/hosts && cd "$1" && exec setpriv --reuid=bench --regid=bench --init-groups --reset-env -- env HOME=/home/bench PATH=/usr/bin:/bin "${@:2}"' \
     "$R/hosts" "/home/bench/live-$m" python3 "$W/pool_fixture.py" --output "$R/$m" --seconds "$SECS" --warmup 0 \
-    --window-origin launch --startup-timeout 300 --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
+    --window-origin launch --startup-timeout "$SECS" --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
     > "$R/$m.out" 2>&1
   python3 - "$R/$m/work.json" "$m" "$SECS" <<'PY' | tee -a "$R/summary.txt"
 import json, sys
