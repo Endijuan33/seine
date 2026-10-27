@@ -212,7 +212,7 @@ def main():
     if data.get("bare_metal"):
         hbar_chart(data["bare_metal"], "AMD EPYC bare metal",
                    "Whole-invocation hashrate, fixed manual configuration",
-                   "9355P: 192 GiB DDR5-4800, 12 channels, 280 W cap. Four runs. Method: docs/PERFORMANCE.md",
+                   "9355P: 192 GiB DDR5-4800, 12 channels. v0.2.39, two runs. Method: docs/PERFORMANCE.md",
                    args.out / "bare-metal.svg", fonts, groups=False)
     if data.get("best"):
         hbar_chart(data["best"], "Best by generation",

@@ -4,6 +4,46 @@
   "power": "stock, unmodified",
   "machines": [
     {
+      "cpu": "AMD EPYC 9355P 32-Core Processor",
+      "threads": 64,
+      "repetitions": 2,
+      "mean_hps": 77.07157408717545,
+      "min_hps": 77.0153292334711,
+      "max_hps": 77.12781894087979,
+      "sample_sd_hps": 0.07954223492237149,
+      "source": "9355p",
+      "runs": [
+        {
+          "role": "current",
+          "threads": 64,
+          "seconds": 120,
+          "completed_hashes": 9652,
+          "whole_invocation_seconds": 125.142913835,
+          "whole_invocation_hps": 77.12781894087979,
+          "benchmark_avg_hps": 76.6303154415491,
+          "binary_sha256": "decf8613f8f900932b0fa88bd269f5fca15267dc51f3b65aa66bdfeb664cf094",
+          "report_sha256": "fa258aaa3e617c44c3268fc18aa2fc7f7b7a70d19bc7acb4e2032c7380e263d2",
+          "label": "comparison-2-current",
+          "cpu": "AMD EPYC 9355P 32-Core Processor"
+        },
+        {
+          "role": "current",
+          "threads": 64,
+          "seconds": 120,
+          "completed_hashes": 9628,
+          "whole_invocation_seconds": 125.014073118,
+          "whole_invocation_hps": 77.0153292334711,
+          "benchmark_avg_hps": 76.51752874220797,
+          "binary_sha256": "decf8613f8f900932b0fa88bd269f5fca15267dc51f3b65aa66bdfeb664cf094",
+          "report_sha256": "e1f27a5ceea8c9a0fd368f788281d256330e591e5b0c41133013f66c491d1d7f",
+          "label": "comparison-3-current",
+          "cpu": "AMD EPYC 9355P 32-Core Processor"
+        }
+      ],
+      "baseline_mean_hps": 66.53594858957672,
+      "paired_geometric_delta_pct": 15.83449143483804
+    },
+    {
       "cpu": "AMD EPYC 9554P 64-Core Processor",
       "threads": 64,
       "repetitions": 3,
@@ -76,6 +116,26 @@
   "release": "v0.2.39",
   "source_revision": "8a822f767bdc6a8b2effd7565751f47ba2c6846d",
   "reports": [
+    {
+      "file": "9355p/comparison-1-baseline.json",
+      "original_sha256": "03455639fb444556d7c47d20fab00acfff3ba2c39a345fb997988c4f98a5305f",
+      "published_sha256": "6191165dabc88bb65fd61356548f773ffbc2ed2b65d2e2d815e2db67ae35f9b6"
+    },
+    {
+      "file": "9355p/comparison-2-current.json",
+      "original_sha256": "fa258aaa3e617c44c3268fc18aa2fc7f7b7a70d19bc7acb4e2032c7380e263d2",
+      "published_sha256": "4b2a3ba114af20a88a6c14fee3527fe60e38ae41cb6b8aa340aadadf4d968973"
+    },
+    {
+      "file": "9355p/comparison-3-current.json",
+      "original_sha256": "e1f27a5ceea8c9a0fd368f788281d256330e591e5b0c41133013f66c491d1d7f",
+      "published_sha256": "a1ee91a1aac23c7216875288cc984b58e222594a975b36a85a04b20777c78304"
+    },
+    {
+      "file": "9355p/comparison-4-baseline.json",
+      "original_sha256": "3fd2ed6dd2f777e8e35482638bb2a08e70d91bb09cca3154377ce444ea73b56a",
+      "published_sha256": "a7fa8b676d6b5075f77facb3c9de74e17f3d401957658ae348304996f2b32dcd"
+    },
     {
       "file": "9554p/screen-t32.json",
       "original_sha256": "508079d44ed556758debe2c2b8021825174c2875d9c25d0191bc93ffa1063ce2",

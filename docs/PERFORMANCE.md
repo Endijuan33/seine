@@ -43,12 +43,27 @@ or a same-hardware percentage gain over the previous cloud-server chart entry.
 
 ## AMD EPYC 9355P bare metal
 
-<img src="assets/charts/bare-metal.svg" alt="AMD EPYC 9355P: 68.3 H/s with 64 threads and 1 GiB huge pages" width="900">
+<img src="assets/charts/bare-metal.svg" alt="AMD EPYC 9355P: 77.1 H/s with 64 threads and 1 GiB huge pages" width="900">
 
 A complete 32-core/64-thread Turin socket with 192 GiB of memory across twelve
-DDR5-4800 channels, running native Linux. These are **fixed manual configurations**,
-measured over four fresh 120-second invocations each, including startup and
-shutdown. Each comparison has its own paired control.
+DDR5-4800 channels, running native Linux. The official v0.2.39 release measured
+**77.07 H/s** with 64 fixed mining threads, `avx512-256-stream` and explicit
+1 GiB huge pages. Power settings were left unchanged; power was not measured.
+
+The original v0.2.24 benchmark executable and v0.2.39 ran in baseline/current/
+current/baseline order, with one fresh 120-second invocation each. Current runs
+measured **77.13 and 77.02 H/s**; the paired baseline averaged **66.54 H/s**,
+a **15.83%** geometric paired improvement on this machine. Rates include all
+completed hashes and whole-process elapsed time. Both executables passed all
+21 independent 1 GiB kernel parity cases. This measures a manual configuration;
+it does not measure automatic cold-start tuning or pool-credited work.
+[Rebenchmark evidence](../experiments/headline-20261027/README.md#epyc-9355p-rebenchmark).
+
+### Earlier page-size and power-cap comparisons
+
+These separate historical comparisons used four fresh 120-second invocations
+per configuration, including startup and shutdown. Each has its own paired
+control; their power measurements do not apply to the v0.2.39 result above.
 
 | Configuration | H/s | Measured CPU-package W | CPU-package J/hash | Evidence |
 |---|---:|---:|---:|---|

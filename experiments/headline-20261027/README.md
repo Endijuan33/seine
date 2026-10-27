@@ -1,4 +1,9 @@
-# EPYC 9554P headline benchmark
+# EPYC headline benchmarks
+
+The current headline results are **77.07 H/s on EPYC 9355P** and **75.04 H/s
+on EPYC 9554P**, both with the official v0.2.39 release and 64 mining threads.
+
+## EPYC 9554P
 
 The official Seine v0.2.39 Linux x86-64 release measured **75.04 H/s** on a
 single EPYC 9554P (64 physical cores, 128 logical CPUs), using 64 mining
@@ -66,3 +71,37 @@ published. The kernel verifier log, CPU topology and cleanup outcome are include
 The rented server was deleted after collection. An earlier, separate 9355P
 attempt ended after a controller timeout and produced no complete timed result;
 it is not used in this 9554P result.
+
+## EPYC 9355P rebenchmark
+
+A fresh 32-core/64-thread EPYC 9355P rental had twelve 16 GiB DDR5-4800 DIMMs,
+one per channel, and native Ubuntu Linux. The same 64-thread, streaming-kernel,
+1 GiB-page configuration above was used. Power settings were left unchanged;
+no package or wall-power measurement was made.
+
+The exact v0.2.24 executable from the original page-size experiment was compared
+with the official v0.2.39 release. Its SHA-256 is
+`a4d3bd3b1091102b9d50b8d5c80aed057e8d30534ddcfee742b1d69ec137f6dc`.
+The predeclared order was baseline/current/current/baseline, with one fresh
+120-second invocation per run and no warmup rounds:
+
+| Order | Version | Whole-invocation H/s |
+|---|---|---:|
+| 1 | v0.2.24 | 66.48332 |
+| 2 | v0.2.39 | 77.12782 |
+| 3 | v0.2.39 | 77.01533 |
+| 4 | v0.2.24 | 66.58857 |
+
+The two current runs average **77.07157 H/s**, versus **66.53595 H/s** for
+the paired baseline. The geometric mean of the adjacent paired ratios is
+**+15.83449%**. This is a same-machine, fixed-configuration comparison between
+these executable versions. It does not attribute the gain to one optimization
+or measure automatic cold-start tuning. Two paired observations do not establish
+a cross-host confidence interval.
+
+Both executables passed all 21 independent 1 GiB reference-parity cases before
+measurement. All four reports verified full 1 GiB backing and zero allocation
+failures. The exact reports, timing measurements and hashes are retained in
+`9355p/` and [summary.json](summary.json). The headline uses the new pair's mean;
+the older 68.26 H/s page-size experiment and its power measurements remain
+separate historical results. The replacement rental was deleted after collection.

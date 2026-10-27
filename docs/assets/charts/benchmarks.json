@@ -141,13 +141,13 @@
       "name": "AMD EPYC \u00b7 Zen 5",
       "sub": "9355P \u00b7 32C/64T \u00b7 1 GiB pages",
       "category": "amd",
-      "hps": 68.2557553746872,
-      "source": "experiments/amd-page-size-20261025/benchmark-records.json",
-      "record_id": "turin-page-size-candidate",
-      "source_revision": "28191b798b8dc18fdf6ebcaf44fd549b35264870",
+      "hps": 77.07157408717545,
+      "source": "experiments/headline-20261027/summary.json",
+      "source_revision": "8a822f767bdc6a8b2effd7565751f47ba2c6846d",
       "selection": "manual_fixed_configuration",
       "metric_scope": "whole_invocation",
-      "repetitions": 4
+      "repetitions": 2,
+      "page_backing": "explicit_1g_hugetlb"
     },
     {
       "name": "AMD EPYC \u00b7 Zen 4",
@@ -186,13 +186,13 @@
       "name": "AMD EPYC 9355P",
       "sub": "32 cores / 64 threads \u00b7 1 GiB pages",
       "category": "amd",
-      "hps": 68.2557553746872,
-      "source": "experiments/amd-page-size-20261025/benchmark-records.json",
-      "record_id": "turin-page-size-candidate",
-      "source_revision": "28191b798b8dc18fdf6ebcaf44fd549b35264870",
+      "hps": 77.07157408717545,
+      "source": "experiments/headline-20261027/summary.json",
+      "source_revision": "8a822f767bdc6a8b2effd7565751f47ba2c6846d",
       "selection": "manual_fixed_configuration",
       "metric_scope": "whole_invocation",
-      "repetitions": 4
+      "repetitions": 2,
+      "page_backing": "explicit_1g_hugetlb"
     }
   ]
 }
