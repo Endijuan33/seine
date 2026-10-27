@@ -224,3 +224,12 @@ Wallet setup owns creation and recovery, fees owns calculation, payment links ow
 | Blocknet view-only wallet; watch incoming Blocknet payments | `/blog/blocknet-view-only-wallet/` | Export, transfer and load an encrypted viewing file on a second computer, verify its identity and understand the access granted |
 
 Node operation owns installation and lifecycle; checkpoints on bntpool owns accelerated chain sync; wallet setup owns creation and recovery. The diagnostic guide owns the sequence from symptom to the stage needing attention. Stealth addresses owns the key/scan explanation, while the viewing guide owns the exported-file workflow and private access handling. Explorer owns public lookup, and pool tracking owns pool records. Existing URLs retain their intent.
+
+## Payment proofs and signed messages (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet payment proof; verify Blocknet payment | `/blog/blocknet-payment-proof/` | Generate a transaction key and verify recipient outputs and amounts while keeping chain status separate |
+| sign Blocknet message; verify Blocknet signature | `/blog/blocknet-sign-verify-message/` | Sign an agreed challenge and check the address, exact message and signature with application-level freshness checks |
+
+Sending owns payment creation; explorer owns public lookup; privacy and stealth addresses own the mechanisms. Payment proofs own deliberate transaction-specific disclosure and output verification. Message signatures own address-control challenges, not transaction receipts. Existing wallet creation, recovery and viewing guides retain their intent.

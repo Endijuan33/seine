@@ -659,3 +659,7 @@ CLI v1.2.0 at `948af4de8b7a3e3cddc86a329c7d2d003cb3fd6b` previews fixed-amount s
 ## Wallet scanning and viewing access (October 27, 2026)
 
 CLI v1.2.0 distinguishes core download from wallet output scanning: `sync` scans downloaded blocks; `outputs` can report scan progress, and `balance` warns about lag using the wallet's scanned height. `viewkeys` authorizes with the full wallet password and creates an encrypted viewing file with a separately chosen password. That file watches incoming funds and cannot send or sign; its private viewing material remains sensitive and is not a spending backup. Details, source lines and intent boundaries: [wallet sync and viewing research](research/wallet-sync-and-view-only-2026-10-27.md).
+
+## Payment proofs and message signatures (October 27, 2026)
+
+CLI v1.2.0 and core v0.22.0 provide distinct workflows: transaction proof generation returns a transaction key; public verification separately checks key validity and recipient output matches. Message signing uses the full wallet's spending key, accepts up to 1024 bytes, and returns a signature without broadcasting a payment. Public signature verification checks address/message/signature; challenge freshness and intended authorization remain application rules. Source pins, line references and the explorer UI observation are recorded in [payment proofs and messages research](research/payment-proofs-and-messages-2026-10-27.md).
