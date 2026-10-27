@@ -1313,7 +1313,7 @@ mod tests {
         // Odd MiB size prevents an explicit HugeTLB success bypassing this path.
         let bytes = 3 * 1024 * 1024;
         let blocks = bytes / std::mem::size_of::<blocknet_pow_kernel::PowBlock>();
-        for advice in [23, -1] {
+        for advice in [libc::MADV_HUGEPAGE, -1] {
             let arena =
                 super::MmapArena::new_with_prefault(blocks, bytes, CpuPageMode::Auto, Some(advice))
                     .unwrap();
@@ -1353,7 +1353,7 @@ mod tests {
         .hash_password_into(&nonce, salt, &mut expected)
         .unwrap();
         let fixed = FixedArgon2id::with_kernel(KIB, CpuKernel::preferred()).unwrap();
-        for advice in [23, -1] {
+        for advice in [libc::MADV_HUGEPAGE, -1] {
             let mut arena = super::MmapArena::new_with_prefault(
                 KIB as usize,
                 KIB as usize * 1024,
@@ -1826,12 +1826,14 @@ impl MmapArena {
         page_mode: CpuPageMode,
     ) -> Result<Self, String> {
         #[cfg(target_os = "linux")]
-        // Hint THP before a writing prefault instead of populating 4 KiB pages and
-        // collapsing them: 32 native EPYC 9R14 workers allocated in 1.8 s instead of
-        // 30.1 s. Kernels without MADV_POPULATE_WRITE fall back to the legacy path.
+        // Hint THP and let the first hash fault 2 MiB pages, like a writing prefault
+        // but overlapped with hashing: 128 EPYC 9554P workers were ready in 0.5 s
+        // instead of 11.3 s (+0.9% over 15 min, steady unchanged); 256 EPYC 9754
+        // workers had taken 33 s to prefault. MAP_POPULATE and a synchronous
+        // collapse remain the fallback when the hint fails.
         let prefault_advice = (page_mode == CpuPageMode::Auto
             && byte_len == POW_MEMORY_KB as usize * 1024)
-            .then_some(23); // MADV_POPULATE_WRITE
+            .then_some(libc::MADV_HUGEPAGE);
         #[cfg(not(target_os = "linux"))]
         let prefault_advice = None;
         Self::new_with_prefault(block_count, byte_len, page_mode, prefault_advice)
@@ -1913,13 +1915,8 @@ impl MmapArena {
                 return Err(format!("regular mmap failed for {byte_len} bytes: {error}"));
             }
             if let Some(advice) = prefault_advice {
-                // Validated native 32-core EPYC path: hint before faulting
-                // to avoid allocating 4 KiB pages only to collapse them afterward.
-                // Allocation and end-to-end evidence are in CPU_OPTIMIZATION_LOG.md.
-                let populated = unsafe {
-                    libc::madvise(ptr, byte_len, libc::MADV_HUGEPAGE) == 0
-                        && libc::madvise(ptr, byte_len, advice) == 0
-                };
+                // Hint before the first fault so pages are never 4 KiB first.
+                let populated = unsafe { libc::madvise(ptr, byte_len, advice) == 0 };
                 if !populated {
                     // Advice can fail after partially populating the mapping.
                     // Discard it and restore the exact legacy allocation path.
@@ -1959,7 +1956,11 @@ impl MmapArena {
             } else {
                 unsafe {
                     let _ = libc::madvise(ptr, byte_len, libc::MADV_HUGEPAGE);
-                    let _ = libc::madvise(ptr, byte_len, MADV_COLLAPSE);
+                    // A collapse of the still-unfaulted hinted range would populate
+                    // it synchronously; only collapse the legacy populated mapping.
+                    if prefault_advice.is_none() {
+                        let _ = libc::madvise(ptr, byte_len, MADV_COLLAPSE);
+                    }
                 }
                 MmapBacking::TransparentHuge
             };
