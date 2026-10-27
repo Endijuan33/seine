@@ -79,6 +79,25 @@ fn check_cuda_libraries(driver: impl FnOnce() -> bool, nvrtc: impl FnOnce() -> b
 mod library_tests {
     use super::*;
 
+    #[test]
+    #[ignore = "requires scripts/test_cuda_unused_symbol.py loader isolation"]
+    fn unused_driver_symbol_probe() {
+        assert_eq!(
+            std::env::var("SEINE_TEST_UNUSED_CUDA_SYMBOL").as_deref(),
+            Ok("1")
+        );
+        let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        assert!(unsafe { cudarc::driver::sys::is_culib_present() });
+        // The fake driver's only callable entry point returns NO_DEVICE. Never
+        // touch a real GPU; exercise the dependency's library/symbol resolution.
+        let error = cudarc::driver::result::init().expect_err("fake driver must return NO_DEVICE");
+        assert_eq!(error.0, cudarc::driver::sys::CUresult::CUDA_ERROR_NO_DEVICE);
+        assert!(
+            guard.0.snapshot(true).events.is_empty(),
+            "unused symbols must not panic"
+        );
+    }
+
     // Run in a fresh subprocess with the test shim blocking only the named library.
     #[test]
     #[ignore = "requires scripts/test_cuda_missing_library.py loader isolation"]

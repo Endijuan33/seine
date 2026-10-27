@@ -11,7 +11,7 @@ supported hardware only.
 
 - **Up to about 6% faster CPU hashing on Linux with AMD Zen 3 processors** (measured on EPYC 7R13).
 - Closing a Windows console now allows brief cleanup, and slow telemetry uploads no longer leave completed runs marked as interrupted.
-- Missing NVIDIA driver or CUDA compiler libraries now produce clearer startup errors while other mining backends can continue.
+- NVIDIA startup avoids panics from unused driver functions and reports missing driver or CUDA compiler libraries clearly.
 - Stopping during backend initialization now exits cleanly instead of reporting a startup failure.
 - Fixed shutdown hangs when a dashboard keeps the control API event stream open.
 
