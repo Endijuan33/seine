@@ -172,3 +172,11 @@ Updating owns binary replacement, Windows startup owns Task Scheduler, tuning ow
 | miner keeps stopping; Blocknet miner crash troubleshooting | `/blog/miner-keeps-stopping/` | Distinguish process exit, backend fault, startup failure and computer sleep using logs, then verify a targeted fix |
 
 Configuration owns saved settings; RAM and huge pages own resource setup; NVIDIA owns GPU installation. Pool tracking owns connection diagnosis. This guide owns the cross-stage stopping decision process. No existing URL is retargeted.
+
+## Desktop use and network quality (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| mine while using PC; mining desktop responsiveness | `/blog/mine-while-using-pc/` | Choose a repeatable mining configuration around a foreground desktop workload |
+
+CPU usage owns utilization interpretation; tuning owns automatic selection; RAM owns capacity planning. This guide owns the foreground-task comparison and daily-use launch routine. No existing URL is retargeted.

@@ -635,3 +635,7 @@ v0.2.36 reads `seine.config.json` under `--data-dir` (default `./seine-data`, re
 ## Stop diagnosis and wallet receipt (October 26, 2026)
 
 v0.2.37 prints handled fatal errors before exit; `--ui plain` selects logs while still running mining. A backend fault can be isolated while remaining active backends continue. OS termination, sleep and a live reconnecting process require distinct observations. Wallet node synchronization and wallet output scanning are separate progress checks; ordinary public address searches do not reproduce private wallet balances. Source references and verification limits: `research/miner-stops-and-wallet-receipt-2026-10-26.md`.
+
+## Desktop sharing and connection quality (October 26, 2026)
+
+v0.2.38 supports CPU-only/NVIDIA-only selection, an automatic CPU search ceiling and explicit per-backend counts. Efficiency is a count/hashrate policy, not a CPU-utilization or measured-power cap. Dashboard count changes restart backends and reconnect, remain session-only and disable CPU autotuning for that run. Pool transport carries jobs, qualifying submissions and replies; local H/s and network bandwidth measure different work. See `research/desktop-and-network-2026-10-26.md` for source anchors, controlled-comparison procedure and verification limits.
