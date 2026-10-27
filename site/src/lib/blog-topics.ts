@@ -49,12 +49,14 @@ const groups: Record<string, readonly string[]> = {
     "argon2id-proof-of-work-explained"
   ],
   "troubleshooting": [
+    "blocknet-wallet-not-syncing",
     "mining-hashrate-dropping",
     "miner-keeps-stopping",
     "antivirus-flags-crypto-miner",
     "seine-dashboard-explained"
   ],
   "blocknet": [
+    "blocknet-view-only-wallet",
     "send-receive-blocknet",
     "blocknet-explorer-guide",
     "blocknet-faraday-upgrade",

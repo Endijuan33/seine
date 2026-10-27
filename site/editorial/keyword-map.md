@@ -215,3 +215,12 @@ The coin overview and privacy articles own current fundamentals; Faraday owns th
 | Blocknet explorer; look up Blocknet transaction | `/blog/blocknet-explorer-guide/` | Search public identifiers and interpret a transaction, containing block and network readings |
 
 Wallet setup owns creation and recovery, fees owns calculation, payment links owns request construction, and memos owns memo syntax. Sending owns the end-to-end payment procedure. Confirmations on bntpool owns maturity; privacy owns cryptographic mechanisms; node operation owns a local core. The explorer guide owns public-page navigation with dated real screenshots and the boundary between public inclusion and wallet receipt. No existing URL is retargeted.
+
+## Wallet diagnosis and viewing access (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet wallet not syncing; wrong Blocknet wallet balance | `/blog/blocknet-wallet-not-syncing/` | Locate a balance discrepancy in wallet selection, node download, output scanning or payment state and verify progress |
+| Blocknet view-only wallet; watch incoming Blocknet payments | `/blog/blocknet-view-only-wallet/` | Export, transfer and load an encrypted viewing file on a second computer, verify its identity and understand the access granted |
+
+Node operation owns installation and lifecycle; checkpoints on bntpool owns accelerated chain sync; wallet setup owns creation and recovery. The diagnostic guide owns the sequence from symptom to the stage needing attention. Stealth addresses owns the key/scan explanation, while the viewing guide owns the exported-file workflow and private access handling. Explorer owns public lookup, and pool tracking owns pool records. Existing URLs retain their intent.

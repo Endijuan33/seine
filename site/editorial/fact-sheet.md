@@ -655,3 +655,7 @@ The official Faraday page describes a future network upgrade, with tentative act
 ## Payment and explorer workflow (October 27, 2026)
 
 CLI v1.2.0 at `948af4de8b7a3e3cddc86a329c7d2d003cb3fd6b` previews fixed-amount sends before explicit confirmation, then prints the transaction ID and explorer link. History combines incoming outputs and recorded outgoing sends. The public explorer searches block height/hash or transaction hash, shows public fees and transaction structure, and leaves ordinary transfer amounts private. Mempool means zero confirmations; included count is current height minus containing height plus one. Private receipt is checked in the wallet. These are dated source/UI observations; details, screenshots and source locations are in [payments-and-explorer-2026-10-27.md](research/payments-and-explorer-2026-10-27.md).
+
+## Wallet scanning and viewing access (October 27, 2026)
+
+CLI v1.2.0 distinguishes core download from wallet output scanning: `sync` scans downloaded blocks; `outputs` can report scan progress, and `balance` warns about lag using the wallet's scanned height. `viewkeys` authorizes with the full wallet password and creates an encrypted viewing file with a separately chosen password. That file watches incoming funds and cannot send or sign; its private viewing material remains sensitive and is not a spending backup. Details, source lines and intent boundaries: [wallet sync and viewing research](research/wallet-sync-and-view-only-2026-10-27.md).
