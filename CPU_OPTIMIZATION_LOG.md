@@ -32,6 +32,7 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Full-width AVX-512 compress in the streaming ring loop | Ryzen 7 9700X, 8 / 12 / 16 workers | +0.2% / −0.5% / +0.2% | rejected (bandwidth-bound) |
 | Same-host defaults vs competitors after today's changes | Ryzen 7 9700X | Seine autotune 11 lanes 9.79 H/s (3.5% late-hash bench loss); 0%-fee NTM 10.04 @16; 2%-fee paired-arena miner tune 10.47 / bench 10.0 @16×2 | gross parity; open lead: paired arenas on SMT (~+4% in that miner's own tune) |
 | Paired arenas (two hashes per thread) with the shipping ring-2 streaming policy | Ryzen 7 9700X, research harness, 2 interleaved reps | single@16 SMT 10.10; paired@8 phys 10.01; paired@16 10.05; single@8 9.96 | rejected (−0.5% vs SMT at 2× RAM). Raw kernel at 16 = competitor parity; Seine's lower bench numbers are round-fence loss and an 11-worker autotune pick |
+| Live mining tuner on Zen 5 desktop (baseline v0.2.38 tree) | Ryzen 7 9700X, 23 min on bntpool | settled at 8 of 16 workers; plain AVX-512/AVX2 re-trialled at each count probe (~75% of streaming); lifetime 9.50 H/s vs ~10.0 steady | led to decisive-loss memory and any-gain upward count steps. A second 9700X run is invalid: it used a stale pre-fix binary |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
