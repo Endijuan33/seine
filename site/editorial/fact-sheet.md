@@ -40,7 +40,7 @@ Initial research checked 2026-10-25; release, platform and pool facts rechecked 
 - **Impact on writing:** everything below about Argon2id, 2 GB per thread, the H/s benchmarks, memory-hardness and the CPU vs GPU balance describes the network **before Faraday**.
   - The PoW is planned to change about 4 months after this sheet's date.
   - Undated "evergreen" mining articles will go stale. Date posts, or add a "before the Faraday upgrade" qualifier.
-  - Only publish Faraday details that blocknetcrypto.com states publicly. Unannounced parameters (PoW, block time, reward changes) stay out of posts until upstream publishes them.
+  - Only publish Faraday details that blocknetcrypto.com states publicly. Unannounced parameters stay out of posts. The October 27 post now publicly proposes block-time and reward changes; mining details are reserved for a separate future post.
 
 ---
 
@@ -478,7 +478,7 @@ Added by this sheet from the evidence:
 - **Ticker on exchanges:** is BNT the official listed ticker anywhere? Are there any exchange listings? The site states neither. No price or market data was checked.
 - **Pre-relaunch chain:** code calls the 2026-02-15 genesis a "relaunch". History of the first launch (~2026-02-05 to 02-15), and whether any coins carried over, is unverified. Genesis has no coinbase, so nothing carried over on-chain.
 - **Fees burned?** Coinbase must equal the subsidy exactly (`block.go:663-680`). Fees seem unclaimed, but no doc states this. Confirm with the maintainer before writing "fees are burned".
-- **Faraday effect on emission and block time:** not stated publicly yet. Don't speculate in posts; the 4-year / ~100M schedule framing may change.
+- **Faraday effect on emission and block time:** the October 27 official post proposes 10-minute target blocks and a doubled block reward, preserving the planned daily issuance rate. These remain proposed rules, not live-chain behavior; see the dated update below.
 - **Faraday miner support:** when seine ships Faraday support, and whether fees stay the same, is not public yet.
 - **Other Stratum miners on bntpool:** login requires protocol v2 + `submit_claimed_hash`. Whether any non-seine miner works is unknown.
 - **bntpool payout interval** in production. Also, are there regional endpoints? `eu.bntpool.com` appears only in a unit test (`seine@master:src/dev_fee.rs:279`). Do not advertise it.
@@ -672,3 +672,18 @@ CLI v1.2.0 and core v0.22.0 provide distinct workflows: transaction proof genera
 ## Release guard refresh (October 27, 2026)
 
 v0.2.39 is the latest published seine release. Its fee implementation, NVIDIA setup guide, configuration guide and release workflow are byte-identical to the reviewed v0.2.38 sources; all five platform archives remain available. The mining, NVIDIA, antivirus and Linux setup articles still describe supported behavior. Existing version-labelled benchmark and feature history remains historical. The pool calculator’s flat 2% miner-fee assumption remains valid; no pool deployment is needed for this verification. Source: GitHub latest-release API and `git diff v0.2.38..v0.2.39` for the four paths pinned in `release-facts.json`.
+
+## Faraday official explanation (October 27, 2026)
+
+Source: https://blocknetcrypto.com/blog/2026-10-27-how-blocknet-privacy-survives-quantum-computers/ (retrieved October 27, 2026 EDT). This supersedes the earlier overview where more specific. The post explicitly says Faraday is still being built and tested and its numbers, dates and design can change.
+
+- Planned February 2027 activation at block 103,680; homepage approximate February 16 remains a tentative calendar estimate.
+- Hash-based spend proofs built with Plonky3 and ML-KEM payment detection. The privacy set is the set of **Faraday coins**, growing as coins enter the format, not every old-format coin immediately.
+- One year after activation to migrate; unmigrated coins become permanently unspendable. Migrated coins wait about one week before spending. Exact migration steps remain forthcoming; current wallet backups do not migrate coins.
+- Existing 12-word recovery phrases continue; new wallets receive 24 words. Key-imported wallets without recovery words need a new wallet and a coin transfer. Proposed addresses are about 1,700 characters, with copy/paste, QR codes and Blocknet ID for usability.
+- Proposed target block time doubles from 5 to 10 minutes while block reward doubles, preserving planned daily issuance. No invented live reward or hardware-performance claim.
+- Maximum reorg depth becomes 60 blocks; newly mined coins wait 60 blocks (about 10 hours at target). Payment safety remains 10 confirmations (about 100 minutes at target). These are timing estimates, not guarantees.
+- Individual spend proofs are combined into a block proof and discarded after finality. The post describes development testing; do not turn its results into an independent audit, our own benchmark or released-mainnet performance.
+- Mining changes get a separate post; no future seine flags or hardware ranking are announced. Node auto-update statements must be read alongside actual version-pinning policy.
+
+See `research/faraday-official-post-2026-10-27.md` for the refresh scope.

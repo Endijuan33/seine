@@ -241,3 +241,7 @@ Sending owns payment creation; explorer owns public lookup; privacy and stealth 
 | Blocknet wallet backup; restore Blocknet wallet; move Blocknet wallet | `/blog/blocknet-wallet-backup-restore/` | Make a separate backup, choose file loading or seed import, and verify the same wallet on a destination computer |
 
 Wallet setup owns initial creation and seed phrases owns recovery-material concepts. Sync troubleshooting owns diagnosing scan progress. This guide owns the complete migration/recovery procedure and its verification before retiring the original. Existing articles retain their intent.
+
+## Faraday explanation refresh (October 27, 2026)
+
+The existing `/blog/blocknet-faraday-upgrade/` owns Faraday migration, recovery-word changes, post-quantum addresses and proposed timing. Preserve its original publication date and URL; record the refresh with `updated`. The backup guide owns recovery on currently released wallets; the reward schedule owns current-chain issuance. Link to these rather than duplicating operational instructions. Update all 20 language versions together from the official October 27 post.
