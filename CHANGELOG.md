@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.39
 
 - **About 23% more hashes in the first 20 minutes of mining on a 32-core AMD Zen 5 server** (measured on EPYC 9R45): automatic tuning now starts AMD Zen 2 to Zen 5 CPUs at their physical core count, settles on higher worker counts when they are faster, and stops re-testing slower kernels. Steady mining there rose about 17%.
 - **Up to about 6% faster CPU hashing on Linux with AMD Zen 3 processors** (measured on EPYC 7R13).
