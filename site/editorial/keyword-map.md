@@ -233,3 +233,11 @@ Node operation owns installation and lifecycle; checkpoints on bntpool owns acce
 | sign Blocknet message; verify Blocknet signature | `/blog/blocknet-sign-verify-message/` | Sign an agreed challenge and check the address, exact message and signature with application-level freshness checks |
 
 Sending owns payment creation; explorer owns public lookup; privacy and stealth addresses own the mechanisms. Payment proofs own deliberate transaction-specific disclosure and output verification. Message signatures own address-control challenges, not transaction receipts. Existing wallet creation, recovery and viewing guides retain their intent.
+
+## Wallet backup, recovery and migration (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet wallet backup; restore Blocknet wallet; move Blocknet wallet | `/blog/blocknet-wallet-backup-restore/` | Make a separate backup, choose file loading or seed import, and verify the same wallet on a destination computer |
+
+Wallet setup owns initial creation and seed phrases owns recovery-material concepts. Sync troubleshooting owns diagnosing scan progress. This guide owns the complete migration/recovery procedure and its verification before retiring the original. Existing articles retain their intent.

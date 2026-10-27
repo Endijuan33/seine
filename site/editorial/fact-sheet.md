@@ -663,3 +663,12 @@ CLI v1.2.0 distinguishes core download from wallet output scanning: `sync` scans
 ## Payment proofs and message signatures (October 27, 2026)
 
 CLI v1.2.0 and core v0.22.0 provide distinct workflows: transaction proof generation returns a transaction key; public verification separately checks key validity and recipient output matches. Message signing uses the full wallet's spending key, accepts up to 1024 bytes, and returns a signature without broadcasting a payment. Public signature verification checks address/message/signature; challenge freshness and intended authorization remain application rules. Source pins, line references and the explorer UI observation are recorded in [payment proofs and messages research](research/payment-proofs-and-messages-2026-10-27.md).
+
+## Wallet backup and recovery (October 27, 2026)
+
+- Released CLI v1.2.0 supports loading a full wallet-file copy with its existing password or importing the original recovery seed into a newly named file with a new password. It lists files in the configured core wallet directory and does not overwrite same-name local backups. Seed display is not available for every wallet; file recovery and seed recovery are separate paths. Source: `blocknetprivacy/blocknet@948af4de8b7a3e3cddc86a329c7d2d003cb3fd6b:attach_wallet.go:98-337,1072-1268`.
+- Core v0.22.0 imports into a new file, refuses existing-file overwrite and starts wallet catch-up scanning. Verify the full address and scan state after recovery; no universal restoration of local payment annotations or outgoing-history records is claimed. Source: `blocknetprivacy/core@5a0a5b510c1dce46f4eeb12c33a291052e44e7b3:api_handlers.go:1980-2087`; CLI `attach_wallet.go:757-882`. See `research/wallet-backup-restore-2026-10-27.md`.
+
+## Release guard refresh (October 27, 2026)
+
+v0.2.39 is the latest published seine release. Its fee implementation, NVIDIA setup guide, configuration guide and release workflow are byte-identical to the reviewed v0.2.38 sources; all five platform archives remain available. The mining, NVIDIA, antivirus and Linux setup articles still describe supported behavior. Existing version-labelled benchmark and feature history remains historical. The pool calculator’s flat 2% miner-fee assumption remains valid; no pool deployment is needed for this verification. Source: GitHub latest-release API and `git diff v0.2.38..v0.2.39` for the four paths pinned in `release-facts.json`.
