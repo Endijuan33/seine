@@ -107,6 +107,21 @@ fn candidates_for(
         } else {
             paths.push(stream);
         }
+    } else if let Some(stream) = matches!(
+        identity.vendor.as_deref(),
+        Some("AuthenticAMD" | "GenuineIntel")
+    )
+    .then(|| {
+        [CpuKernel::Avx512256Stream, CpuKernel::Avx2Stream]
+            .into_iter()
+            .find(|k| supported.contains(k))
+    })
+    .flatten()
+    {
+        // Unvalidated x86 hosts (Intel, masked-CPUID AMD VMs, Zen 1) keep their
+        // start, but may discover streaming through the repeated-win gate: it was
+        // 25-67% faster on every measured AMD cohort and +13.5% on Sapphire Rapids.
+        paths.push(stream);
     }
     paths
 }
@@ -703,7 +718,7 @@ impl Tuner {
             }
         }
         let sapphire_startup = sapphire_stream_startup(cfg, &host, identity, &supported);
-        if sapphire_startup {
+        if sapphire_startup && !candidates.contains(&CpuKernel::Avx512256Stream) {
             candidates.push(CpuKernel::Avx512256Stream);
         }
         let turin_startup = turin_stream_startup(cfg, &host, identity, &supported);
@@ -1970,7 +1985,7 @@ mod tests {
             assert_eq!(t.startup, stream);
             assert_eq!(
                 t.cache.configuration != neutral.cache.configuration,
-                stream.is_some()
+                t.candidates != neutral.candidates
             );
             assert!(t.candidates.iter().all(|k| k.is_supported()));
         }
@@ -2522,6 +2537,8 @@ mod tests {
             };
             assert_eq!(candidates_for(&zen5, &supported), supported);
         }
+        // Unvalidated x86 hosts keep their start but may discover streaming
+        // through repeated trials; identity-neutral fixtures stay unchanged.
         for identity in [
             CpuIdentity {
                 vendor: Some("GenuineIntel".into()),
@@ -2532,11 +2549,14 @@ mod tests {
                 model: Some(0x31),
                 ..turin.clone()
             },
-            CpuIdentity::default(),
         ] {
-            assert_eq!(candidates_for(&identity, &supported), supported[..2]);
-            assert_eq!(startup_kernel_for(&identity, &supported[..2]), None);
+            assert_eq!(candidates_for(&identity, &supported), supported);
+            assert_eq!(startup_kernel_for(&identity, &supported), None);
         }
+        assert_eq!(
+            candidates_for(&CpuIdentity::default(), &supported),
+            supported[..2]
+        );
         assert_eq!(
             candidates_for(&turin, &[CpuKernel::Avx2]),
             [CpuKernel::Avx2]
@@ -2605,7 +2625,10 @@ mod tests {
             ..rome.clone()
         };
         assert_eq!(static_kernel_for_identity(&naples, &avx2_only, 32), None);
-        assert_eq!(candidates_for(&naples, &avx2_only), [CpuKernel::Avx2]);
+        assert_eq!(
+            candidates_for(&naples, &avx2_only),
+            [CpuKernel::Avx2, CpuKernel::Avx2Stream]
+        );
         let intel = CpuIdentity {
             vendor: Some("GenuineIntel".into()),
             ..masked_zen5.clone()
