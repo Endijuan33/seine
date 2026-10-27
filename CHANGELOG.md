@@ -10,6 +10,7 @@ supported hardware only.
 ## Unreleased
 
 - **About 40-50% faster CPU hashing on Windows with AMD Zen 2 and Zen 3 processors** (measured on EPYC 7R13): the memory-streaming kernel is now used on Windows too.
+- Faster restarts with saved CPU tuning on Linux EPYC 9375F systems: the fast kernel resumes promptly after memory initialization.
 
 ## v0.2.39
 

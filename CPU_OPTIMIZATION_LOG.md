@@ -4862,3 +4862,35 @@ Its `independent-verification.json` preserves report hashes and verification
 counts; `comparison-diagnostics/genoa-prefetch-and-wide-stores-result.json`
 preserves decisions and cleanup. These results do not replace the public
 steady-state benchmark or establish a power-efficiency gain.
+
+
+### 2026-10-27: Count owned arenas in the initial CPU capacity observation
+
+Kept the small controller-start correction: account for running CPU backends'
+committed arenas when initializing the capacity policy, as subsequent ticks
+already do. Counting zero after allocation made large cached counts appear to
+recover capacity on the next tick and delayed cached kernel restoration.
+No kernel, identity gate, tuning window, pressure threshold or cached score changes.
+
+Native Linux EPYC 9375F (32C/64T, 384 GiB host, deliberately constrained to a
+192 GiB MemoryMax cgroup), v0.2.39 versus that exact release plus the patch.
+Independent 300-second cold runs created each binary's natural 48-worker cache;
+four fresh 180-second cached invocations used B/C/C/B order and unmodified copies
+of those caches. Thread/kernel/page/profile settings were automatic, THP backing,
+unprivileged private-network loopback fixture, no real shares or pool traffic.
+
+Logged completed hashes / whole-invocation elapsed (a lower bound) was
+68.99522 / 72.90969 / 72.99905 / 69.02797 H/s for the cached sequence:
+paired +5.674% / +5.753%, geometric +5.713%. Cold 66.21307 → 66.19679 H/s
+(-0.025%). All predeclared gates pass; two cached pairs are not a confidence
+interval or evidence for other hardware. Baseline streaming started at 62.0/61.1s;
+candidate restored it at 16.7/16.2s immediately after allocation. This is early
+restart output, not sustained hashrate or the separate manual 85.1 H/s headline.
+
+All six runs exited cleanly with zero swap/OOM counter deltas; full 21-case
+streaming reference parity passed before the manual benchmark. Relevant local
+suites: 53 adaptive CPU, 66 config, 65 kernel-policy passed; three native tests
+ignored locally. Rental results and [reproducible evidence](experiments/9375f-cached-start-20261027/README.md)
+include raw logs, memory samples, cache/provenance hashes, and verified cleanup.
+The server and its task SSH key were deleted; no release tag or production miner
+restart accompanies this change.

@@ -64,5 +64,6 @@ An earlier EPYC 9575F rental was deleted after a controller error before its
 files were collected. Its interim readings are not used here. A replacement
 9575F order was out of stock; this 9375F protocol was declared before its results.
 The completed headline files were collected locally while the separate startup
-experiment was running. Rental cleanup is recorded separately after
-that experiment; it does not change these immutable headline reports.
+experiment was running. [Cleanup verification](cleanup.json) confirms provider deletion, SSH-key removal
+and stopped watchdog at 5:45 a.m. EDT after the startup experiment. The original
+huge-page reservation was restored. These headline reports remain unchanged.
