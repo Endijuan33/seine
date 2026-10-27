@@ -82,14 +82,21 @@ def cmd_up(args):
     if args.windows:
         # OpenSSH for Administrator with the task key; guest shutdown at expiry.
         user_data = f"""<powershell>
-$ErrorActionPreference = 'Stop'
-schtasks /create /tn SeineExpiry /tr "shutdown /s /f /t 0" /sc once /st (Get-Date).AddMinutes({minutes}).ToString('HH:mm') /ru SYSTEM /f | Out-Null
+New-Item -ItemType Directory -Force C:\\cohort | Out-Null
+Start-Transcript -Path C:\\cohort\\bootstrap.log
+$expiry = New-ScheduledTaskAction -Execute 'shutdown.exe' -Argument '/s /f /t 0'
+$when = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes({minutes})
+Register-ScheduledTask -TaskName SeineExpiry -Action $expiry -Trigger $when -User SYSTEM -RunLevel Highest -Force | Out-Null
 if (!(Get-Service sshd -ErrorAction SilentlyContinue)) {{ Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null }}
-Set-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value '{public_key}' -Encoding ASCII
-icacls.exe C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant:r Administrators:F SYSTEM:F | Out-Null
-New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -Value C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -PropertyType String -Force | Out-Null
-Set-Service sshd -StartupType Automatic; Start-Service sshd
-New-NetFirewallRule -Name seine-ssh -DisplayName seine-ssh -Protocol TCP -LocalPort 22 -Action Allow | Out-Null
+Set-Service sshd -StartupType Automatic
+Start-Service sshd
+Set-Content -Path C:\\ProgramData\\ssh\\administrators_authorized_keys -Value '{public_key}' -Encoding ASCII
+& icacls.exe C:\\ProgramData\\ssh\\administrators_authorized_keys /inheritance:r /grant:r 'Administrators:F' 'SYSTEM:F' | Out-Null
+New-Item -Path HKLM:\\SOFTWARE\\OpenSSH -Force | Out-Null
+New-ItemProperty -Path HKLM:\\SOFTWARE\\OpenSSH -Name DefaultShell -Value 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -PropertyType String -Force | Out-Null
+Restart-Service sshd
+New-NetFirewallRule -Name seine-ssh -DisplayName seine-ssh -Enabled True -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow | Out-Null
+Stop-Transcript
 </powershell>"""
     else:
         user_data = ('#cloud-config\ndisable_root: false\nssh_authorized_keys:\n  - ' + public_key
