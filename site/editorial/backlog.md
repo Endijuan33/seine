@@ -58,3 +58,5 @@ Published 2026-10-25: `mine-blocknet-nvidia-gpu` owns NVIDIA setup, runtime diag
 Published 2026-10-25: `antivirus-flags-crypto-miner` owns Windows download warnings, official-release checksum verification and reporting unresolved detections. It includes an actual v0.2.26 Windows PowerShell verification record and release-assets capture.
 
 Published October 26, 2026: `how-much-ram-to-mine-blocknet` covers memory arithmetic, current-release sizing and allocation troubleshooting. No new hardware measurements were commissioned; channel-scaling benchmarks remain separate future research.
+
+Published October 27, 2026: `update-blocknet-wallet` covers routine desktop application updates, preserving wallet data, fully quitting, choosing the official package and verifying the same address and synchronized history. Available in all 20 languages; no new hardware measurements.

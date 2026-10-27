@@ -671,7 +671,7 @@ CLI v1.2.0 and core v0.22.0 provide distinct workflows: transaction proof genera
 
 ## Release guard refresh (October 27, 2026)
 
-v0.2.39 is the latest published seine release. Its fee implementation, NVIDIA setup guide, configuration guide and release workflow are byte-identical to the reviewed v0.2.38 sources; all five platform archives remain available. The mining, NVIDIA, antivirus and Linux setup articles still describe supported behavior. Existing version-labelled benchmark and feature history remains historical. The pool calculator’s flat 2% miner-fee assumption remains valid; no pool deployment is needed for this verification. Source: GitHub latest-release API and `git diff v0.2.38..v0.2.39` for the four paths pinned in `release-facts.json`.
+At the earlier October 27 check, v0.2.39 was the latest published seine release. Its fee implementation, NVIDIA setup guide, configuration guide and release workflow are byte-identical to the reviewed v0.2.38 sources; all five platform archives remain available. The mining, NVIDIA, antivirus and Linux setup articles still describe supported behavior. Existing version-labelled benchmark and feature history remains historical. The pool calculator’s flat 2% miner-fee assumption remains valid; no pool deployment is needed for this verification. Source: GitHub latest-release API and `git diff v0.2.38..v0.2.39` for the four paths pinned in `release-facts.json`.
 
 ## Faraday official explanation (October 27, 2026)
 
@@ -702,3 +702,11 @@ The visual guide uses GUI v0.22.0 (`661fff98e047f395489a0d2eba88f572c2a89935`), 
 ## First-receipt visual reference
 
 The first-BNT guide uses the same pinned GUI v0.22.0 as the desktop walkthrough. History opens a transaction detail with its hash, status, block, confirmations and the wallet-owned received amount; Dashboard supplies the spendable reading after sync and scanning. The 1.25 BNT receipt, fee, hash and chain readings in the captures are labeled local demo data. No new payout constants or receipt timing guarantees are introduced. See [first-BNT research](batches/2026-10-first-blocknet/research.md).
+
+## Desktop wallet update behavior (v0.22.0)
+
+The released GUI opening screen displays the application package version. Both About fields, Wallet Version and Daemon Version, call the bundled daemon’s version command in this release. The tray Quit action stops API events and the daemon before exit; on macOS, closing the window only hides it. Backup Wallet File copies the active encrypted wallet file to the chosen location; multi-wallet users need a separate backup for each wallet. The application directory holds the wallet and active-wallet selection separately from the installed executable. See [wallet update research](batches/2026-10-wallet-update/research.md) for pinned source and release assets.
+
+## Release verification: v0.2.41 (October 27, 2026)
+
+The latest release check now verifies v0.2.41. The fee source, NVIDIA setup guide, configuration guide and release workflow remain byte-identical to the previously reviewed v0.2.39 sources, with the same five platform archive names and flat 2% miner fee. v0.2.40–41 change CPU kernel selection, tuning and Linux startup; existing setup directions remain applicable, and version-labeled measurements remain historical. No new performance claims are added in this verification. Pool calculator fee assumptions remain unchanged; its historical reviewed-version label is not a latest-version claim. Source: GitHub release API, v0.2.41 commit and four SHA-256 hashes recorded in `release-facts.json`.

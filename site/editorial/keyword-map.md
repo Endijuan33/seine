@@ -269,3 +269,11 @@ This page owns the visual desktop procedure, using the released interface with l
 | how to get Blocknet; get first BNT; receive or mine Blocknet | `/blog/get-first-blocknet/` | Choose receiving a transfer or mining with an existing computer, then identify the first incoming wallet payment and spendable balance |
 
 This is the acquisition starting-point guide. Desktop wallet owns interface setup, sending/receiving owns the payment procedure, and mining owns installation and accepted shares. The new article routes to those owners, adds a simple first-receipt checklist and follows a single labeled demo payment through History and Dashboard. Pool payout rules and troubleshooting remain on bntpool.com. No existing URL is retargeted. Demand is inferred from the newcomer journey; no measured query-volume claim is made.
+
+## Desktop wallet updates (October 27, 2026)
+
+| Primary search intent | Owner | Distinct reader job |
+|---|---|---|
+| update Blocknet wallet; Blocknet wallet latest version | `/blog/update-blocknet-wallet/` | Replace the released desktop application while preserving the existing wallet, then verify application version, receiving address and synchronized history |
+
+Desktop setup owns creating and opening wallets. Backup/restore owns recovery and moving keys. Synchronization owns diagnosing an incomplete balance. This article owns the routine application replacement sequence, with release-specific version-label and full-exit behavior and actual released-interface screenshots. Faraday owns the future network migration; this article does not supply migration instructions. Demand is inferred from ordinary wallet maintenance, not measured search volume.
