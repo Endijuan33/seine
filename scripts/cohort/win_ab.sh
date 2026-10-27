@@ -20,7 +20,9 @@ echo "$NAME at $IP"
 OPTS=(-i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -o LogLevel=ERROR
       -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$OUT/known_hosts")
 for _ in $(seq 90); do timeout 20 ssh "${OPTS[@]}" "Administrator@$IP" 'echo ready' 2>/dev/null | grep -q ready && break; sleep 10; done
-ssh "${OPTS[@]}" "Administrator@$IP" 'New-Item -ItemType Directory -Force C:\cohort\candidate | Out-Null'
+# Exclude the work tree from Defender before uploading: it quarantined a competitor
+# miner during upload on two disposable guests.
+ssh "${OPTS[@]}" "Administrator@$IP" 'New-Item -ItemType Directory -Force C:\cohort\candidate | Out-Null; Add-MpPreference -ExclusionPath C:\cohort -ErrorAction SilentlyContinue'
 scp "${OPTS[@]}" "$CAND"/seine.exe "$CAND"/verify_cpu_kernels.exe "Administrator@$IP:C:/cohort/candidate/"
 scp "${OPTS[@]}" "$HERE/$PS1" "$HERE/pool_fixture.py" "$HERE/live_summary.py" "Administrator@$IP:C:/cohort/"
 # Optional EXTRA_DIR (competitor binaries, Python, ...) is uploaded as C:\cohort\extra.

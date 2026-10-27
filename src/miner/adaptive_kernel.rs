@@ -181,6 +181,13 @@ fn cohort_stream_kernel(
         {
             Some(CpuKernel::Avx2Stream)
         }
+        // No AMD CPU with AVX2 reports family 06h: these are hypervisor CPU models
+        // that hide the real Zen family and AVX-512 (231 telemetry installs of one
+        // 16-vCPU "AMD EPYC" VM type). EPYC 7R32 with 4 KiB pages at 14 workers,
+        // matching that fleet: avx2-stream 7.86 vs avx2 5.44 H/s (+44.5%).
+        Some(6) if AVX2_STREAM_OS && supported.contains(&CpuKernel::Avx2Stream) => {
+            Some(CpuKernel::Avx2Stream)
+        }
         _ => None,
     }
 }
@@ -2565,6 +2572,22 @@ mod tests {
         assert_eq!(
             candidates_for(&CpuIdentity::default(), &supported),
             supported[..2]
+        );
+        // A masked-CPUID AMD VM (family 06h) starts AVX2-only hosts on streaming.
+        let masked = CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(6),
+            model: Some(63),
+            ..CpuIdentity::default()
+        };
+        let avx2_paths = [CpuKernel::Avx2, CpuKernel::Avx2Stream];
+        assert_eq!(
+            startup_kernel_for(&masked, &avx2_paths),
+            Some(CpuKernel::Avx2Stream)
+        );
+        assert_eq!(
+            static_kernel_for_identity(&masked, &avx2_paths, 14),
+            Some(CpuKernel::Avx2Stream)
         );
         // Sapphire and Emerald Rapids start on streaming; other Intel models do not.
         for (model, stream) in [(0x8f, true), (0xcf, true), (0xad, false), (0x55, false)] {
