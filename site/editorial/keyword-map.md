@@ -245,3 +245,11 @@ Wallet setup owns initial creation and seed phrases owns recovery-material conce
 ## Faraday explanation refresh (October 27, 2026)
 
 The existing `/blog/blocknet-faraday-upgrade/` owns Faraday migration, recovery-word changes, post-quantum addresses and proposed timing. Preserve its original publication date and URL; record the refresh with `updated`. The backup guide owns recovery on currently released wallets; the reward schedule owns current-chain issuance. Link to these rather than duplicating operational instructions. Update all 20 language versions together from the official October 27 post.
+
+## Wallet, node and miner roles (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet wallet vs node vs miner; do I need a node to mine Blocknet; keep wallet open for mining | `/blog/blocknet-wallet-node-miner/` | Choose the applications needed for receiving, pool mining or direct mining; understand what must stay running |
+
+This guide owns the software-role decision before setup. `blocknet-wallet-for-mining` owns initial wallet creation, `run-blocknet-node` owns node operation, and `how-to-mine-blocknet` owns the mining setup procedure. Link to those procedures rather than reproduce commands. Demand is inferred from the documented user journey, not measured Search Console volume.

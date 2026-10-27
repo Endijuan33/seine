@@ -1,5 +1,11 @@
 # Backlog
 
+## Current editorial direction — October 27, 2026
+
+Prioritize ordinary newcomer questions and broader Blocknet fundamentals: choosing software, receiving and sending, first mining setup, and understanding balances. Improve the existing owner when a question already has a guide. Defer narrow merchant/invoice workflows. Competitor comparisons and work requiring rented hardware remain on hold by owner preference.
+
+Published: `blocknet-wallet-node-miner` explains the software roles and which applications must stay running. A possible next topic is the ordinary transaction journey; check its boundary against `send-receive-blocknet`, fees and payment proofs before drafting.
+
 Researched topics not yet written, in priority order. Batch 1 (2026-10-25) took the hardware,
 Mac, Argon2id, what-is-Blocknet, Blocknet ID and privacy topics; pool-side topics went to the
 bntpool.com blog. Each owns one search job; check
@@ -27,7 +33,7 @@ check search results before drafting.
 
 | Slug | Primary cluster | Search job |
 |---|---|---|
-| `blocknet-faraday-upgrade` | blocknet faraday; blocknet post-quantum | What the planned upgrade brings, attributed to blocknetcrypto.com |
+| Published: `blocknet-faraday-upgrade` | blocknet faraday; blocknet post-quantum | Existing guide refreshed from the official October 27 post; update it when public plans change |
 
 Low-confidence demand, revisit with Search Console data: HiveOS/mmpOS packaging, AVX-512 on
 Zen 5, laptop mining.

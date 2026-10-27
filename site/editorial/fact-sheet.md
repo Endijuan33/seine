@@ -687,3 +687,10 @@ Source: https://blocknetcrypto.com/blog/2026-10-27-how-blocknet-privacy-survives
 - Mining changes get a separate post; no future seine flags or hardware ranking are announced. Node auto-update statements must be read alongside actual version-pinning policy.
 
 See `research/faraday-official-post-2026-10-27.md` for the refresh scope.
+
+## Wallet, node and miner roles — October 27, 2026
+
+- The official core combines node, wallet and mining functionality; the attached CLI shell is a client and closing it leaves the background core running. Mining is separately controlled. Source: CLI v1.2.0 `948af4d`, `docs/reference-core.md:21–23,700–735,962–969`.
+- Saving `wallet_file` remembers a path, not an unlocked wallet session. After starting the core, attach and use `load` with the wallet password. Source: same pin, `docs/reference-wallet.md:90–94`.
+- The wallet can scan previously downloaded blocks to find its outputs. Receipt does not require the receiving wallet application to be online; its later displayed balance depends on chain and wallet scan progress. Derived from same pin, `docs/reference-core.md:588–616`, and current-chain output/scanner behavior.
+- seine defaults to pool mode; the mining node connection belongs to the pool in that workflow. Its separate daemon mode needs the user's running, authenticated core. Source: seine v0.2.39 `8a822f7`, `docs/guides/solo-mining.md`, `src/config.rs`. Detailed evidence and scope: `batches/2026-10-wallet-node-miner/research.md`.
