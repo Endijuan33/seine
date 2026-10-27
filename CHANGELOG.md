@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.43
 
 - **Mining starts within a second on large Linux servers** (measured on a 64-core EPYC 9554P: 11 s to 0.5 s), instead of waiting for all worker memory to be prepared first.
 - **About 5% faster on 32 GiB Windows machines with 16 or more CPU threads** (measured on EPYC 9R45): automatic sizing now keeps at most 1 GiB of RAM in reserve, fitting one more 2 GiB worker.
