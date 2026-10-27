@@ -91,6 +91,8 @@ aggregate briefing. Older clients have unknown request context.
 ## Rollout
 
 Deploy the schema-7 collector before a miner release containing these changes.
+The approved collector-only update completed at 00:25 EDT; see its
+[deployment receipt](collector-schema7-deployment-20261027.md).
 There is no database migration or pool, daemon or Stratum change. Existing miner
 binaries cannot send the new evidence; a later miner release and adoption are
 required. No historical crash cause can be reconstructed from these new fields.
