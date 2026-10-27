@@ -24,10 +24,12 @@ pub enum CpuKernel {
     /// AVX2 compression with two cached blocks, non-temporal arena stores and
     /// three-block data-independent prefetch.
     Avx2Stream,
+    /// Full-width AVX-512 compression in the streaming ring loop (Zen 5 servers).
+    Avx512Stream,
 }
 
 impl CpuKernel {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Scalar,
         Self::Avx2,
         Self::Avx512,
@@ -40,6 +42,7 @@ impl CpuKernel {
         Self::Avx512256StreamR64D4,
         Self::Avx512256StreamR64D6,
         Self::Avx2Stream,
+        Self::Avx512Stream,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -56,6 +59,7 @@ impl CpuKernel {
             Self::Avx512256StreamR64D4 => "avx512-256-stream-r64d4",
             Self::Avx512256StreamR64D6 => "avx512-256-stream-r64d6",
             Self::Avx2Stream => "avx2-stream",
+            Self::Avx512Stream => "avx512-stream",
         }
     }
 
@@ -75,7 +79,8 @@ impl CpuKernel {
             | Self::Avx512256StreamR8D2
             | Self::Avx512256StreamR64D3
             | Self::Avx512256StreamR64D4
-            | Self::Avx512256StreamR64D6 => {
+            | Self::Avx512256StreamR64D6
+            | Self::Avx512Stream => {
                 std::arch::is_x86_feature_detected!("avx2")
                     && std::arch::is_x86_feature_detected!("avx512f")
                     && std::arch::is_x86_feature_detected!("avx512vl")
@@ -111,7 +116,7 @@ impl std::str::FromStr for CpuKernel {
             .into_iter()
             .find(|kernel| kernel.as_str() == value)
             .ok_or_else(|| {
-                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, neon, or neon-sha3"
+                "expected scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, avx512-stream, neon, or neon-sha3"
                     .to_string()
             })
     }

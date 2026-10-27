@@ -39,6 +39,8 @@ const ISA_AVX512_256_STREAM_R64D4: u8 = 9;
 const ISA_AVX512_256_STREAM_R64D6: u8 = 10;
 #[allow(dead_code)]
 const ISA_AVX2_STREAM: u8 = 11;
+#[allow(dead_code)]
+const ISA_AVX512_STREAM: u8 = 12;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -74,6 +76,7 @@ const fn isa_label(isa: u8) -> &'static str {
         ISA_AVX512_256_STREAM_R64D4 => "avx512-256-stream-r64d4",
         ISA_AVX512_256_STREAM_R64D6 => "avx512-256-stream-r64d6",
         ISA_AVX2_STREAM => "avx2-stream",
+        ISA_AVX512_STREAM => "avx512-stream",
         _ => "scalar",
     }
 }
@@ -97,6 +100,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Avx512256StreamR64D4 => ISA_AVX512_256_STREAM_R64D4,
         CpuKernel::Avx512256StreamR64D6 => ISA_AVX512_256_STREAM_R64D6,
         CpuKernel::Avx2Stream => ISA_AVX2_STREAM,
+        CpuKernel::Avx512Stream => ISA_AVX512_STREAM,
     }
 }
 
@@ -118,6 +122,7 @@ pub fn compiled_isa_variants() -> &'static [&'static str] {
             "avx512-256-stream-r64d4",
             "avx512-256-stream-r64d6",
             "avx2-stream",
+            "avx512-stream",
         ]
     }
     #[cfg(target_arch = "aarch64")]
@@ -216,23 +221,27 @@ impl FixedArgon2id {
             ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM => unsafe {
-                self.fill_streaming_ring::<2, 3, false>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, false>(memory_blocks)
+            },
+            #[cfg(target_arch = "x86_64")]
+            ISA_AVX512_STREAM => unsafe {
+                self.fill_streaming_ring::<2, 3, false, true>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
-                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }>(memory_blocks)
+                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }, false>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D3 => unsafe {
-                self.fill_streaming_ring::<64, 3, true>(memory_blocks)
+                self.fill_streaming_ring::<64, 3, true, false>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D4 => unsafe {
-                self.fill_streaming_ring::<64, 4, true>(memory_blocks)
+                self.fill_streaming_ring::<64, 4, true, false>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D6 => unsafe {
-                self.fill_streaming_ring::<64, 6, true>(memory_blocks)
+                self.fill_streaming_ring::<64, 6, true, false>(memory_blocks)
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
@@ -258,6 +267,7 @@ impl FixedArgon2id {
         const RING: usize,
         const DEPTH: usize,
         const DEMAND_FENCE: bool,
+        const FULL_WIDTH: bool,
     >(
         &self,
         memory: &mut [PowBlock],
@@ -311,19 +321,37 @@ impl FixedArgon2id {
                             prefetch_pow_block::<ISA_AVX512_256_STREAM>(&*arena.add(ahead));
                         }
                     }
-                    avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
+                    if FULL_WIDTH {
+                        compress_avx512_into(prev, &*reference_ptr, &mut *dst);
+                    } else {
+                        avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
+                    }
                 } else if block + 1 < self.segment_length {
-                    avx512_256::compress_into_mid_prefetch_ring::<RING>(
-                        prev,
-                        &*reference_ptr,
-                        &mut *dst,
-                        cur,
-                        arena,
-                        cache,
-                        cur + 1,
-                    );
+                    if FULL_WIDTH {
+                        compress_avx512_into_mid_prefetch(
+                            prev,
+                            &*reference_ptr,
+                            &mut *dst,
+                            cur,
+                            arena,
+                        );
+                    } else {
+                        avx512_256::compress_into_mid_prefetch_ring::<RING>(
+                            prev,
+                            &*reference_ptr,
+                            &mut *dst,
+                            cur,
+                            arena,
+                            cache,
+                            cur + 1,
+                        );
+                    }
                 } else {
-                    avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
+                    if FULL_WIDTH {
+                        compress_avx512_into(prev, &*reference_ptr, &mut *dst);
+                    } else {
+                        avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
+                    }
                 }
                 // Contiguous stores fill each complete 64-byte cache line. The
                 // arena is never used as a pre-round backup in this candidate.

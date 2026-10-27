@@ -106,6 +106,15 @@ fn cohort_stream_kernel(
         return None;
     }
     match identity.family {
+        // Zen 5 server-class models (00h-1Fh: Turin, Turin Dense, masked cloud
+        // CPUIDs) use full-width compression: EPYC 9355P +4.9% at 64 workers.
+        // Client Zen 5 (20h+) stays 256-bit: Ryzen 7 9700X measured neutral.
+        Some(0x1a)
+            if identity.model.is_some_and(|m| m < 0x20)
+                && supported.contains(&CpuKernel::Avx512Stream) =>
+        {
+            Some(CpuKernel::Avx512Stream)
+        }
         Some(0x19 | 0x1a) if supported.contains(&CpuKernel::Avx512256Stream) => {
             Some(CpuKernel::Avx512256Stream)
         }
@@ -1886,15 +1895,16 @@ mod tests {
             model: Some(0x02),
             ..CpuIdentity::default()
         };
-        for (identity, eligible, starts_streaming) in [
-            (turin.clone(), true, true),
+        // Zen 5 server-class models use full-width streaming; client Zen 5 and
+        // Zen 4 use the 256-bit path.
+        for (identity, stream) in [
+            (turin.clone(), Some(CpuKernel::Avx512Stream)),
             (
                 CpuIdentity {
                     model: Some(0x44),
                     ..turin.clone()
                 },
-                true,
-                true,
+                Some(CpuKernel::Avx512256Stream),
             ),
             (
                 CpuIdentity {
@@ -1902,31 +1912,26 @@ mod tests {
                     model: Some(0x11),
                     ..turin.clone()
                 },
-                true,
-                true,
+                Some(CpuKernel::Avx512256Stream),
             ),
             (
                 CpuIdentity {
                     vendor: Some("GenuineIntel".into()),
                     ..turin
                 },
-                false,
-                false,
+                None,
             ),
         ] {
             let t = Tuner::for_identity(&cfg, host.clone(), &identity);
-            let streaming = eligible && CpuKernel::Avx512256Stream.is_supported();
+            let stream = stream.filter(|k| k.is_supported());
             assert_eq!(
-                t.candidates.contains(&CpuKernel::Avx512256Stream),
-                streaming
+                stream.is_some_and(|k| t.candidates.contains(&k)),
+                stream.is_some()
             );
-            assert_eq!(
-                t.startup,
-                (streaming && starts_streaming).then_some(CpuKernel::Avx512256Stream)
-            );
+            assert_eq!(t.startup, stream);
             assert_eq!(
                 t.cache.configuration != neutral.cache.configuration,
-                streaming
+                stream.is_some()
             );
             assert!(t.candidates.iter().all(|k| k.is_supported()));
         }

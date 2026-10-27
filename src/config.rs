@@ -704,7 +704,7 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = BenchKind::Backend)]
     bench_kind: BenchKind,
 
-    /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, neon, neon-sha3).
+    /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, avx512-stream, neon, neon-sha3).
     /// Requires --bench, CPU-only backends, fixed --threads, and no CPU autotuning.
     #[arg(long, requires_all = ["bench", "threads"])]
     bench_cpu_kernel: Option<blocknet_pow_kernel::CpuKernel>,
