@@ -7,7 +7,7 @@ set -u
 W=/opt/cohort
 R=$W/results/ab-$1-vs-$2
 BASE=$1 CAND=$2; shift 2
-SECS=${SECS:-30}
+SECS=${SECS:-20}
 mkdir -p "$R"; chown -R bench:bench "$W"
 isolated() {
   local dir=$1; shift
@@ -20,7 +20,7 @@ one() { # one <kernel> <threads> <tag>
   sync; echo 3 > /proc/sys/vm/drop_caches
   isolated "$W/candidate" ./seine --bench --bench-kind backend --backend cpu --ui plain \
     --data-dir /home/bench/seine-ab --threads "$2" --disable-cpu-autotune-threads --bench-cpu-kernel "$1" \
-    --bench-secs "$SECS" --bench-rounds 2 --bench-warmup-rounds 1 --bench-output "$R/$3.json" > "$R/$3.log" 2>&1
+    --bench-secs "$SECS" --bench-rounds "${ROUNDS:-1}" --bench-warmup-rounds 1 --bench-output "$R/$3.json" > "$R/$3.log" 2>&1
   python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(sys.argv[2], round(d['avg_hps'], 3))" "$R/$3.json" "$3"
 }
 for t in "$@"; do
