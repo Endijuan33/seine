@@ -656,7 +656,21 @@ impl Policy {
             .restoring
             .is_some_and(|(_, start)| now.saturating_sub(start) >= SWITCH_TIMEOUT_SECS);
         if self.joint.is_some() && (safety_change || joint_invalid || switch_timeout) {
-            return self.cancel_joint(kernels, now, snapshots, cap, actual, allocation_limited);
+            // Capacity that shrinks once a larger count actually allocates (a
+            // 64 GiB host fits 27 arenas plus reserve, but estimates 28 at 21)
+            // must back off like an allocation limit; a 30 s retry re-allocated
+            // and tore down 14 GiB about every 33 s on a 32-core Zen 5 host.
+            let cap_shrank = self
+                .joint
+                .as_ref()
+                .is_some_and(|j| j.base.max(j.candidate) > cap && j.base <= cap);
+            let result =
+                self.cancel_joint(kernels, now, snapshots, cap, actual, allocation_limited);
+            if cap_shrank && !allocation_limited {
+                self.allocation_retry_at = now.saturating_add(RETRY_SECS);
+                self.next_trial = self.next_trial.max(now.saturating_add(RETRY_SECS));
+            }
+            return result;
         }
         if safety_change || switch_timeout {
             self.restoring = None;
@@ -2065,6 +2079,29 @@ mod tests {
             }
         }
         assert!(recovered);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn capacity_shrinking_under_a_probe_backs_off_like_an_allocation_limit() {
+        let (path, mut kernels, mut policy, s) = recovery_fixture("shrink");
+        policy.joint = Some(JointComparison {
+            base: 1,
+            candidate: 2,
+            base_kernel: s.kernel,
+            candidate_kernel: None,
+            base_backing: vec![s.backing_bytes],
+            candidate_backing: None,
+            started: 0,
+            confirmed_peak: 0.0,
+            repeat: false,
+        });
+        // The estimate allowed two workers; it reads one once the probe allocates.
+        let (_, decision) = policy.tick_joint(&mut kernels, 10, &[s], 1, false);
+        assert_eq!(decision.expect("probe cancelled").threads, 1);
+        assert!(policy.joint.is_none());
+        assert!(policy.allocation_retry_at >= 10 + RETRY_SECS);
+        assert!(policy.next_trial >= 10 + RETRY_SECS);
         let _ = fs::remove_file(path);
     }
 
