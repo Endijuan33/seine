@@ -26,5 +26,16 @@ scp "${OPTS[@]}" "$HERE/$PS1" "Administrator@$IP:C:/cohort/"
 ssh "${OPTS[@]}" "Administrator@$IP" "powershell -ExecutionPolicy Bypass -File C:\\cohort\\$PS1 $*" || true
 ssh "${OPTS[@]}" "Administrator@$IP" 'Compress-Archive -Force C:\cohort\results C:\cohort\results.zip'
 scp "${OPTS[@]}" "Administrator@$IP:C:/cohort/results.zip" "$OUT/"
-(cd "$OUT" && python3 -c "import zipfile; zipfile.ZipFile('results.zip').extractall('.')")
+# PowerShell 5.1 archives use backslash separators; normalise while extracting.
+python3 - "$OUT" <<'PY'
+import pathlib, sys, zipfile
+out = pathlib.Path(sys.argv[1])
+with zipfile.ZipFile(out / 'results.zip') as z:
+    for info in z.infolist():
+        target = out / info.filename.replace('\\', '/')
+        if info.filename.endswith(('/', '\\')):
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(z.read(info))
+PY
 find "$OUT" -name summary.txt -exec sh -c 'echo "== $1"; cat "$1"' _ {} \;
