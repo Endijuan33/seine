@@ -9,6 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
+- **About 10% more hashes in the first 15 minutes on Intel Xeon Sapphire Rapids and Emerald Rapids** (measured on Xeon Platinum 8488C): mining now starts on the memory-streaming kernel at every logical CPU. Other x86 CPUs can now discover it while mining.
 - **Mining starts hashing in seconds instead of up to half a minute on Linux** (measured on a 32-core EPYC 9355: 21 s to 1.5 s), adding about 2% more hashes in the first 15 minutes.
 - Linux no longer asks you to reserve HugeTLB pages when transparent huge pages are enabled; they made no measurable difference to hashrate.
 
