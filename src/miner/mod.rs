@@ -2144,17 +2144,31 @@ fn cpu_affinity_label(affinity: crate::config::CpuAffinityMode) -> &'static str 
 }
 
 fn cpu_autotune_host_fingerprint() -> CpuAutotuneHostFingerprint {
-    let mut sys = System::new();
-    sys.refresh_memory();
-    sys.refresh_cpu_all();
+    // Brand, physical cores and installed memory are fixed for the process. A
+    // sysinfo CPU refresh costs ~0.4 s on Windows and startup builds this
+    // fingerprint about ten times (5 s before the first worker on EPYC 9R14).
+    static HARDWARE: std::sync::OnceLock<(Option<String>, Option<usize>, u64)> =
+        std::sync::OnceLock::new();
+    let (cpu_brand, physical_cores, total_memory_bytes) = HARDWARE
+        .get_or_init(|| {
+            let mut sys = System::new();
+            sys.refresh_memory();
+            sys.refresh_cpu_all();
+            (
+                sys.cpus().first().map(|cpu| cpu.brand().to_string()),
+                sys.physical_core_count(),
+                sys.total_memory(),
+            )
+        })
+        .clone();
     CpuAutotuneHostFingerprint {
-        cpu_brand: sys.cpus().first().map(|cpu| cpu.brand().to_string()),
+        cpu_brand,
         cpu_arch: System::cpu_arch(),
         logical_cores: std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(0),
-        physical_cores: sys.physical_core_count(),
-        total_memory_bytes: sys.total_memory(),
+        physical_cores,
+        total_memory_bytes,
         os: std::env::consts::OS.to_string(),
         kernel_version: crate::runtime_identity::runtime_kernel_version(),
         runtime_environment: crate::runtime_identity::runtime_environment(),
