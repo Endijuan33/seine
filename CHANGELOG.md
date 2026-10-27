@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.42
 
 - **About 45% faster CPU hashing on cloud VMs that report "AMD EPYC" with a generic CPU model** (AuthenticAMD family 6, AVX2 only), including with `--threads`: they now use the memory-streaming kernel.
 
