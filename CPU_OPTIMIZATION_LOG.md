@@ -38,6 +38,7 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Same, Zen 3 neighbour check | EPYC 7R13 (c6a.8xlarge), same host, 15 min live each | lifetime 15.45 → 15.73 H/s (+1.8%); settled 21 → 24 workers, 771 → 585 s | no regression; adopted |
 | Explicit 2 MiB / 1 GiB HugeTLB instead of THP with streaming kernels | EPYC 9355 bare metal, 32 workers, 2 interleaved reps | THP 58.08/58.16; 2 MiB 57.97/58.07; 1 GiB 57.96/58.01 | rejected (±0.2%; July's +4% predates streaming). EPYC 9124P partial: THP 22.58, 2 MiB 22.53 |
 | `avx2-stream` on Windows | EPYC 7R13 (c6a.8xlarge, Windows Server 2025), 16 / 24 workers | 15.21 vs 10.97 (+39%) / 14.32 vs 9.57 (+50%); full 2 GiB parity (mingw build) | adopted: AVX2 streaming cohort now Linux + Windows |
+| Full-width AVX-512 compress in the ring-2 streaming loop (`avx512-stream`), Zen 5 server-class | EPYC 9355P research build 64 workers; EPYC 9R45 (c8a.8xlarge) 16 / 28 workers | +4.9%; 36.71 vs 35.02 (**+4.8%**) / 46.30 vs 45.94 (+0.8%); full 2 GiB parity | adopted for Zen 5 models 00h-1Fh only (9700X neutral, EPYC 9124P -1.5%) |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
