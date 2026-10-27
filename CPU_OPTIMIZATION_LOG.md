@@ -39,6 +39,15 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Explicit 2 MiB / 1 GiB HugeTLB instead of THP with streaming kernels | EPYC 9355 bare metal, 32 workers, 2 interleaved reps | THP 58.08/58.16; 2 MiB 57.97/58.07; 1 GiB 57.96/58.01 | rejected (±0.2%; July's +4% predates streaming). EPYC 9124P partial: THP 22.58, 2 MiB 22.53 |
 | `avx2-stream` on Windows | EPYC 7R13 (c6a.8xlarge, Windows Server 2025), 16 / 24 workers | 15.21 vs 10.97 (+39%) / 14.32 vs 9.57 (+50%); full 2 GiB parity (mingw build) | adopted: AVX2 streaming cohort now Linux + Windows |
 | Full-width AVX-512 compress in the ring-2 streaming loop (`avx512-stream`), Zen 5 server-class | EPYC 9355P research build 64 workers; EPYC 9R45 (c8a.8xlarge) 16 / 28 workers | +4.9%; 36.71 vs 35.02 (**+4.8%**) / 46.30 vs 45.94 (+0.8%); full 2 GiB parity | adopted for Zen 5 models 00h-1Fh only (9700X neutral, EPYC 9124P -1.5%) |
+| Far L2 prefetch (`prefetcht1`, 14 blocks ahead) of data-independent references, copied from a competitor's AVX-512 loop | EPYC 9124P (Zen 4), 16 / 28 workers | 24.03 vs 22.61 (**+6.3%**); rerun +6.9% / **+6.7%** (24.84 vs 23.31) | adopted for Zen 4 as `avx512-256-stream-l2` |
+| Same, distance 8 / 24 instead of 14 | EPYC 9124P, 16 workers | +6.9% / +6.7% | flat; 14 kept |
+| Same plus 16-byte NT stores | EPYC 9124P, 16 workers | +6.6% | stores add nothing; rejected |
+| Far L2 prefetch on Zen 4 desktop | Ryzen 7 7700X, 8 / 16 workers | +5.0% / +1.4% | confirms Zen 4 |
+| Far L2 prefetch on Zen 5 desktop | Ryzen 9 9900X, 12 / 24 workers | -1.9% / -2.8% (distance 8: -2.6% at 24) | rejected for Zen 5 client |
+| Far L2 prefetch in full-width `avx512-stream` | EPYC 9R45 (c8a.8xlarge), 16 / 28 workers | -2.2% / -1.2% (distance 24: -2.1% at 28) | rejected for Zen 5 server |
+| Far L2 prefetch in `avx2-stream` | EPYC 7313P (Zen 3), 16 workers | -1.5% | rejected for Zen 2/3 |
+| Same-host defaults vs competitors on Zen 4 desktop (far-prefetch build) | Ryzen 7 7700X | Seine autotune 14 lanes 12.20 H/s (3.6% late-hash bench loss); 0%-fee NTM 12.61 @16; 2%-fee Longhorn 12.45 @16 | gross parity |
+| Worker count on Zen 5 desktop | Ryzen 9 9900X, `avx512-256-stream` | 12 workers 12.08 vs 24 workers 11.20 (-7.3%) | open lead: Zen 5 client cold start at logical CPUs may start too high |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
