@@ -7,6 +7,10 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
+## Unreleased
+
+- **About 5% faster on 32 GiB Windows machines with 16 or more CPU threads** (measured on EPYC 9R45): automatic sizing now keeps at most 1 GiB of RAM in reserve, fitting one more 2 GiB worker.
+
 ## v0.2.42
 
 - **About 45% faster CPU hashing on cloud VMs that report "AMD EPYC" with a generic CPU model** (AuthenticAMD family 6, AVX2 only), including with `--threads`: they now use the memory-streaming kernel.
