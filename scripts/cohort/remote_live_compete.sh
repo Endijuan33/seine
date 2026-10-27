@@ -11,15 +11,30 @@ MINERS=${*:-seine ntmminer longhorn}
 W=/opt/cohort
 R=$W/results/live-compete-$SECS
 mkdir -p "$R/tls"
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=localhost \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout "$R/tls/key.pem" -out "$R/tls/cert.pem" 2>/dev/null
+# NTM speaks TLS only and trusts only bundled public roots, so it needs a publicly
+# trusted certificate: issue a short-lived Let's Encrypt IP certificate for this
+# host over HTTP-01 (port 80) before the isolated runs. Other miners use plain TCP.
+TLS_NAME=
+if [[ " $MINERS " == *" ntmminer "* ]]; then
+  TLS_NAME=$(curl -s --max-time 10 https://checkip.amazonaws.com)
+  if [ ! -x "$W/lego" ]; then
+    curl -sL --max-time 120 -o "$W/lego.tgz" https://github.com/go-acme/lego/releases/download/v4.25.2/lego_v4.25.2_linux_amd64.tar.gz
+    sha256sum "$W/lego.tgz" > "$R/lego.sha256"; tar -C "$W" -xzf "$W/lego.tgz" lego
+  fi
+  "$W/lego" --server https://acme-v02.api.letsencrypt.org/directory --path "$W/acme" --accept-tos \
+    --domains "$TLS_NAME" --http --http.port :80 run --profile shortlived > "$R/lego.log" 2>&1
+  crt=$(find "$W/acme/certificates" -name "$TLS_NAME.crt" | head -1)
+  key=$(find "$W/acme/certificates" -name "$TLS_NAME.key" | head -1)
+  if [ -n "$crt" ] && [ -n "$key" ]; then cp "$crt" "$R/tls/cert.pem"; cp "$key" "$R/tls/key.pem"
+  else echo "ntmminer: certificate issuance failed (see lego.log)" | tee -a "$R/summary.txt"; MINERS=${MINERS/ntmminer/}; fi
+fi
 printf '127.0.0.1 localhost bntpool.com\n' > "$R/hosts"
 chown -R bench:bench "$W"
 for m in $MINERS; do
   tls=() extra=()
   case $m in
     seine) exe=$W/candidate/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off) ;;
-    ntmminer) exe=$W/extra/NTMminer-BNT; tls=(--tls-cert "$R/tls/cert.pem" --tls-key "$R/tls/key.pem" --tls-name localhost) ;;
+    ntmminer) exe=$W/extra/NTMminer-BNT; tls=(--tls-cert "$R/tls/cert.pem" --tls-key "$R/tls/key.pem" --tls-name "$TLS_NAME") ;;
     longhorn) exe=$(ls -d $W/extra/longhorn-* | head -1)/longhorn ;;
   esac
   [ -x "$exe" ] || { echo "$m missing"; continue; }
