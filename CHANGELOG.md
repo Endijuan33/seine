@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.41
 
 - **About 10% more hashes in the first 15 minutes on Intel Xeon Sapphire Rapids and Emerald Rapids** (measured on Xeon Platinum 8488C): mining now starts on the memory-streaming kernel at every logical CPU. Other x86 CPUs can now discover it while mining.
 - **Mining starts hashing in seconds instead of up to half a minute on Linux** (measured on a 32-core EPYC 9355: 21 s to 1.5 s), adding about 2% more hashes in the first 15 minutes.
