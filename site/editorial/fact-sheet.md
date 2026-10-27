@@ -647,3 +647,7 @@ Energy budgeting distinguishes component sensors from whole-PC consumption and f
 ## Falling hashrate and wallet transaction fees (October 26, 2026)
 
 A running miner's current/session/device/pool measurements have different scopes; diagnosis compares like-for-like observations and resource evidence. Thermal/power causes need model-specific readings, not a universal threshold. The reviewed core send path estimates size from inputs/outputs/ring structure, with 1,000 atomic units minimum and 10 atomic units per estimated byte; 100,000,000 atomic units = 1 BNT. These are dated implementation defaults. CLI v1.2.0 displays a dry-run fee before confirmation, while the later send builds separately. See `research/hashrate-and-fees-2026-10-26.md` for pinned public sources, arithmetic and scope.
+
+## Faraday plan and node lifecycle (October 26, 2026)
+
+The official Faraday page describes a future network upgrade, with tentative activation around February 16, 2027 and a proposed one-year wallet migration period ending around February 16, 2028. Old-format coins would become unspendable after that window. Do not describe planned cryptography, mining rules or speedups as shipped behavior. CLI v1.2.0 manages a background core separately from attach; setup schedules updates, and outer status can trigger automatic update checks that restart unpinned managed cores. Attach status is distinct. Pinned sources and scope are recorded in `research/faraday-and-node-2026-10-26.md`.

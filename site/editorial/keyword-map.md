@@ -197,3 +197,12 @@ Old-PC guidance owns suitability and brief cost arithmetic; desktop use owns res
 | Blocknet transaction fees; check wallet fee before sending | `/blog/blocknet-transaction-fees/` | Understand size-based fee estimation and review recipient amount, fee and change before confirming a payment |
 
 Hashrate units and pool estimation belong to bntpool; CPU usage owns utilization; stopping owns process/backend failure; benchmarks own the measurement harness. The new diagnostic guide owns the running-session before/after decision path. Wallet setup owns creating/restoring a wallet, payment links own URI fields, mining fees belong to bntpool. The fee article owns transaction-size estimation, input/change accounting and the CLI preview. The user explicitly selected this fee topic. Neither article retargets an existing URL.
+
+## Faraday and node operation (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet Faraday upgrade; Blocknet network upgrade | `/blog/blocknet-faraday-upgrade/` | Understand the announced transition and distinguish future wallet migration, node updates and miner preparation |
+| run Blocknet node; Blocknet node setup | `/blog/run-blocknet-node/` | Install a managed mainnet core and inspect peers, sync progress, logs and update policy |
+
+The coin overview and privacy articles own current fundamentals; Faraday owns the dated upgrade plan and role-specific preparation. Wallet setup owns keys and addresses; checkpoints owns sync acceleration details on bntpool. Node operation owns the background process, network health and lifecycle. Neither article retargets an existing URL.
