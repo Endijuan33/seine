@@ -22,7 +22,9 @@ OPTS=(-i "$KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 
 for _ in $(seq 90); do timeout 20 ssh "${OPTS[@]}" "Administrator@$IP" 'echo ready' 2>/dev/null | grep -q ready && break; sleep 10; done
 ssh "${OPTS[@]}" "Administrator@$IP" 'New-Item -ItemType Directory -Force C:\cohort\candidate | Out-Null'
 scp "${OPTS[@]}" "$CAND"/seine.exe "$CAND"/verify_cpu_kernels.exe "Administrator@$IP:C:/cohort/candidate/"
-scp "${OPTS[@]}" "$HERE/$PS1" "Administrator@$IP:C:/cohort/"
+scp "${OPTS[@]}" "$HERE/$PS1" "$HERE/pool_fixture.py" "$HERE/live_summary.py" "Administrator@$IP:C:/cohort/"
+# Optional EXTRA_DIR (competitor binaries, Python, ...) is uploaded as C:\cohort\extra.
+if [ -n "${EXTRA_DIR:-}" ]; then scp -r "${OPTS[@]}" "$EXTRA_DIR" "Administrator@$IP:C:/cohort/extra"; fi
 ssh "${OPTS[@]}" "Administrator@$IP" "powershell -ExecutionPolicy Bypass -File C:\\cohort\\$PS1 $*" || true
 ssh "${OPTS[@]}" "Administrator@$IP" 'Compress-Archive -Force C:\cohort\results C:\cohort\results.zip'
 scp "${OPTS[@]}" "Administrator@$IP:C:/cohort/results.zip" "$OUT/"
