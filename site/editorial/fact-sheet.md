@@ -639,3 +639,7 @@ v0.2.37 prints handled fatal errors before exit; `--ui plain` selects logs while
 ## Desktop sharing and connection quality (October 26, 2026)
 
 v0.2.38 supports CPU-only/NVIDIA-only selection, an automatic CPU search ceiling and explicit per-backend counts. Efficiency is a count/hashrate policy, not a CPU-utilization or measured-power cap. Dashboard count changes restart backends and reconnect, remain session-only and disable CPU autotuning for that run. Pool transport carries jobs, qualifying submissions and replies; local H/s and network bandwidth measure different work. See `research/desktop-and-network-2026-10-26.md` for source anchors, controlled-comparison procedure and verification limits.
+
+## Electricity and intermittent sessions (October 26, 2026)
+
+Energy budgeting distinguishes component sensors from whole-PC consumption and full from incremental use. The efficiency profile is a hashrate/thread selection policy, not a measured-watt cap. bntpool's current six-hour window uses share timestamps; reconnecting does not renew previous shares, and payout processing does not require a currently connected miner. Source anchors, explicit arithmetic assumptions and the stop/return example are recorded in `research/electricity-and-part-time-2026-10-26.md`.

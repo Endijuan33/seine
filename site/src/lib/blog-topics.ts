@@ -34,6 +34,7 @@ const groups: Record<string, readonly string[]> = {
     "how-crypto-mining-works"
   ],
   "hardware": [
+    "mining-electricity-use",
     "mine-while-using-pc",
     "miner-cpu-usage",
     "benchmark-seine-miner",

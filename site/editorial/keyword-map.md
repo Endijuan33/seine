@@ -180,3 +180,11 @@ Configuration owns saved settings; RAM and huge pages own resource setup; NVIDIA
 | mine while using PC; mining desktop responsiveness | `/blog/mine-while-using-pc/` | Choose a repeatable mining configuration around a foreground desktop workload |
 
 CPU usage owns utilization interpretation; tuning owns automatic selection; RAM owns capacity planning. This guide owns the foreground-task comparison and daily-use launch routine. No existing URL is retargeted.
+
+## Electricity and part-time mining (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet mining electricity use; mining energy cost | `/blog/mining-electricity-use/` | Define measurement scope, convert energy and calculate total versus incremental electricity cost |
+
+Old-PC guidance owns suitability and brief cost arithmetic; desktop use owns responsiveness; benchmarks own hashrate testing. This article owns whole-PC versus component measurement, full versus incremental consumption and tariff interval budgeting. No existing URL is retargeted.
