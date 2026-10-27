@@ -141,6 +141,15 @@ fn cohort_stream_kernel(
     identity: &crate::runtime_identity::CpuIdentity,
     supported: &[CpuKernel],
 ) -> Option<CpuKernel> {
+    // Intel Sapphire Rapids (06h/8Fh) and Emerald Rapids (06h/CFh, same Raptor
+    // Cove core): streaming beat plain AVX-512 by 14.5% / 19.3% at 16 / 32 workers
+    // on a Xeon Platinum 8488C (m7i.8xlarge) with full 2 GiB parity.
+    if identity.vendor.as_deref() == Some("GenuineIntel") {
+        return (identity.family == Some(6)
+            && matches!(identity.model, Some(0x8f | 0xcf))
+            && supported.contains(&CpuKernel::Avx512256Stream))
+        .then_some(CpuKernel::Avx512256Stream);
+    }
     if identity.vendor.as_deref() != Some("AuthenticAMD") {
         return None;
     }
@@ -2557,6 +2566,20 @@ mod tests {
             candidates_for(&CpuIdentity::default(), &supported),
             supported[..2]
         );
+        // Sapphire and Emerald Rapids start on streaming; other Intel models do not.
+        for (model, stream) in [(0x8f, true), (0xcf, true), (0xad, false), (0x55, false)] {
+            let xeon = CpuIdentity {
+                vendor: Some("GenuineIntel".into()),
+                family: Some(6),
+                model: Some(model),
+                ..CpuIdentity::default()
+            };
+            assert_eq!(candidates_for(&xeon, &supported), supported);
+            assert_eq!(
+                startup_kernel_for(&xeon, &supported),
+                stream.then_some(CpuKernel::Avx512256Stream)
+            );
+        }
         assert_eq!(
             candidates_for(&turin, &[CpuKernel::Avx2]),
             [CpuKernel::Avx2]
