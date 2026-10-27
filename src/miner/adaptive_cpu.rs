@@ -196,12 +196,30 @@ fn initial_threads(
     available: usize,
     memory_capacity: usize,
     full_count: bool,
+    cohort_start: Option<usize>,
 ) -> usize {
-    if record.is_none() && full_count {
-        max.min(memory_capacity).min(available)
-    } else {
-        seed_threads(record, min, max, available, memory_capacity)
+    match (record, full_count, cohort_start) {
+        (None, true, _) => max.min(memory_capacity).min(available),
+        (None, false, Some(start)) if available > 0 => {
+            start.clamp(min.min(available), max.min(memory_capacity).min(available))
+        }
+        _ => seed_threads(record, min, max, available, memory_capacity),
     }
+}
+
+// Cold start for CPUs whose cohort mines on a streaming kernel (AMD Zen 2-5).
+// Native hosts reach or plateau near their peak by the physical core count
+// (Ryzen 7 9700X, EPYC 7443P/7R32/9R14), while the generic midpoint estimate
+// started a 32-core Zen 5 host at 14 of 28 workers and took ~16 minutes and
+// ~20% of early hashrate to climb. Repeated count trials still decide.
+fn cohort_cold_start(cfg: &Config, host: &CpuAutotuneHostFingerprint) -> Option<usize> {
+    // Unit tests stay host-independent; `initial_threads` covers the policy.
+    (!cfg!(test)
+        && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
+        && super::adaptive_kernel::cohort_kernel().is_some())
+    .then_some(host.physical_cores)
+    .flatten()
+    .filter(|&cores| cores > 0)
 }
 
 // Threads already running (including the API's Tokio worker pool) are charged
@@ -308,6 +326,10 @@ fn prepare_with_resources(
             max,
             memory_capacity,
         ));
+    let cohort_start = seed
+        .is_none()
+        .then(|| cohort_cold_start(cfg, &cpu_autotune_host_fingerprint()))
+        .flatten();
     let threads = initial_threads(
         seed.as_ref(),
         min,
@@ -315,6 +337,7 @@ fn prepare_with_resources(
         available,
         memory_capacity,
         full_count,
+        cohort_start,
     );
     // Zero is intentional here. A parked CPU backend stays connected and can
     // recover when a whole arena plus the configured reserve fits again.
@@ -334,6 +357,8 @@ fn prepare_with_resources(
         "waiting for RAM"
     } else if seed.is_some() {
         "cached starting point"
+    } else if cohort_start.is_some() && !full_count {
+        "physical cores for this CPU family"
     } else {
         "initial estimate"
     };
@@ -2652,13 +2677,27 @@ mod tests {
     fn full_count_seed_preserves_cache_and_transient_resource_limits() {
         let cfg = super::super::tests::test_config();
         let cached = record(&cfg, 24);
-        assert_eq!(initial_threads(None, 1, 32, 32, 32, true), 32);
-        assert_eq!(initial_threads(None, 1, 32, 32, 32, false), 16);
-        assert_eq!(initial_threads(Some(&cached), 1, 32, 32, 32, true), 24);
-        assert_eq!(initial_threads(Some(&cached), 1, 32, 8, 32, true), 8);
-        assert_eq!(initial_threads(None, 1, 32, 8, 32, true), 8);
-        assert_eq!(initial_threads(None, 1, 32, 32, 8, true), 8);
-        assert_eq!(initial_threads(None, 1, 32, 0, 32, true), 0);
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, true, None), 32);
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, false, None), 16);
+        assert_eq!(
+            initial_threads(Some(&cached), 1, 32, 32, 32, true, None),
+            24
+        );
+        assert_eq!(initial_threads(Some(&cached), 1, 32, 8, 32, true, None), 8);
+        assert_eq!(initial_threads(None, 1, 32, 8, 32, true, None), 8);
+        assert_eq!(initial_threads(None, 1, 32, 32, 8, true, None), 8);
+        assert_eq!(initial_threads(None, 1, 32, 0, 32, true, None), 0);
+        // Streaming cohorts start at the physical core count, bounded by RAM;
+        // cached results and the validated full-count contexts still take precedence.
+        assert_eq!(initial_threads(None, 1, 32, 28, 28, false, Some(32)), 28);
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, false, Some(8)), 8);
+        assert_eq!(initial_threads(None, 1, 32, 6, 32, false, Some(8)), 6);
+        assert_eq!(initial_threads(None, 1, 32, 0, 32, false, Some(8)), 0);
+        assert_eq!(
+            initial_threads(Some(&cached), 1, 32, 32, 32, false, Some(8)),
+            24
+        );
+        assert_eq!(initial_threads(None, 1, 32, 32, 32, true, Some(8)), 32);
     }
 
     fn record(cfg: &Config, selected_threads: usize) -> CpuAutotuneRecord {
