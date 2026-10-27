@@ -643,3 +643,7 @@ v0.2.38 supports CPU-only/NVIDIA-only selection, an automatic CPU search ceiling
 ## Electricity and intermittent sessions (October 26, 2026)
 
 Energy budgeting distinguishes component sensors from whole-PC consumption and full from incremental use. The efficiency profile is a hashrate/thread selection policy, not a measured-watt cap. bntpool's current six-hour window uses share timestamps; reconnecting does not renew previous shares, and payout processing does not require a currently connected miner. Source anchors, explicit arithmetic assumptions and the stop/return example are recorded in `research/electricity-and-part-time-2026-10-26.md`.
+
+## Falling hashrate and wallet transaction fees (October 26, 2026)
+
+A running miner's current/session/device/pool measurements have different scopes; diagnosis compares like-for-like observations and resource evidence. Thermal/power causes need model-specific readings, not a universal threshold. The reviewed core send path estimates size from inputs/outputs/ring structure, with 1,000 atomic units minimum and 10 atomic units per estimated byte; 100,000,000 atomic units = 1 BNT. These are dated implementation defaults. CLI v1.2.0 displays a dry-run fee before confirmation, while the later send builds separately. See `research/hashrate-and-fees-2026-10-26.md` for pinned public sources, arithmetic and scope.

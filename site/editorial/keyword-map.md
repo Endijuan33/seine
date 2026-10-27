@@ -188,3 +188,12 @@ CPU usage owns utilization interpretation; tuning owns automatic selection; RAM 
 | Blocknet mining electricity use; mining energy cost | `/blog/mining-electricity-use/` | Define measurement scope, convert energy and calculate total versus incremental electricity cost |
 
 Old-PC guidance owns suitability and brief cost arithmetic; desktop use owns responsiveness; benchmarks own hashrate testing. This article owns whole-PC versus component measurement, full versus incremental consumption and tariff interval budgeting. No existing URL is retargeted.
+
+## Falling hashrate and wallet fees (October 26, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| mining hashrate dropping; miner slower during session | `/blog/mining-hashrate-dropping/` | Locate a sustained change in a running session using matched readings, device scope and resource evidence |
+| Blocknet transaction fees; check wallet fee before sending | `/blog/blocknet-transaction-fees/` | Understand size-based fee estimation and review recipient amount, fee and change before confirming a payment |
+
+Hashrate units and pool estimation belong to bntpool; CPU usage owns utilization; stopping owns process/backend failure; benchmarks own the measurement harness. The new diagnostic guide owns the running-session before/after decision path. Wallet setup owns creating/restoring a wallet, payment links own URI fields, mining fees belong to bntpool. The fee article owns transaction-size estimation, input/change accounting and the CLI preview. The user explicitly selected this fee topic. Neither article retargets an existing URL.

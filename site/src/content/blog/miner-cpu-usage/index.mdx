@@ -10,7 +10,7 @@ faq:
     a: 'Each active CPU mining thread needs a 2 GiB memory arena, and threads share memory bandwidth. Automatic selection considers memory and tests throughput instead of assuming every logical processor should have a mining thread. Explicit limits, backend selection and the available execution environment also affect the active count.'
   - q: 'What should I check if CPU usage and hashrate both fall?'
     a: 'Check the CPU backend state, active thread count, recent tuning and memory messages, and whether the miner has a current job. Compare the same device and time interval, then inspect background load and execution limits. For connection or zero-pool-hashrate problems, follow the pool tracking guide rather than increasing threads immediately.'
-related: [mine-while-using-pc, seine-automatic-cpu-tuning, benchmark-seine-miner, how-much-ram-to-mine-blocknet]
+related: [mining-hashrate-dropping, mine-while-using-pc, seine-automatic-cpu-tuning, benchmark-seine-miner]
 image: /assets/blog/miner-cpu-usage.svg
 ---
 
