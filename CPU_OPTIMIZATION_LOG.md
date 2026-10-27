@@ -48,6 +48,10 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Far L2 prefetch in `avx2-stream` | EPYC 7313P (Zen 3), 16 workers | -1.5% | rejected for Zen 2/3 |
 | Same-host defaults vs competitors on Zen 4 desktop (far-prefetch build) | Ryzen 7 7700X | Seine autotune 14 lanes 12.20 H/s (3.6% late-hash bench loss); 0%-fee NTM 12.61 @16; 2%-fee Longhorn 12.45 @16 | gross parity |
 | Worker count on Zen 5 desktop | Ryzen 9 9900X, `avx512-256-stream` | 12 workers 12.08 vs 24 workers 11.20 (-7.3%) | open lead: Zen 5 client cold start at logical CPUs may start too high |
+| `avx512-256-stream-l2` production build, kernel A/B and live bntpool (15 min each, tuner from cold) | Ryzen 7 7700X | bench +4.0% / +1.0% at 8 / 16; live lifetime 12.00 -> 12.11 H/s (+1.0%), steady 12.54 -> 12.76 (+1.7%) at the tuner's 16 workers | validated; full 2 GiB parity |
+| No periodic SFENCE in full-width `avx512-stream` | EPYC 9355 bare metal, 32 / 64 workers | -0.5% / -0.6% | rejected; SFENCE stays |
+| Live default mining vs a 0%-fee competitor's bench, same host | EPYC 9355 bare metal | Seine lifetime 78.9 H/s, steady ~83 at 64 workers (15 min bntpool); competitor bench 83.4 @64 | Turin gross parity in live mining |
+| Bench accounting at high lane counts | Ryzen 9 9900X curve 8-24 workers | exactly one uncounted late hash per lane per round (24 of 262 at 24 lanes); live 24-worker trial windows read 12.4-12.6 vs bench 11.4 | bench understates high counts ~0.5 hash/lane/round; compare counts live, not by bench |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
