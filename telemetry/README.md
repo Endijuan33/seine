@@ -4,6 +4,28 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 8 adds fixed API-stop, API-restart, TUI-quit and TUI-thread-change origins,
+plus the last entered cleanup step. Current-run reports and interrupted-run
+checkpoints retain these independently. Cleanup transitions are saved directly,
+including while an upload is blocked; ordinary checkpointing remains periodic.
+A stop request is not a termination cause, and entering a cleanup step does not
+prove it completed. Unknown/absent values remain unknown.
+
+NVIDIA diagnostics include the loaded driver's CUDA compatibility version and
+loaded NVRTC compiler version, encoded as `major * 1000 + minor * 10`. The driver
+value is **not** the display-driver release number or installed toolkit version.
+Seine uses the CUDA driver API and NVRTC, not the CUDA Runtime (`cudart`), so it
+does not invent a CUDA Runtime version. Optional version symbols are queried
+without creating a GPU context or launching an external status process; missing
+symbols and failed queries leave fields absent. The fixed dependency-source
+allowlist now also covers the linked cudarc 0.19.5 release.
+
+Deploy the schema-8 collector before releasing schema-8 miners: a schema-7
+collector rejects their reports. Historical schemas remain accepted; no SQL
+storage migration or alert-threshold change is required. `diagnostics.sql` exposes
+software versions, interrupted cleanup steps and current shutdown-context clusters.
+Those clusters count reporting installations, not clean exits or proven crashes.
+
 Schema 7 adds a fixed `previous_run.shutdown_request` enum and typed unavailable
 NVIDIA driver/NVRTC library causes. The collector continues to accept schemas 1–6;
 deploy schema-7 support before releasing schema-7 miners. No database migration is

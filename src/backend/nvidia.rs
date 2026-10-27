@@ -36,16 +36,54 @@ const BACKEND_NAME: &str = "nvidia";
 // Check the dependency's own library search before its infallible accessor can
 // panic. Successful checks are cached; a failed check can be retried next start.
 fn require_cuda_libraries() -> Result<()> {
-    static READY: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-    if READY.get().is_some() {
+    static READY: std::sync::OnceLock<seine_telemetry::NvidiaSoftware> = std::sync::OnceLock::new();
+    if let Some(software) = READY.get() {
+        crate::diagnostics::nvidia_software(software.clone());
         return Ok(());
     }
-    check_cuda_libraries(
-        || unsafe { cudarc::driver::sys::is_culib_present() },
-        || unsafe { nvrtc_sys::is_culib_present() },
-    )?;
-    let _ = READY.set(());
+    let driver = unsafe { cudarc::driver::sys::is_culib_present() };
+    let nvrtc = driver && unsafe { nvrtc_sys::is_culib_present() };
+    let software = cuda_software_versions(driver, nvrtc);
+    crate::diagnostics::nvidia_software(software.clone());
+    check_cuda_libraries(|| driver, || nvrtc)?;
+    let _ = READY.set(software);
     Ok(())
+}
+
+// Query optional symbols from the SAME loaded libraries used by mining. A missing
+// version symbol must never trigger the dependency's infallible/panicking wrapper.
+// No context, device enumeration, NVML or external process is needed.
+fn cuda_software_versions(driver: bool, nvrtc: bool) -> seine_telemetry::NvidiaSoftware {
+    let mut software = seine_telemetry::NvidiaSoftware::default();
+    unsafe {
+        if driver {
+            type Version = unsafe extern "C" fn(*mut i32) -> cudarc::driver::sys::CUresult;
+            if let Ok(query) = cudarc::driver::sys::culib().get::<Version>(b"cuDriverGetVersion\0")
+            {
+                let mut version = 0;
+                if query(&mut version) == cudarc::driver::sys::CUresult::CUDA_SUCCESS {
+                    software.driver_cuda_version = valid_cuda_version(version);
+                }
+            }
+        }
+        if nvrtc {
+            type Version = unsafe extern "C" fn(*mut i32, *mut i32) -> nvrtc_sys::nvrtcResult;
+            if let Ok(query) = nvrtc_sys::culib().get::<Version>(b"nvrtcVersion\0") {
+                let (mut major, mut minor) = (0, 0);
+                if query(&mut major, &mut minor) == nvrtc_sys::nvrtcResult::NVRTC_SUCCESS
+                    && (1..=999).contains(&major)
+                    && (0..=99).contains(&minor)
+                {
+                    software.nvrtc_version = valid_cuda_version(major * 1000 + minor * 10);
+                }
+            }
+        }
+    }
+    software
+}
+
+fn valid_cuda_version(version: i32) -> Option<u32> {
+    ((1000..=999_990).contains(&version) && version % 10 == 0).then_some(version as u32)
 }
 
 fn check_cuda_libraries(driver: impl FnOnce() -> bool, nvrtc: impl FnOnce() -> bool) -> Result<()> {
@@ -78,6 +116,31 @@ fn check_cuda_libraries(driver: impl FnOnce() -> bool, nvrtc: impl FnOnce() -> b
 #[cfg(test)]
 mod library_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires scripts/test_cuda_versions.py loader isolation"]
+    fn software_version_probe() {
+        let mode = std::env::var("SEINE_TEST_CUDA_VERSIONS").unwrap();
+        let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        require_cuda_libraries().unwrap();
+        let software = guard.0.snapshot(false).nvidia_software;
+        if mode == "present" {
+            assert_eq!(
+                software,
+                Some(seine_telemetry::NvidiaSoftware {
+                    driver_cuda_version: Some(12080),
+                    nvrtc_version: Some(12090),
+                })
+            );
+            // Cached library readiness must still populate each new session.
+            let next = crate::diagnostics::install(crate::diagnostics::test_context());
+            require_cuda_libraries().unwrap();
+            assert_eq!(next.0.checkpoint().nvidia_software, software);
+        } else {
+            assert_eq!(software, None);
+        }
+        assert!(guard.0.snapshot(true).events.is_empty());
+    }
 
     #[test]
     #[ignore = "requires scripts/test_cuda_unused_symbol.py loader isolation"]

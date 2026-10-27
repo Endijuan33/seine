@@ -252,6 +252,7 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         shutdown,
         None,
         Arc::new(session::SessionHistory::new()),
+        Arc::default(),
     )
 }
 
@@ -260,6 +261,7 @@ pub(crate) fn run_with_thread_control(
     shutdown: Arc<AtomicBool>,
     thread_control: Option<thread_control::ThreadControl>,
     history: Arc<session::SessionHistory>,
+    stop_origin: Arc<crate::diagnostics::StopOrigin>,
 ) -> Result<()> {
     if cfg.bench {
         return bench::run_benchmark(cfg, shutdown.as_ref());
@@ -270,6 +272,9 @@ pub(crate) fn run_with_thread_control(
         .hardware_telemetry
         .as_ref()
         .and_then(|options| crate::hardware_telemetry::start(options, cfg).ok());
+    if let Some((_, worker)) = &telemetry {
+        worker.attach_stop_origin(&stop_origin);
+    }
     let recorder = telemetry.as_ref().map(|(recorder, _)| recorder.clone());
     let result = normalize_startup_cancellation(run_with_thread_control_inner(
         cfg,
@@ -286,6 +291,7 @@ pub(crate) fn run_with_thread_control(
         );
     }
     crate::diagnostics::set_phase(seine_telemetry::RunPhase::ShuttingDown);
+    crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::FinalizingTelemetry);
     drop(telemetry);
     result
 }
@@ -1108,6 +1114,7 @@ fn run_with_thread_control_inner(
     };
 
     crate::diagnostics::set_phase(seine_telemetry::RunPhase::ShuttingDown);
+    crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::StoppingAutotune);
     adaptive_controller.stop();
     let shutdown_requested = shutdown.load(Ordering::SeqCst);
     info("MINER", "shutting down: stopping backends...");
@@ -1123,6 +1130,7 @@ fn run_with_thread_control_inner(
         format!("backends stopped in {:.1}s", stop_t.elapsed().as_secs_f64()),
     );
     shutdown.store(true, Ordering::SeqCst);
+    crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::StoppingTipListener);
     if let Some(listener) = tip_listener {
         if shutdown_requested {
             listener.detach();
@@ -2716,6 +2724,7 @@ fn stop_backend_slots(
     stop_timeout: Duration,
     log_tag: &'static str,
 ) {
+    crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::StoppingBackends);
     for slot in backends.iter() {
         backend_executor.quarantine_backend(slot.id, Arc::clone(&slot.backend));
     }

@@ -64,7 +64,12 @@ build revision and release. Checkpoints preserve up to eight diagnostic groups
 from that run, prioritizing panics/errors and structured causes, with an indication
 when groups were omitted. These checkpoints do not identify the termination cause.
 They can also retain a fixed code for an observed interrupt, console close, logoff
-or system shutdown request. This records the request, not whether cleanup completed.
+or system shutdown request, API stop/restart, or TUI quit/thread-count restart.
+Current-run summaries and interrupted-run checkpoints can include the last entered
+cleanup step. This records the request and progress, not whether cleanup completed.
+NVIDIA runs can include the loaded driver's CUDA compatibility version and loaded
+NVRTC compiler version as bounded numbers. These are not the installed NVIDIA
+display-driver release or toolkit version. Missing version queries remain absent.
 Loader failures can identify an unavailable NVIDIA driver or CUDA compiler library
 without uploading library search paths or error messages.
 
@@ -83,7 +88,7 @@ hardware serial numbers, command lines or raw logs.
 
 Regular reports are attempted after five minutes of a mining run, followed by
 hourly reports. A mining run that ends with diagnostics or paired trial evidence
-can attempt a final report, including failures before the first regular report. Reports use HTTPS, except
+can attempt a final report, including stop/cleanup context and failures before the first regular report. Reports use HTTPS, except
 when explicitly configured for a local loopback test server. Collection failures
 do not stop mining.
 

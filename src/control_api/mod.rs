@@ -344,6 +344,7 @@ struct SupervisorState {
     stopped_at_unix_ms: Option<u64>,
     last_error: Option<String>,
     session_shutdown: Option<Arc<AtomicBool>>,
+    stop_origin: Arc<crate::diagnostics::StopOrigin>,
     session_history: Option<Arc<SessionHistory>>,
     effective_config: Option<Config>,
     staged_config: Option<Config>,
@@ -364,6 +365,7 @@ impl Default for SupervisorState {
             stopped_at_unix_ms: None,
             last_error: None,
             session_shutdown: None,
+            stop_origin: Arc::default(),
             session_history: None,
             effective_config: None,
             staged_config: None,
@@ -660,6 +662,7 @@ impl MinerSupervisor {
 
         let history = preserved_history.unwrap_or_else(|| Arc::new(SessionHistory::new()));
         let run_shutdown = Arc::new(AtomicBool::new(false));
+        let stop_origin = Arc::new(crate::diagnostics::StopOrigin::default());
         let run_shutdown_for_worker = Arc::clone(&run_shutdown);
         let cfg_for_worker = cfg.clone();
 
@@ -687,6 +690,7 @@ impl MinerSupervisor {
             state.stopped_at_unix_ms = None;
             state.last_error = None;
             state.session_shutdown = Some(Arc::clone(&run_shutdown));
+            state.stop_origin = Arc::clone(&stop_origin);
             state.effective_config = Some(cfg.clone());
             state.backend_phases.clear();
             state.pending_nvidia_count = 0;
@@ -734,6 +738,7 @@ impl MinerSupervisor {
                         Arc::clone(&run_shutdown_for_worker),
                         Some(thread_control),
                         history,
+                        stop_origin,
                     )
                 }))
                 .unwrap_or_else(|_| Err(anyhow!("miner session panicked")));
@@ -794,14 +799,26 @@ impl MinerSupervisor {
     }
 
     fn stop(&self, request: StopRequest) -> ActionResponse {
+        self.stop_with_origin(request, Some(seine_telemetry::ShutdownRequest::ApiStop))
+    }
+
+    fn stop_with_origin(
+        &self,
+        request: StopRequest,
+        origin: Option<seine_telemetry::ShutdownRequest>,
+    ) -> ActionResponse {
         let _operation = self
             .operations
             .lock()
             .expect("supervisor operation lock poisoned");
-        self.stop_session(request)
+        self.stop_session(request, origin)
     }
 
-    fn stop_session(&self, request: StopRequest) -> ActionResponse {
+    fn stop_session(
+        &self,
+        request: StopRequest,
+        origin: Option<seine_telemetry::ShutdownRequest>,
+    ) -> ActionResponse {
         let wait = request
             .wait_ms
             .map(Duration::from_millis)
@@ -817,6 +834,9 @@ impl MinerSupervisor {
             state.metrics.stop_requests = state.metrics.stop_requests.saturating_add(1);
             previous = state.lifecycle;
             if let Some(flag) = state.session_shutdown.as_ref() {
+                if let Some(origin) = origin {
+                    state.stop_origin.request(origin);
+                }
                 flag.store(true, Ordering::SeqCst);
                 requested = true;
                 state.lifecycle = MinerLifecycle::Stopping;
@@ -880,9 +900,16 @@ impl MinerSupervisor {
             // An explicit API restart still starts a fresh session.
             quit_requested.and_then(|_| state.session_history.clone())
         };
-        let _ = self.stop_session(StopRequest {
-            wait_ms: Some(15_000),
-        });
+        let _ = self.stop_session(
+            StopRequest {
+                wait_ms: Some(15_000),
+            },
+            Some(if quit_requested.is_some() {
+                seine_telemetry::ShutdownRequest::TuiThreadChange
+            } else {
+                seine_telemetry::ShutdownRequest::ApiRestart
+            }),
+        );
         if quit_requested.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
             return Ok(ActionResponse {
                 ok: true,
@@ -1190,9 +1217,12 @@ pub(crate) fn run_interactive(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<
         supervisor.start(StartRequest::default(), true)?;
         loop {
             if shutdown.load(Ordering::SeqCst) {
-                supervisor.stop(StopRequest {
-                    wait_ms: Some(60_000),
-                });
+                supervisor.stop_with_origin(
+                    StopRequest {
+                        wait_ms: Some(60_000),
+                    },
+                    crate::shutdown::requested(),
+                );
                 return Ok(());
             }
             if let Err(err) = supervisor.apply_pending_thread_change() {
@@ -1363,9 +1393,12 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         let _ = std::fs::remove_file(&cfg.api_cookie_path);
     }
     drop(thread_control_worker);
-    let _ = supervisor.stop(StopRequest {
-        wait_ms: Some(15_000),
-    });
+    let _ = supervisor.stop_with_origin(
+        StopRequest {
+            wait_ms: Some(15_000),
+        },
+        crate::shutdown::requested(),
+    );
     set_log_sink(None);
 
     result.context("control API server exited unexpectedly")?;
@@ -2583,6 +2616,36 @@ mod tests {
             map.insert(name.clone(), value.parse().unwrap());
         }
         map
+    }
+
+    #[test]
+    fn api_stop_records_origin_but_internal_teardown_does_not_invent_one() {
+        let _lock = crate::diagnostics::TEST_LOCK.lock().unwrap();
+        for api_request in [true, false] {
+            let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+            let supervisor = MinerSupervisor::new(
+                crate::miner::tests::test_config(),
+                Arc::new(AtomicBool::new(false)),
+            );
+            let shutdown = Arc::new(AtomicBool::new(false));
+            {
+                let mut state = supervisor.state.lock().unwrap();
+                state.session_shutdown = Some(shutdown.clone());
+                state.lifecycle = MinerLifecycle::Running;
+                state.stop_origin.attach(&guard.0);
+            }
+            let request = StopRequest { wait_ms: Some(1) };
+            if api_request {
+                supervisor.stop(request);
+            } else {
+                supervisor.stop_with_origin(request, None);
+            }
+            assert!(shutdown.load(Ordering::SeqCst));
+            assert_eq!(
+                guard.0.checkpoint().shutdown_request,
+                api_request.then_some(seine_telemetry::ShutdownRequest::ApiStop)
+            );
+        }
     }
 
     #[test]

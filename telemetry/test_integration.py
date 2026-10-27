@@ -323,3 +323,28 @@ if runtime_fixture := os.environ.get('TELEMETRY_TEST_TRIAL_FIXTURE'):
         assert send(invalid_context) == 204
         assert analysis('tuning_report.sql')['qualified_trials'] == before + 5
     print('PASS: runtime Monitor output accepted, five-installation research hint, changed/unknown context excluded and unknown costs preserved')
+
+# Schema 8 preserves current and interrupted-run context independently.
+context = json.loads(json.dumps(shutdown))
+context['schema_version'] = 8
+context['installation_id'] = uuid.uuid4().hex
+context['report_id'] = uuid.uuid4().hex
+context['diagnostics'].update(shutdown_request='api_stop', cleanup_stage='finalizing_telemetry',
+                              nvidia_software={'driver_cuda_version': 12080, 'nvrtc_version': 12090})
+context['diagnostics']['previous_run'].update(shutdown_request='tui_quit', cleanup_stage='stopping_backends',
+                                             nvidia_software={'driver_cuda_version': 12060})
+assert send(context) == 204
+stored = json.loads(query(f"SELECT payload->'diagnostics' FROM telemetry_reports WHERE report_id='{context['report_id']}'"))
+for name in ('shutdown_request', 'cleanup_stage', 'nvidia_software'):
+    assert stored[name] == context['diagnostics'][name]
+    assert stored['previous_run'][name] == context['diagnostics']['previous_run'][name]
+for field in ('shutdown_request', 'cleanup_stage', 'nvidia_software', 'downgrade'):
+    bad = json.loads(json.dumps(context))
+    bad['installation_id'] = uuid.uuid4().hex
+    bad['report_id'] = uuid.uuid4().hex
+    if field == 'downgrade':
+        bad['schema_version'] = 7
+    else:
+        bad['diagnostics'][field] = 'private free text'
+    assert send(bad) == 422
+print('PASS: schema 8 current/previous context persistence, downgrade and free-text rejection')

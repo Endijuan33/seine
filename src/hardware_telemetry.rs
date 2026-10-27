@@ -393,6 +393,12 @@ pub(crate) struct Worker {
     _diagnostics: crate::diagnostics::Guard,
 }
 
+impl Worker {
+    pub(crate) fn attach_stop_origin(&self, origin: &crate::diagnostics::StopOrigin) {
+        origin.attach(&self._diagnostics.0);
+    }
+}
+
 impl Drop for Worker {
     fn drop(&mut self) {
         // Mining is finished even if a previous HTTP request is still blocked.
@@ -516,7 +522,7 @@ fn start_with_context(
                             .attach(&store);
                         diagnostics.set_previous_unclean(unclean);
                         diagnostics.set_previous_run(store.previous_run.clone());
-                        store.checkpoint(&options.installation_id, diagnostics.checkpoint());
+                        diagnostics.attach_checkpoint_store(&store, &options.installation_id);
                         store
                     },
                 );
@@ -559,9 +565,8 @@ fn start_with_context(
                     } else if Instant::now() >= next_checkpoint
                         || saved_shutdown != crate::shutdown::requested()
                     {
-                        let checkpoint = diagnostics.checkpoint();
-                        saved_shutdown = checkpoint.shutdown_request;
-                        store.checkpoint(&options.installation_id, checkpoint);
+                        saved_shutdown = crate::shutdown::requested();
+                        diagnostics.persist_checkpoint();
                         next_checkpoint = Instant::now() + Duration::from_secs(5);
                     }
                 }
@@ -577,11 +582,21 @@ fn start_with_context(
                 }
                 let tuning = samples.drain_tuning();
                 let diagnostic_snapshot = diagnostics.snapshot(final_report);
+                let has_stop_context = diagnostic_snapshot.shutdown_request.is_some()
+                    || diagnostic_snapshot.cleanup_stage.is_some();
                 let has_diagnostics = !diagnostic_snapshot.events.is_empty()
                     || diagnostic_snapshot.previous_run_unclean
                     || diagnostic_snapshot.dropped_events > 0;
-                let has_evidence = has_diagnostics || tuning.is_some();
-                if final_report && !has_evidence {
+                let has_evidence = has_diagnostics || tuning.is_some() || has_stop_context;
+                // Routine stop context must not evict an undelivered report from
+                // the bounded spool. A replay may still be rate-limited or fail.
+                let preserve_pending = final_report
+                    && !has_diagnostics
+                    && tuning.is_none()
+                    && store
+                        .as_ref()
+                        .is_some_and(|s| s.pending(&options.installation_id).is_some());
+                if final_report && (!has_evidence || preserve_pending) {
                     if let Some(store) = &store {
                         store.finish();
                     }
@@ -818,6 +833,40 @@ mod tests {
     }
 
     #[test]
+    fn clean_stop_context_is_spooled_without_leaving_an_unclean_marker() {
+        let _guard = WORKER_TEST.lock().unwrap();
+        let dir = Temp::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/reports", listener.local_addr().unwrap());
+        drop(listener); // An immediate connection refusal, no external service.
+        let options = resolve(&dir.0, Some(true), Some(&endpoint))
+            .unwrap()
+            .unwrap();
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        let origin = crate::diagnostics::StopOrigin::default();
+        worker.attach_stop_origin(&origin);
+        origin.request(seine_telemetry::ShutdownRequest::ApiStop);
+        crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::FinalizingTelemetry);
+        drop(worker);
+        let (store, unclean) =
+            crate::diagnostics::Store::open(&options.state_path, &options.installation_id).unwrap();
+        assert!(!unclean);
+        let report = store.pending(&options.installation_id).unwrap();
+        assert!(report.validate());
+        let diagnostic = report.diagnostics.unwrap();
+        assert_eq!(
+            diagnostic.shutdown_request,
+            Some(seine_telemetry::ShutdownRequest::ApiStop)
+        );
+        assert_eq!(
+            diagnostic.cleanup_stage,
+            Some(seine_telemetry::CleanupStage::FinalizingTelemetry)
+        );
+        assert_eq!(diagnostic.reason, "shutdown");
+        store.finish();
+    }
+
+    #[test]
     fn completed_run_marker_is_cleared_during_slow_pending_replay() {
         let _guard = WORKER_TEST.lock().unwrap();
         let dir = Temp::new();
@@ -849,6 +898,23 @@ mod tests {
         };
         let marker = dir.0.join("seine.diagnostics.running");
         assert!(marker.exists(), "live mining must retain its marker");
+        // The uploader is blocked in HTTP. Transitions must persist immediately,
+        // without waiting for its one-second polling loop or periodic checkpoint.
+        let origin = crate::diagnostics::StopOrigin::default();
+        worker.attach_stop_origin(&origin);
+        origin.request(seine_telemetry::ShutdownRequest::ApiStop);
+        crate::diagnostics::cleanup_stage(seine_telemetry::CleanupStage::StoppingBackends);
+        crate::diagnostics::nvidia_software(seine_telemetry::NvidiaSoftware {
+            driver_cuda_version: Some(12080),
+            nvrtc_version: Some(12090),
+        });
+        let persisted: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.0.join("seine.diagnostics.phase.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted["run"]["shutdown_request"], "api_stop");
+        assert_eq!(persisted["run"]["cleanup_stage"], "stopping_backends");
+        assert_eq!(persisted["run"]["nvidia_software"]["nvrtc_version"], 12090);
         let finished = std::thread::spawn(move || drop(worker));
         let deadline = Instant::now() + Duration::from_secs(1);
         while marker.exists() && Instant::now() < deadline {

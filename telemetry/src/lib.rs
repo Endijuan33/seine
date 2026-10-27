@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ pub enum FailureReason {
     NvrtcUnavailable,
 }
 
-/// An observed OS shutdown request, not proof that cleanup finished or the cause
+/// An observed session or OS shutdown request, not proof that cleanup finished or the cause
 /// of a later termination. Raw signal payloads and user input are never collected.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,6 +82,56 @@ pub enum ShutdownRequest {
     ConsoleClose,
     Logoff,
     SystemShutdown,
+    ApiStop,
+    ApiRestart,
+    TuiQuit,
+    TuiThreadChange,
+}
+
+impl ShutdownRequest {
+    fn schema7_compatible(self) -> bool {
+        matches!(
+            self,
+            Self::Interrupt | Self::ConsoleClose | Self::Logoff | Self::SystemShutdown
+        )
+    }
+}
+
+/// Last entered cleanup step, not proof that the step completed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CleanupStage {
+    QuiescingBackends,
+    DrainingEvents,
+    StoppingNetworkWorkers,
+    StoppingTui,
+    StoppingAutotune,
+    StoppingBackends,
+    StoppingTipListener,
+    FinalizingTelemetry,
+}
+
+/// Versions of the CUDA software actually loaded, not an installed toolkit guess.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NvidiaSoftware {
+    /// CUDA compatibility version returned by cuDriverGetVersion (e.g. 12080).
+    /// This is NOT the NVIDIA display-driver release number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver_cuda_version: Option<u32>,
+    /// NVRTC major/minor, encoded as major * 1000 + minor * 10.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nvrtc_version: Option<u32>,
+}
+
+impl NvidiaSoftware {
+    pub fn validate(&self) -> bool {
+        (self.driver_cuda_version.is_some() || self.nvrtc_version.is_some())
+            && [self.driver_cuda_version, self.nvrtc_version]
+                .into_iter()
+                .flatten()
+                .all(|v| (1000..=999_990).contains(&v) && v % 10 == 0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -140,6 +190,11 @@ impl FailureDetail {
 #[serde(deny_unknown_fields)]
 pub struct PreviousRun {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_stage: Option<CleanupStage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nvidia_software: Option<NvidiaSoftware>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shutdown_request: Option<ShutdownRequest>,
     pub phase: RunPhase,
     pub uptime_secs: u64,
@@ -156,7 +211,10 @@ pub struct PreviousRun {
 
 impl PreviousRun {
     pub fn validate(&self) -> bool {
-        self.uptime_secs <= 315_360_000
+        self.nvidia_software
+            .as_ref()
+            .is_none_or(NvidiaSoftware::validate)
+            && self.uptime_secs <= 315_360_000
             && valid_fingerprint(&self.build_commit)
             && self
                 .miner_version
@@ -243,6 +301,12 @@ impl DiagnosticEvent {
 #[serde(deny_unknown_fields)]
 pub struct Diagnostics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_stage: Option<CleanupStage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nvidia_software: Option<NvidiaSoftware>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shutdown_request: Option<ShutdownRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<RunPhase>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_run: Option<PreviousRun>,
@@ -269,6 +333,9 @@ pub const DEPENDENCY_SOURCES: &[&str] = &[
     "deps/cudarc-0.19.2/src/lib.rs",
     "deps/cudarc-0.19.2/src/driver/sys/mod.rs",
     "deps/cudarc-0.19.2/src/nvrtc/sys/mod.rs",
+    "deps/cudarc-0.19.5/src/lib.rs",
+    "deps/cudarc-0.19.5/src/driver/sys/mod.rs",
+    "deps/cudarc-0.19.5/src/nvrtc/sys/mod.rs",
 ];
 
 pub fn valid_source(source: &str) -> bool {
@@ -289,7 +356,10 @@ fn backend_name(value: &str) -> bool {
 
 impl Diagnostics {
     fn validate(&self) -> bool {
-        valid_fingerprint(&self.build_commit)
+        self.nvidia_software
+            .as_ref()
+            .is_none_or(NvidiaSoftware::validate)
+            && valid_fingerprint(&self.build_commit)
             && valid_fingerprint(&self.source_fingerprint)
             && matches!(self.mode.as_str(), "pool" | "daemon")
             && self.requested_backends.len() <= 4
@@ -441,6 +511,22 @@ impl Report {
             && self.diagnostics.as_ref().is_none_or(|d| {
                 self.schema_version >= 3
                     && d.validate()
+                    && (self.schema_version >= 8
+                        || (d.shutdown_request.is_none()
+                            && d.cleanup_stage.is_none()
+                            && d.nvidia_software.is_none()
+                            && d.events
+                                .iter()
+                                .all(|e| !e.source.starts_with("deps/cudarc-0.19.5/"))
+                            && d.previous_run.as_ref().is_none_or(|r| {
+                                r.recent_events
+                                    .iter()
+                                    .all(|e| !e.source.starts_with("deps/cudarc-0.19.5/"))
+                                    && r.cleanup_stage.is_none()
+                                    && r.nvidia_software.is_none()
+                                    && r.shutdown_request
+                                        .is_none_or(ShutdownRequest::schema7_compatible)
+                            })))
                     && (self.schema_version >= 7
                         || (d.events.iter().all(DiagnosticEvent::schema6_compatible)
                             && d.previous_run.as_ref().is_none_or(|r| {
@@ -493,6 +579,57 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schema8_context_is_optional_bounded_and_cannot_be_downgraded() {
+        let base: serde_json::Value =
+            serde_json::from_str(include_str!("../reliability-fixture.json")).unwrap();
+        for previous in [false, true] {
+            for (field, value) in [
+                ("shutdown_request", serde_json::json!("api_stop")),
+                ("cleanup_stage", serde_json::json!("stopping_backends")),
+                (
+                    "nvidia_software",
+                    serde_json::json!({"driver_cuda_version": 12080, "nvrtc_version": 12090}),
+                ),
+            ] {
+                let mut value_report = base.clone();
+                value_report["schema_version"] = 8.into();
+                let context = if previous {
+                    &mut value_report["diagnostics"]["previous_run"]
+                } else {
+                    &mut value_report["diagnostics"]
+                };
+                context[field] = value;
+                let mut report: Report = serde_json::from_value(value_report).unwrap();
+                assert!(report.validate(), "{field}, previous={previous}");
+                report.schema_version = 7;
+                assert!(!report.validate(), "{field} must require schema 8");
+            }
+        }
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"driver_cuda_version": 0}),
+            serde_json::json!({"nvrtc_version": 12081}),
+            serde_json::json!({"nvrtc_version": 1_000_000}),
+        ] {
+            let software: NvidiaSoftware = serde_json::from_value(bad).unwrap();
+            assert!(!software.validate());
+        }
+        for field in ["cleanup_stage", "shutdown_request", "nvidia_software"] {
+            let mut value = base.clone();
+            value["schema_version"] = 8.into();
+            value["diagnostics"][field] = "private free text".into();
+            assert!(serde_json::from_value::<Report>(value).is_err());
+        }
+        let mut report: Report = serde_json::from_value(base).unwrap();
+        report.schema_version = 8;
+        report.diagnostics.as_mut().unwrap().events[0].source =
+            "deps/cudarc-0.19.5/src/driver/sys/mod.rs".into();
+        assert!(report.validate());
+        report.schema_version = 7;
+        assert!(!report.validate());
+    }
 
     #[test]
     fn shutdown_requests_and_loader_causes_require_schema7() {

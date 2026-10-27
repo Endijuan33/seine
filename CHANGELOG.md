@@ -12,6 +12,7 @@ supported hardware only.
 - **Up to about 6% faster CPU hashing on Linux with AMD Zen 3 processors** (measured on EPYC 7R13).
 - Closing a Windows console now allows brief cleanup, and slow telemetry uploads no longer leave completed runs marked as interrupted.
 - NVIDIA startup avoids panics from unused driver functions and reports missing driver or CUDA compiler libraries clearly.
+- Reliability reports now include stop origins, cleanup progress and loaded CUDA software versions to help diagnose interruptions.
 - Stopping during backend initialization now exits cleanly instead of reporting a startup failure.
 - Fixed shutdown hangs when a dashboard keeps the control API event stream open.
 
