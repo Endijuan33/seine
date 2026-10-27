@@ -14,6 +14,30 @@ const MAX_DRIFT: f64 = 0.05;
 
 const CACHE_SCHEMA: u32 = 3;
 
+// Plain AVX-512/AVX2 ran 25-67% slower than the cohort streaming kernel on every
+// validated host, and each A/B/A trial spent ~3% of a 15-minute run's hashes before
+// count tuning could start (Ryzen 7 7700X, EPYC 9355). Keep them as a safety-net
+// comparison, but out of the first half hour when mining started on that kernel.
+const GENERIC_TRIAL_DEFER_SECS: u64 = 1800;
+
+fn defer_generic_trial(
+    startup: Option<CpuKernel>,
+    base: CpuKernel,
+    candidate: CpuKernel,
+    now: u64,
+) -> bool {
+    now < GENERIC_TRIAL_DEFER_SECS
+        && startup == Some(base)
+        && matches!(
+            base,
+            CpuKernel::Avx512256Stream
+                | CpuKernel::Avx512256StreamL2
+                | CpuKernel::Avx512Stream
+                | CpuKernel::Avx2Stream
+        )
+        && matches!(candidate, CpuKernel::Avx512 | CpuKernel::Avx2)
+}
+
 // Validated policy, restricted to the native Turin measurement identity.
 // Slow samples and explicitly lengthened trials retain the existing window.
 fn short_trials_for(
@@ -1203,6 +1227,7 @@ impl Tuner {
                     .copied()
                     .filter(|&k| k != base)
                     .filter(|&k| !decisive.iter().any(|d| d.applies(base, k, workers, wall)))
+                    .filter(|&k| !defer_generic_trial(self.startup, base, k, now))
                     .filter(|&k| {
                         !frontier
                             || matches!(
@@ -3926,7 +3951,8 @@ mod tests {
             assert!(t.cache.winners.is_empty());
             s.kernel = CpuKernel::Avx512256Stream;
             s.kernel_generation += 1;
-            let mut now = 2;
+            // Plain-kernel challengers wait out the startup half hour.
+            let mut now = GENERIC_TRIAL_DEFER_SECS;
             run_comparison(&mut t, &mut s, &mut now, &[100, 130, 100, 100, 130, 100]);
             assert_eq!(s.kernel, CpuKernel::Avx512);
             run_comparison(&mut t, &mut s, &mut now, &[130, 120, 130]);
@@ -4003,8 +4029,14 @@ mod tests {
         assert!(t.cache.winners.is_empty());
         s.kernel = CpuKernel::Avx512256Stream;
         s.kernel_generation += 1;
-        let mut now = 2;
-        // Settles, then compares the remaining paths against streaming at once.
+        // Settles, then defers the plain-kernel challengers for the first half hour.
+        assert!(!t.tick(2, &[s], true, true).hold_counts);
+        assert!(
+            !t.tick(GENERIC_TRIAL_DEFER_SECS - 1, &[s], true, true)
+                .hold_counts
+        );
+        assert!(t.trial.is_none());
+        let mut now = GENERIC_TRIAL_DEFER_SECS;
         let a = run_comparison(&mut t, &mut s, &mut now, &[100, 95, 100]);
         assert_eq!(s.kernel, CpuKernel::Avx512256Stream);
         assert!(a
