@@ -7,6 +7,10 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
+## Unreleased
+
+- **About 45% faster CPU hashing on cloud VMs that report "AMD EPYC" with a generic CPU model** (AuthenticAMD family 6, AVX2 only), including with `--threads`: they now use the memory-streaming kernel.
+
 ## v0.2.41
 
 - **About 10% more hashes in the first 15 minutes on Intel Xeon Sapphire Rapids and Emerald Rapids** (measured on Xeon Platinum 8488C): mining now starts on the memory-streaming kernel at every logical CPU. Other x86 CPUs can now discover it while mining.
