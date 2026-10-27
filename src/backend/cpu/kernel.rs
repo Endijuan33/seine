@@ -1309,118 +1309,6 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn hint_first_thp_requires_exact_native_host() {
-        let identity = crate::runtime_identity::CpuIdentity {
-            vendor: Some("AuthenticAMD".into()),
-            family: Some(0x19),
-            model: Some(0x11),
-            ..Default::default()
-        };
-        let matches =
-            |id: &crate::runtime_identity::CpuIdentity, brand, logical, physical, memory, env| {
-                super::hint_first_thp_matches(id, brand, logical, physical, memory, env)
-            };
-        let memory = 128 * 1024_u64.pow(3);
-        assert!(matches(
-            &identity,
-            Some("AMD EPYC 9R14"),
-            32,
-            Some(32),
-            memory,
-            "native"
-        ));
-        for (field, value) in [("model", 0x61), ("family", 0x1a), ("vendor", 0)] {
-            let mut other = identity.clone();
-            match field {
-                "model" => other.model = Some(value),
-                "family" => other.family = Some(value),
-                _ => other.vendor = Some("GenuineIntel".into()),
-            }
-            assert!(!matches(
-                &other,
-                Some("AMD EPYC 9R14"),
-                32,
-                Some(32),
-                memory,
-                "native"
-            ));
-        }
-        for (brand, logical, physical, mem, env) in [
-            (Some("AMD EPYC 9354P"), 32, Some(32), memory, "native"),
-            (Some("AMD EPYC 9R14"), 64, Some(32), memory, "native"),
-            (Some("AMD EPYC 9R14"), 32, Some(16), memory, "native"),
-            (Some("AMD EPYC 9R14"), 32, None, memory, "native"),
-            (
-                Some("AMD EPYC 9R14"),
-                32,
-                Some(32),
-                64 * 1024_u64.pow(3),
-                "native",
-            ),
-            (Some("AMD EPYC 9R14"), 32, Some(32), memory, "wsl2"),
-        ] {
-            assert!(!matches(&identity, brand, logical, physical, mem, env));
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn turin_hint_first_thp_requires_exact_native_host() {
-        let identity = crate::runtime_identity::CpuIdentity {
-            vendor: Some("AuthenticAMD".into()),
-            family: Some(0x1a),
-            model: Some(0x02),
-            ..Default::default()
-        };
-        let matches =
-            |id: &crate::runtime_identity::CpuIdentity, brand, logical, physical, memory, env| {
-                super::hint_first_thp_matches(id, brand, logical, physical, memory, env)
-            };
-        let memory = 128 * 1024_u64.pow(3);
-        assert!(matches(
-            &identity,
-            Some("AMD EPYC 9R45"),
-            32,
-            Some(32),
-            memory,
-            "native"
-        ));
-        for (field, value) in [("model", 0x61), ("family", 0x19), ("vendor", 0)] {
-            let mut other = identity.clone();
-            match field {
-                "model" => other.model = Some(value),
-                "family" => other.family = Some(value),
-                _ => other.vendor = Some("GenuineIntel".into()),
-            }
-            assert!(!matches(
-                &other,
-                Some("AMD EPYC 9R45"),
-                32,
-                Some(32),
-                memory,
-                "native"
-            ));
-        }
-        for (brand, logical, physical, mem, env) in [
-            (Some("AMD EPYC 9354P"), 32, Some(32), memory, "native"),
-            (Some("AMD EPYC 9R45"), 64, Some(32), memory, "native"),
-            (Some("AMD EPYC 9R45"), 32, Some(16), memory, "native"),
-            (Some("AMD EPYC 9R45"), 32, None, memory, "native"),
-            (
-                Some("AMD EPYC 9R45"),
-                32,
-                Some(32),
-                64 * 1024_u64.pow(3),
-                "native",
-            ),
-            (Some("AMD EPYC 9R45"), 32, Some(32), memory, "wsl2"),
-        ] {
-            assert!(!matches(&identity, brand, logical, physical, mem, env));
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
     fn hint_first_thp_prefault_and_unsupported_fallback_are_zeroed_and_usable() {
         // Odd MiB size prevents an explicit HugeTLB success bypassing this path.
         let bytes = 3 * 1024 * 1024;
@@ -1919,48 +1807,6 @@ enum MmapBacking {
     Regular,
 }
 
-#[cfg(target_os = "linux")]
-fn hint_first_thp_matches(
-    identity: &crate::runtime_identity::CpuIdentity,
-    brand: Option<&str>,
-    logical: usize,
-    physical: Option<usize>,
-    memory: u64,
-    environment: &str,
-) -> bool {
-    identity.vendor.as_deref() == Some("AuthenticAMD")
-        && ((identity.family == Some(0x19)
-            && identity.model == Some(0x11)
-            && brand == Some("AMD EPYC 9R14"))
-            || (identity.family == Some(0x1a)
-                && identity.model == Some(0x02)
-                && brand == Some("AMD EPYC 9R45")))
-        && logical == 32
-        && physical == Some(32)
-        && (120 * 1024_u64.pow(3)..=130 * 1024_u64.pow(3)).contains(&memory)
-        && environment == "native"
-}
-
-#[cfg(target_os = "linux")]
-fn hint_first_thp_host() -> bool {
-    static ELIGIBLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ELIGIBLE.get_or_init(|| {
-        let mut system = sysinfo::System::new();
-        system.refresh_memory();
-        system.refresh_cpu_all();
-        // Workers are already pinned here. available_parallelism() would describe
-        // that single worker's mask, so use the host CPU inventory instead.
-        hint_first_thp_matches(
-            &crate::runtime_identity::cpu_identity(),
-            system.cpus().first().map(|cpu| cpu.brand()),
-            system.cpus().len(),
-            system.physical_core_count(),
-            system.total_memory(),
-            &crate::runtime_identity::runtime_environment(),
-        )
-    })
-}
-
 /// RAII wrapper around an mmap-backed arena.
 #[cfg(unix)]
 pub(super) struct MmapArena {
@@ -1980,10 +1826,12 @@ impl MmapArena {
         page_mode: CpuPageMode,
     ) -> Result<Self, String> {
         #[cfg(target_os = "linux")]
+        // Hint THP before a writing prefault instead of populating 4 KiB pages and
+        // collapsing them: 32 native EPYC 9R14 workers allocated in 1.8 s instead of
+        // 30.1 s. Kernels without MADV_POPULATE_WRITE fall back to the legacy path.
         let prefault_advice = (page_mode == CpuPageMode::Auto
-            && byte_len == POW_MEMORY_KB as usize * 1024
-            && hint_first_thp_host())
-        .then_some(23); // MADV_POPULATE_WRITE; unsupported kernels fall back below.
+            && byte_len == POW_MEMORY_KB as usize * 1024)
+            .then_some(23); // MADV_POPULATE_WRITE
         #[cfg(not(target_os = "linux"))]
         let prefault_advice = None;
         Self::new_with_prefault(block_count, byte_len, page_mode, prefault_advice)
