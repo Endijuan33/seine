@@ -10,6 +10,7 @@ and timing scopes are documented with each measurement below. Evidence
 for each row is linked, and chart data lives in
 [`assets/charts/benchmarks.json`](assets/charts/benchmarks.json).
 
+- [AMD EPYC 9554P bare metal](#amd-epyc-9554p-bare-metal)
 - [AMD EPYC 9355P bare metal](#amd-epyc-9355p-bare-metal)
 - [Automatic AMD tuning](#automatic-amd-tuning)
 - [Cloud servers](#cloud-servers)
@@ -21,6 +22,24 @@ for each row is linked, and chart data lives in
 
 A thread here is one hashing thread with its own 2 GiB arena, the same number you set
 with `--threads` or see as "Threads" on the dashboard.
+
+## AMD EPYC 9554P bare metal
+
+**75.04 H/s** on a complete 64-core/128-thread Zen 4 Genoa socket, with
+384 GiB of DDR5-4800 memory across twelve channels and native Linux.
+The official v0.2.39 release used a **fixed manual configuration**: 64 mining
+threads, `avx512-256-stream`, and explicit 1 GiB huge pages (128 GiB of hash
+arenas). Power settings were left unchanged; package power was not measured.
+
+Three fresh 120-second invocations measured **75.03, 75.05 and 75.02 H/s**.
+These rates count all completed hashes and divide by whole-process elapsed time,
+including startup, allocation, work, fences and shutdown. A separate 60-second
+screen of 32, 64, 96 and 128 mining threads selected 64 before those confirmations.
+All 21 independent 1 GiB kernel parity cases passed.
+
+[Reports, selection and reproduction](../experiments/headline-20261027/README.md).
+This is a measured configuration on this socket, not an automatic-tuning result
+or a same-hardware percentage gain over the previous cloud-server chart entry.
 
 ## AMD EPYC 9355P bare metal
 
