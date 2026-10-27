@@ -115,6 +115,11 @@ fn cohort_stream_kernel(
         {
             Some(CpuKernel::Avx512Stream)
         }
+        // Zen 4 adds a far L2 prefetch: EPYC 9124P +6% at 16 workers, Ryzen 7
+        // 7700X +5% / +1% at 8 / 16. Zen 5 measured 1-3% slower with it.
+        Some(0x19) if supported.contains(&CpuKernel::Avx512256StreamL2) => {
+            Some(CpuKernel::Avx512256StreamL2)
+        }
         Some(0x19 | 0x1a) if supported.contains(&CpuKernel::Avx512256Stream) => {
             Some(CpuKernel::Avx512256Stream)
         }
@@ -664,6 +669,15 @@ impl Tuner {
         // gates. Only synthetic fixtures opt into an identity-neutral tuner.
         let supported = supported_kernels();
         let mut candidates = candidates_for(identity, &supported);
+        // The exact 9R14 rental context keeps its separately validated startup,
+        // frontier and sample policies, which were measured on the 256-bit kernel.
+        if super::adaptive_cpu::full_count_cold_start(cfg, &host, identity, 32, 32) {
+            for kernel in &mut candidates {
+                if *kernel == CpuKernel::Avx512256StreamL2 {
+                    *kernel = CpuKernel::Avx512256Stream;
+                }
+            }
+        }
         let sapphire_startup = sapphire_stream_startup(cfg, &host, identity, &supported);
         if sapphire_startup {
             candidates.push(CpuKernel::Avx512256Stream);
@@ -1895,8 +1909,8 @@ mod tests {
             model: Some(0x02),
             ..CpuIdentity::default()
         };
-        // Zen 5 server-class models use full-width streaming; client Zen 5 and
-        // Zen 4 use the 256-bit path.
+        // Zen 5 server-class models use full-width streaming, client Zen 5 the
+        // 256-bit path and Zen 4 the 256-bit path with a far L2 prefetch.
         for (identity, stream) in [
             (turin.clone(), Some(CpuKernel::Avx512Stream)),
             (
@@ -1912,7 +1926,7 @@ mod tests {
                     model: Some(0x11),
                     ..turin.clone()
                 },
-                Some(CpuKernel::Avx512256Stream),
+                Some(CpuKernel::Avx512256StreamL2),
             ),
             (
                 CpuIdentity {

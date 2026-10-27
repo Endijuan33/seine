@@ -41,6 +41,8 @@ const ISA_AVX512_256_STREAM_R64D6: u8 = 10;
 const ISA_AVX2_STREAM: u8 = 11;
 #[allow(dead_code)]
 const ISA_AVX512_STREAM: u8 = 12;
+#[allow(dead_code)]
+const ISA_AVX512_256_STREAM_L2: u8 = 13;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -77,6 +79,7 @@ const fn isa_label(isa: u8) -> &'static str {
         ISA_AVX512_256_STREAM_R64D6 => "avx512-256-stream-r64d6",
         ISA_AVX2_STREAM => "avx2-stream",
         ISA_AVX512_STREAM => "avx512-stream",
+        ISA_AVX512_256_STREAM_L2 => "avx512-256-stream-l2",
         _ => "scalar",
     }
 }
@@ -101,6 +104,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Avx512256StreamR64D6 => ISA_AVX512_256_STREAM_R64D6,
         CpuKernel::Avx2Stream => ISA_AVX2_STREAM,
         CpuKernel::Avx512Stream => ISA_AVX512_STREAM,
+        CpuKernel::Avx512256StreamL2 => ISA_AVX512_256_STREAM_L2,
     }
 }
 
@@ -123,6 +127,7 @@ pub fn compiled_isa_variants() -> &'static [&'static str] {
             "avx512-256-stream-r64d6",
             "avx2-stream",
             "avx512-stream",
+            "avx512-256-stream-l2",
         ]
     }
     #[cfg(target_arch = "aarch64")]
@@ -221,27 +226,31 @@ impl FixedArgon2id {
             ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM => unsafe {
-                self.fill_streaming_ring::<2, 3, false, false>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, false, 0>(memory_blocks)
+            },
+            #[cfg(target_arch = "x86_64")]
+            ISA_AVX512_256_STREAM_L2 => unsafe {
+                self.fill_streaming_ring::<2, 3, false, false, STREAM_FAR_PREFETCH>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_STREAM => unsafe {
-                self.fill_streaming_ring::<2, 3, false, true>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, true, 0>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
-                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }, false>(memory_blocks)
+                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }, false, 0>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D3 => unsafe {
-                self.fill_streaming_ring::<64, 3, true, false>(memory_blocks)
+                self.fill_streaming_ring::<64, 3, true, false, 0>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D4 => unsafe {
-                self.fill_streaming_ring::<64, 4, true, false>(memory_blocks)
+                self.fill_streaming_ring::<64, 4, true, false, 0>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D6 => unsafe {
-                self.fill_streaming_ring::<64, 6, true, false>(memory_blocks)
+                self.fill_streaming_ring::<64, 6, true, false, 0>(memory_blocks)
             },
             ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
             #[cfg(target_arch = "x86_64")]
@@ -261,6 +270,9 @@ impl FixedArgon2id {
     // write-combining occupancy. R8/D2 and R64/D3–6 use the measured
     // reference-demand policy: fence before reading an uncommitted arena block.
     // Recent references stay in the ring; finalization always fences.
+    // FAR > 0 also prefetches data-independent references into L2 FAR blocks
+    // ahead (Zen 4: EPYC 9124P +6%, Ryzen 7 7700X +1-5%). Zen 5 lost 1-3% with
+    // it (EPYC 9R45, Ryzen 9 9900X), as did the AVX2 loop on Zen 3 (EPYC 7313P).
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,avx512f,avx512vl")]
     unsafe fn fill_streaming_ring<
@@ -268,6 +280,7 @@ impl FixedArgon2id {
         const DEPTH: usize,
         const DEMAND_FENCE: bool,
         const FULL_WIDTH: bool,
+        const FAR: usize,
     >(
         &self,
         memory: &mut [PowBlock],
@@ -313,6 +326,14 @@ impl FixedArgon2id {
                 let dst = cache.add(cur & mask);
                 debug_assert_ne!(dst, reference_ptr);
                 if di {
+                    if FAR > 0 {
+                        let far_index = cur + FAR;
+                        if let Some(&far) = self.data_independent_ref_indexes.get(far_index) {
+                            if far < cur && cur - far >= RING {
+                                prefetch_pow_block_l2(&*arena.add(far));
+                            }
+                        }
+                    }
                     if block + DEPTH < self.segment_length {
                         let ahead = self.data_independent_ref_indexes[cur + DEPTH];
                         // Recent references are already cached, or are not yet
@@ -756,6 +777,22 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
             next_ref_area_size,
             base as *const PowBlock,
         );
+    }
+}
+
+/// Distance, in blocks, of the streaming kernels' data-independent L2 prefetch.
+const STREAM_FAR_PREFETCH: usize = 14;
+
+/// Prefetch a whole PowBlock into L2 (`prefetcht1`), ahead of the near L1 prefetch.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn prefetch_pow_block_l2(block: &PowBlock) {
+    unsafe {
+        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T1};
+        let ptr = block as *const PowBlock as *const i8;
+        for line in 0..16 {
+            _mm_prefetch(ptr.add(line * 64), _MM_HINT_T1);
+        }
     }
 }
 
