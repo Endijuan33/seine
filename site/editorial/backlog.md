@@ -4,7 +4,7 @@
 
 Prioritize ordinary newcomer questions and broader Blocknet fundamentals: choosing software, receiving and sending, first mining setup, and understanding balances. Improve the existing owner when a question already has a guide. Defer narrow merchant/invoice workflows. Competitor comparisons and work requiring rented hardware remain on hold by owner preference.
 
-Published: `blocknet-wallet-node-miner` explains the software roles and which applications must stay running. A possible next topic is the ordinary transaction journey; check its boundary against `send-receive-blocknet`, fees and payment proofs before drafting.
+Published: `blocknet-wallet-node-miner` explains the software roles and which applications must stay running. Published: `blocknet-desktop-wallet` adds the ordinary desktop create/open, backup, receive, send-review and history journey with released-interface screenshots and labeled demo data.
 
 Researched topics not yet written, in priority order. Batch 1 (2026-10-25) took the hardware,
 Mac, Argon2id, what-is-Blocknet, Blocknet ID and privacy topics; pool-side topics went to the

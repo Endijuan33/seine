@@ -694,3 +694,7 @@ See `research/faraday-official-post-2026-10-27.md` for the refresh scope.
 - Saving `wallet_file` remembers a path, not an unlocked wallet session. After starting the core, attach and use `load` with the wallet password. Source: same pin, `docs/reference-wallet.md:90–94`.
 - The wallet can scan previously downloaded blocks to find its outputs. Receipt does not require the receiving wallet application to be online; its later displayed balance depends on chain and wallet scan progress. Derived from same pin, `docs/reference-core.md:588–616`, and current-chain output/scanner behavior.
 - seine defaults to pool mode; the mining node connection belongs to the pool in that workflow. Its separate daemon mode needs the user's running, authenticated core. Source: seine v0.2.39 `8a822f7`, `docs/guides/solo-mining.md`, `src/config.rs`. Detailed evidence and scope: `batches/2026-10-wallet-node-miner/research.md`.
+
+## Desktop wallet interface reference
+
+The visual guide uses GUI v0.22.0 (`661fff98e047f395489a0d2eba88f572c2a89935`), verified October 27, 2026 (EDT). Its Send action first requests a dry-run fee preview; Confirm Send authorizes the payment separately. Dashboard distinguishes node sync, wallet scan and spendable/pending balances. The new-wallet flow requests backup and confirmation of 12 recovery words. These are versioned interface facts, not promises about future releases. See [desktop-wallet research](batches/2026-10-desktop-wallet/research.md) for pinned source locations and screenshot methodology.

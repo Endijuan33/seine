@@ -253,3 +253,11 @@ The existing `/blog/blocknet-faraday-upgrade/` owns Faraday migration, recovery-
 | Blocknet wallet vs node vs miner; do I need a node to mine Blocknet; keep wallet open for mining | `/blog/blocknet-wallet-node-miner/` | Choose the applications needed for receiving, pool mining or direct mining; understand what must stay running |
 
 This guide owns the software-role decision before setup. `blocknet-wallet-for-mining` owns initial wallet creation, `run-blocknet-node` owns node operation, and `how-to-mine-blocknet` owns the mining setup procedure. Link to those procedures rather than reproduce commands. Demand is inferred from the documented user journey, not measured Search Console volume.
+
+## Desktop wallet walkthrough (October 27, 2026)
+
+| Primary keyword cluster | URL | Search job |
+|---|---|---|
+| Blocknet desktop wallet; how to use Blocknet wallet; Blocknet wallet screenshots | `/blog/blocknet-desktop-wallet/` | Follow the desktop interface from create/open and recovery backup through synchronization, receiving, send review and transaction history |
+
+This page owns the visual desktop procedure, using the released interface with labeled demo data. `blocknet-wallet-for-mining` owns initial wallet/payout setup and CLI commands, `send-receive-blocknet` owns general payment mechanics and its CLI procedure, and `blocknet-wallet-node-miner` owns software selection. Keep detailed recovery, fee calculations and synchronization troubleshooting at their existing URLs. Demand is inferred from the normal newcomer journey, not measured search volume.

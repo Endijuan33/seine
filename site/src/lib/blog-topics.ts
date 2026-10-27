@@ -24,6 +24,7 @@ export const TOPICS = [
 const groups: Record<string, readonly string[]> = {
   "getting-started": [
     "blocknet-wallet-node-miner",
+    "blocknet-desktop-wallet",
     "configure-seine-miner",
     "start-miner-automatically-windows",
     "update-seine-miner",
