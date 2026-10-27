@@ -47,7 +47,8 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Far L2 prefetch in full-width `avx512-stream` | EPYC 9R45 (c8a.8xlarge), 16 / 28 workers | -2.2% / -1.2% (distance 24: -2.1% at 28) | rejected for Zen 5 server |
 | Far L2 prefetch in `avx2-stream` | EPYC 7313P (Zen 3), 16 workers | -1.5% | rejected for Zen 2/3 |
 | Same-host defaults vs competitors on Zen 4 desktop (far-prefetch build) | Ryzen 7 7700X | Seine autotune 14 lanes 12.20 H/s (3.6% late-hash bench loss); 0%-fee NTM 12.61 @16; 2%-fee Longhorn 12.45 @16 | gross parity |
-| Worker count on Zen 5 desktop | Ryzen 9 9900X, `avx512-256-stream` | 12 workers 12.08 vs 24 workers 11.20 (-7.3%) | open lead: Zen 5 client cold start at logical CPUs may start too high |
+| Worker count on Zen 5 desktop | Ryzen 9 9900X, `avx512-256-stream` | bench: 12 workers 12.08 vs 24 workers 11.20 (-7.3%, mostly late-hash bias) | see live row below |
+| Same, fixed counts in live bntpool mining (10 min each) | Ryzen 9 9900X | steady 12.67 / 12.57 / 12.53 H/s at 12 / 16 / 24; lifetime 12.59 / 12.46 / 12.33 | 12 workers only ~1% faster steady; no Zen 5 client cold-start gate (9700X prefers 16) |
 | `avx512-256-stream-l2` production build, kernel A/B and live bntpool (15 min each, tuner from cold) | Ryzen 7 7700X | bench +4.0% / +1.0% at 8 / 16; live lifetime 12.00 -> 12.11 H/s (+1.0%), steady 12.54 -> 12.76 (+1.7%) at the tuner's 16 workers | validated; full 2 GiB parity |
 | No periodic SFENCE in full-width `avx512-stream` | EPYC 9355 bare metal, 32 / 64 workers | -0.5% / -0.6% | rejected; SFENCE stays |
 | Live default mining vs a 0%-fee competitor's bench, same host | EPYC 9355 bare metal | Seine lifetime 78.9 H/s, steady ~83 at 64 workers (15 min bntpool); competitor bench 83.4 @64 | Turin gross parity in live mining |
