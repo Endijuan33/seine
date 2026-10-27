@@ -277,3 +277,11 @@ This is the acquisition starting-point guide. Desktop wallet owns interface setu
 | update Blocknet wallet; Blocknet wallet latest version | `/blog/update-blocknet-wallet/` | Replace the released desktop application while preserving the existing wallet, then verify application version, receiving address and synchronized history |
 
 Desktop setup owns creating and opening wallets. Backup/restore owns recovery and moving keys. Synchronization owns diagnosing an incomplete balance. This article owns the routine application replacement sequence, with release-specific version-label and full-exit behavior and actual released-interface screenshots. Faraday owns the future network migration; this article does not supply migration instructions. Demand is inferred from ordinary wallet maintenance, not measured search volume.
+
+## Ordinary payment timing (October 27, 2026)
+
+| Primary search intent | Owner | Distinct reader job |
+|---|---|---|
+| how long does a Blocknet transfer take; Blocknet transaction pending; when can I spend received BNT | `/blog/blocknet-transfer-time/` | Follow an ordinary payment from mempool to block inclusion to spendable wallet balance, including the ten-block depth rule and differing confirmation counters |
+
+Sending/receiving owns payment construction and approval. Explorer owns public lookup. Wallet synchronization owns diagnosing a stale local view. The pool mining-reward confirmations article owns coinbase maturity and pool accounting, not ordinary recipient wallet timing. This article owns the ordinary-payment timeline, with released-interface screenshots of the same labeled demo receipt in three stages. Search demand is inferred from an ordinary user question, not measured volume.
