@@ -32,6 +32,7 @@ use crate::shortname::validate_destination;
 
 const API_EVENT_CHANNEL_CAPACITY: usize = 4096;
 const RECENT_LOG_CAPACITY: usize = 200;
+const API_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
 struct ApiErrorBody {
@@ -1354,17 +1355,13 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         .await
         .with_context(|| format!("failed to bind control API listener at {bind_addr}"))?;
 
-    let server =
-        axum::serve(listener, app).with_graceful_shutdown(wait_for_shutdown(Arc::clone(&shutdown)));
-
     let thread_control_worker = ThreadControlWorker::spawn(Arc::clone(&supervisor));
 
-    let result = server.await;
+    let result = serve_control_api(listener, app, Arc::clone(&supervisor)).await;
 
     if cfg.api_token.is_none() {
         let _ = std::fs::remove_file(&cfg.api_cookie_path);
     }
-    supervisor.initiate_global_shutdown();
     drop(thread_control_worker);
     let _ = supervisor.stop(StopRequest {
         wait_ms: Some(15_000),
@@ -1373,6 +1370,35 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
 
     result.context("control API server exited unexpectedly")?;
     Ok(())
+}
+
+async fn serve_control_api(
+    listener: tokio::net::TcpListener,
+    app: Router,
+    supervisor: Arc<MinerSupervisor>,
+) -> std::io::Result<()> {
+    let shutdown = Arc::clone(&supervisor.process_shutdown);
+    let server_shutdown = Arc::clone(&shutdown);
+    let server = async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(wait_for_shutdown(server_shutdown))
+            .await
+    };
+    tokio::pin!(server);
+    tokio::select! {
+        result = &mut server => {
+            supervisor.initiate_global_shutdown();
+            result
+        }
+        _ = wait_for_shutdown(shutdown) => {
+            // Mining must stop before waiting for HTTP clients. A stream or
+            // stalled request must not delay the session's cleanup signal.
+            supervisor.initiate_global_shutdown();
+            tokio::time::timeout(API_SHUTDOWN_DRAIN_TIMEOUT, &mut server)
+                .await
+                .unwrap_or(Ok(()))
+        }
+    }
 }
 
 async fn wait_for_shutdown(shutdown: Arc<AtomicBool>) {
@@ -1714,10 +1740,18 @@ async fn post_wallet_unlock(
 
 async fn get_events_stream(State(state): State<AppState>) -> impl IntoResponse {
     let mut rx = state.supervisor.subscribe();
+    let shutdown = Arc::clone(&state.supervisor.process_shutdown);
 
     let stream = stream! {
+        let stopping = wait_for_shutdown(shutdown);
+        tokio::pin!(stopping);
         loop {
-            match rx.recv().await {
+            let event = tokio::select! {
+                biased;
+                _ = &mut stopping => break,
+                event = rx.recv() => event,
+            };
+            match event {
                 Ok(event) => {
                     let payload = serde_json::to_string(&event.data).unwrap_or_else(|_| "{}".to_string());
                     let sse_event = Event::default()
@@ -2413,6 +2447,135 @@ fn ui_mode_to_str(value: UiMode) -> &'static str {
 mod tests {
     use super::*;
     use anyhow::anyhow;
+
+    #[tokio::test]
+    async fn process_shutdown_stops_mining_and_closes_an_open_event_stream() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let supervisor = Arc::new(MinerSupervisor::new(
+            crate::miner::tests::test_config(),
+            Arc::clone(&shutdown),
+        ));
+        let session_shutdown = Arc::new(AtomicBool::new(false));
+        supervisor.state.lock().unwrap().session_shutdown = Some(Arc::clone(&session_shutdown));
+        let app = Router::new()
+            .route("/v1/events/stream", get(get_events_stream))
+            .with_state(AppState {
+                supervisor: Arc::clone(&supervisor),
+                started_unix_ms: now_unix_millis(),
+            });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/v1/events/stream", listener.local_addr().unwrap());
+        let mut server = tokio::spawn(serve_control_api(listener, app, Arc::clone(&supervisor)));
+        let mut response = tokio::time::timeout(
+            Duration::from_secs(2),
+            reqwest::Client::new().get(endpoint).send(),
+        )
+        .await
+        .expect("SSE response headers")
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "text/event-stream"
+        );
+        supervisor.emit_event("fixture", json!({ "ready": true }));
+        let event = tokio::time::timeout(Duration::from_secs(1), async {
+            let mut bytes = Vec::new();
+            while !bytes.ends_with(b"\n\n") {
+                bytes.extend_from_slice(&response.chunk().await.unwrap().expect("live stream"));
+            }
+            String::from_utf8(bytes).unwrap()
+        })
+        .await
+        .expect("live event delivery");
+        assert!(event.contains("event: fixture"));
+        assert!(event.contains(r#"data: {"ready":true}"#));
+        assert!(!session_shutdown.load(Ordering::SeqCst));
+        shutdown.store(true, Ordering::SeqCst);
+        let drained = tokio::time::timeout(Duration::from_secs(1), &mut server).await;
+        let session_stopped = session_shutdown.load(Ordering::SeqCst);
+        let stream_closed =
+            tokio::time::timeout(Duration::from_millis(200), response.chunk()).await;
+        drop(response);
+        if drained.is_err() {
+            server.abort();
+            let _ = server.await;
+        }
+        assert!(
+            session_stopped,
+            "shutdown must reach mining before HTTP drain completes"
+        );
+        drained
+            .expect("an open SSE client must not hold shutdown open")
+            .unwrap()
+            .unwrap();
+        assert!(
+            stream_closed.unwrap().unwrap().is_none(),
+            "the event stream must end cleanly"
+        );
+    }
+
+    #[tokio::test]
+    async fn process_shutdown_bounds_http_drain_and_signals_mining_first() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let supervisor = Arc::new(MinerSupervisor::new(
+            crate::miner::tests::test_config(),
+            Arc::clone(&shutdown),
+        ));
+        let session_shutdown = Arc::new(AtomicBool::new(false));
+        supervisor.state.lock().unwrap().session_shutdown = Some(Arc::clone(&session_shutdown));
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let handler_entered = Arc::clone(&entered);
+        let app = Router::new().route(
+            "/stalled",
+            get(move || {
+                let entered = Arc::clone(&handler_entered);
+                async move {
+                    entered.notify_one();
+                    std::future::pending::<&'static str>().await
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/stalled", listener.local_addr().unwrap());
+        let mut server = tokio::spawn(serve_control_api(listener, app, supervisor));
+        let client = tokio::spawn(async move { reqwest::Client::new().get(endpoint).send().await });
+        tokio::time::timeout(Duration::from_secs(2), entered.notified())
+            .await
+            .expect("request reached the stalled handler");
+        shutdown.store(true, Ordering::SeqCst);
+        let mining_signalled = tokio::time::timeout(Duration::from_millis(500), async {
+            while !session_shutdown.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .is_ok();
+        let waiting_for_http = !server.is_finished();
+        let drained = tokio::time::timeout(
+            API_SHUTDOWN_DRAIN_TIMEOUT + Duration::from_secs(1),
+            &mut server,
+        )
+        .await;
+        if drained.is_err() {
+            server.abort();
+            let _ = server.await;
+        }
+        client.abort();
+        let _ = client.await;
+        assert!(
+            mining_signalled,
+            "mining must stop before the HTTP drain deadline"
+        );
+        assert!(
+            waiting_for_http,
+            "the fixture must keep an HTTP request pending"
+        );
+        drained
+            .expect("HTTP drain must be bounded")
+            .unwrap()
+            .unwrap();
+    }
 
     fn headers(pairs: &[(header::HeaderName, &str)]) -> HeaderMap {
         let mut map = HeaderMap::new();

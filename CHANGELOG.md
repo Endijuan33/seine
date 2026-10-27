@@ -13,6 +13,7 @@ supported hardware only.
 - Closing a Windows console now allows brief cleanup, and slow telemetry uploads no longer leave completed runs marked as interrupted.
 - Missing NVIDIA driver or CUDA compiler libraries now produce clearer startup errors while other mining backends can continue.
 - Stopping during backend initialization now exits cleanly instead of reporting a startup failure.
+- Fixed shutdown hangs when a dashboard keeps the control API event stream open.
 
 ## v0.2.38
 
