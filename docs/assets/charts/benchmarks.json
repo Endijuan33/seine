@@ -1,5 +1,5 @@
 {
-  "note": "Source data for scripts/readme_charts.py. Every value is a measured completed-hash rate (H/s) from the evidence cited in `source`; see docs/PERFORMANCE.md.",
+  "note": "Source data for scripts/readme_charts.py. Every value is measured H/s from the evidence cited in source; metric scopes and settings are documented in docs/PERFORMANCE.md.",
   "desktop": [
     {
       "name": "Apple M4 Max",
@@ -21,9 +21,9 @@
       "name": "AMD EPYC 9R45",
       "sub": "Zen 5 Turin \u00b7 32 threads",
       "category": "amd",
-      "hps": 49.95096944509143,
-      "source": "experiments/turin-fences-20261026/summary.json",
-      "source_revision": "ed7466cd262224a00d2a8ba85e5e553fae00b848",
+      "hps": 50.46967465683834,
+      "source": "experiments/turin-prefetch-20261026/summary.json",
+      "source_revision": "2bcb02cf8fc7237a37c1c7351acdf0d681370164",
       "selection": "manual_fixed_kernel",
       "metric_scope": "hashing_time",
       "page_backing": "transparent_huge_pages",
@@ -45,15 +45,25 @@
       "name": "AMD EPYC 7R13",
       "sub": "Zen 3 Milan \u00b7 16 threads",
       "category": "amd",
-      "hps": 11.625,
-      "source": "experiments/readme-hardware-20261025/summary.json (c6a.8xlarge, AVX2)"
+      "hps": 16.888612692065763,
+      "source": "experiments/chart-refresh-20261027/summary.json",
+      "source_revision": "86aa6e14921f",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "counted_hashes_over_elapsed_including_fence",
+      "page_backing": "transparent_huge_pages",
+      "repetitions": 2
     },
     {
       "name": "AMD EPYC 7R32",
       "sub": "Zen 2 Rome \u00b7 16 threads",
       "category": "amd",
-      "hps": 10.96,
-      "source": "experiments/readme-hardware-20261025/summary.json (c5a.8xlarge, AVX2)"
+      "hps": 17.416101804547615,
+      "source": "experiments/chart-refresh-20261027/summary.json",
+      "source_revision": "86aa6e14921f",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "counted_hashes_over_elapsed_including_fence",
+      "page_backing": "transparent_huge_pages",
+      "repetitions": 2
     },
     {
       "name": "AMD EPYC 7571",

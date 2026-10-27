@@ -5,8 +5,8 @@ memory-hard, so hashrate depends as much on memory bandwidth and latency as on c
 count. Seine ships hand-tuned kernels for each instruction set and picks the
 fastest one for your machine while it mines.
 
-Every number on this page is a measured result: completed hashes divided by the
-actual elapsed time, including the end-of-round fence, from repeated runs. Evidence
+Every number on this page is a measured result from repeated runs. Hash accounting
+and timing scopes are documented with each measurement below. Evidence
 for each row is linked, and chart data lives in
 [`assets/charts/benchmarks.json`](assets/charts/benchmarks.json).
 
@@ -75,10 +75,10 @@ fixed-kernel speedups or measurements of fully converged throughput.
 
 | CPU | Generation | Instance | Threads | Kernel | H/s |
 |---|---|---|---:|---|---:|
-| AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming ring 64 / depth 3 | 49.95 |
+| AMD EPYC 9R45 | Zen 5 Turin | m8a.8xlarge | 32 | streaming ring 64 / depth 4 | 50.47 |
 | AMD EPYC 9R14 | Zen 4 Genoa | m7a.8xlarge | 32 | streaming ring 8 / depth 2 | 45.30 |
-| AMD EPYC 7R13 | Zen 3 Milan | c6a.8xlarge | 16 | AVX2 | 11.63 |
-| AMD EPYC 7R32 | Zen 2 Rome | c5a.8xlarge | 16 | AVX2 | 10.96 |
+| AMD EPYC 7R13 | Zen 3 Milan | c6a.8xlarge | 16 | AVX2 streaming | 16.89 |
+| AMD EPYC 7R32 | Zen 2 Rome | c5a.8xlarge | 16 | AVX2 streaming | 17.42 |
 | AMD EPYC 7571 | Zen 1 Naples | m5a.8xlarge | 16 | AVX2 | 9.38 |
 | Intel Xeon 8488C | Sapphire Rapids | m7i.8xlarge | 32 | streaming | 26.00 |
 | Intel Xeon 6975P-C | Granite Rapids | m8i.8xlarge | 32 | streaming | 24.42 |
@@ -91,12 +91,12 @@ fixed-kernel speedups or measurements of fully converged throughput.
 | AWS Graviton2 | Neoverse N1 | m6g.8xlarge | 30 | NEON | 18.63 |
 
 The EPYC 9R45 row uses 32 threads and full transparent huge-page backing.
-Three fresh alternating confirmation pairs measured **49.95 H/s versus 49.45 H/s**
-with the previous fence policy: **+1.01%**, with a paired 95% bootstrap interval
-of +0.39% to +1.64%. All 13,103 timed hashes across screening and confirmation
+Three fresh alternating confirmation pairs measured **50.47 H/s versus 50.29 H/s**
+with the previous prefetch depth: **+0.35%**, with a paired 95% bootstrap interval
+of +0.22% to +0.43%. All 13,302 timed hashes across screening and confirmation
 verified independently. This fixed-kernel measurement excludes allocation,
 warmup and teardown; startup, pool throughput and energy are separate results.
-[Turin confirmation, frozen sources and raw reports](../experiments/turin-fences-20261026/README.md).
+[Turin confirmation, frozen sources and raw reports](../experiments/turin-prefetch-20261026/README.md).
 
 The EPYC 9R14 row uses 32 threads and full transparent huge-page backing. Three
 alternating 30-second confirmation pairs measured **45.30 H/s versus 44.18 H/s**
@@ -115,6 +115,15 @@ from the Windows fence improvement in v0.2.33. Three fresh alternating
 30-second pairs gave a paired 95% interval of +2.19% to +2.99%; all 8,936
 timed hashes across screening and confirmation verified independently.
 [Windows method and raw reports](../experiments/genoa-windows-fences-20261026/README.md).
+
+The EPYC 7R32 and 7R13 rows use 16 fixed threads, full transparent huge-page
+backing and the AVX2 streaming kernel. Each value averages two 20-second
+candidate runs in an alternating baseline/candidate/candidate/baseline sequence,
+with one warmup round per run. These are the backend report's `avg_hps`:
+counted hashes divided by elapsed time including the final fence; hashes
+completed late are excluded from the numerator. Allocation and warmup are
+outside the timed interval. These settings shipped by v0.2.39.
+[Reports and calculation](../experiments/chart-refresh-20261027/README.md).
 
 Other rows use 32-vCPU AWS instances with explicit 2 MiB huge pages, swept
 across kernels and thread counts, with four timed runs at the winning setting.

@@ -12,16 +12,19 @@
       "metric_scope": "whole_invocation"
     },
     {
+      "label": "AMD EPYC \u00b7 Zen 4",
+      "chip": "EPYC 9R14",
+      "threads": 32,
+      "hps": 45.3,
+      "source": "experiments/genoa-fences-20261026/summary.json",
+      "selection": "manual_fixed_kernel",
+      "metric_scope": "hashing_time"
+    },
+    {
       "labelKey": "perfArm",
       "chip": "AWS Graviton4",
       "threads": 32,
       "hps": 39.3
-    },
-    {
-      "label": "AMD EPYC \u00b7 Zen 4",
-      "chip": "EPYC 9R14",
-      "threads": 32,
-      "hps": 38.2
     },
     {
       "label": "Apple M4 Max",
