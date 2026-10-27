@@ -12,6 +12,7 @@ supported hardware only.
 - **About 7% faster CPU hashing on AMD Zen 4 servers** (measured on EPYC 9124P), and up to about 4% on Ryzen 7000 (measured on Ryzen 7 7700X).
 - **About 5% faster CPU hashing on AMD Zen 5 servers** (measured on EPYC 9355P and EPYC 9R45).
 - **About 5% more hashes in the first 15 minutes on AMD Zen 4 and Zen 5 servers with SMT** (measured on EPYC 9355P): automatic tuning now starts at every logical CPU that fits in memory.
+- **About 2-3% more hashes in the first 15 minutes on AMD Zen 3 to Zen 5 CPUs** (measured on EPYC 7313P and Ryzen 7 9700X): automatic tuning no longer spends its first minutes re-testing slower kernels.
 - `seine --bench` thread autotuning now checks a few widely spaced counts first, so it settles on a good thread count in fewer steps.
 - **About 40-50% faster CPU hashing on Windows with AMD Zen 2 and Zen 3 processors** (measured on EPYC 7R13): the memory-streaming kernel is now used on Windows too.
 - Faster restarts with saved CPU tuning on Linux EPYC 9375F systems: the fast kernel resumes promptly after memory initialization.
