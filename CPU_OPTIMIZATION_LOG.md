@@ -24,6 +24,10 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | Plain AVX-512 stream: ring 2 + SFENCE/32 instead of ring 64 + MFENCE per wrap | Ryzen 7 9700X, 8 / 12 / 16 workers | 0% / +2.0% / +2.8% | adopted |
 | Same, Zen 4 neighbour check | EPYC 9R14 (m7a.8xlarge), 16 / 32 workers | +0.8% (drift) / **+16.4%** (44.22 vs 38.01) | confirms; full 2 GiB parity |
 | Pre-103f170 AVX2 compress (no paired rounds) under `avx2-stream` | EPYC 7R13, 12 / 16 / 28 workers | −2.2% / −2.5% / −2.4% | rejected; paired rounds stay |
+| 16-byte NT stores (`_mm_stream_si128`) in `avx2-stream` | EPYC 7R13 (c6a.8xlarge), 16 / 24 workers | +5.9% / +1.9% | adopted |
+| Same, Zen 2 neighbour check | EPYC 7R32, 16 / 28 workers | +0.3% / +0.2% | neutral; adopted for the shared kernel |
+| 16-byte or 64-byte NT stores in the AVX-512 streaming kernel | Ryzen 7 9700X, 8 / 12 / 16 workers | 16-byte ±0.5%; 64-byte −0.4 to −1.3% | rejected; 32-byte stays |
+| Drop the periodic SFENCE in `avx2-stream` | EPYC 7R13, 16 / 24 workers | +0.8% / −0.2% | rejected (neutral); SFENCE stays |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a

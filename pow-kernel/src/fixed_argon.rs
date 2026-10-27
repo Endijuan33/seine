@@ -356,7 +356,7 @@ impl FixedArgon2id {
         memory: &mut [PowBlock],
     ) {
         use std::arch::x86_64::{
-            __m256i, _mm256_load_si256, _mm256_stream_si256, _mm_mfence, _mm_sfence,
+            __m128i, _mm_load_si128, _mm_mfence, _mm_sfence, _mm_stream_si128,
         };
         assert!(RING >= 2 && RING.is_power_of_two());
         assert!((1..=16).contains(&DEPTH));
@@ -406,9 +406,11 @@ impl FixedArgon2id {
                 }
                 let src = (*dst).0.as_ptr();
                 let output = (*arena.add(cur)).0.as_mut_ptr();
-                for vector in 0..32 {
-                    let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
-                    _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
+                // 16-byte NT stores: EPYC 7R13 +5.9%/+1.9% at 16/24 workers over
+                // 32-byte stores; neutral on EPYC 7R32.
+                for vector in 0..64 {
+                    let value = _mm_load_si128(src.add(vector * 2).cast::<__m128i>());
+                    _mm_stream_si128(output.add(vector * 2).cast::<__m128i>(), value);
                 }
                 if cur & 31 == 31 {
                     // Bound write-combining buffer occupancy.
