@@ -52,6 +52,8 @@ counts, ABBA pairs, full 2 GiB reference parity first. Evidence:
 | No periodic SFENCE in full-width `avx512-stream` | EPYC 9355 bare metal, 32 / 64 workers | -0.5% / -0.6% | rejected; SFENCE stays |
 | Live default mining vs a 0%-fee competitor's bench, same host | EPYC 9355 bare metal | Seine lifetime 78.9 H/s, steady ~83 at 64 workers (15 min bntpool); competitor bench 83.4 @64 | Turin gross parity in live mining |
 | Bench accounting at high lane counts | Ryzen 9 9900X curve 8-24 workers | exactly one uncounted late hash per lane per round (24 of 262 at 24 lanes); live 24-worker trial windows read 12.4-12.6 vs bench 11.4 | bench understates high counts ~0.5 hash/lane/round; compare counts live, not by bench |
+| `avx512-256-stream-l2` on Windows | EPYC 9R14 (m7a.4xlarge, Windows Server 2025), 8 / 16 workers | +1.5% / +2.1% (17.93 vs 17.55); full 2 GiB parity (mingw build) | confirms Zen 4 on Windows |
+| `avx512-stream` on Windows | EPYC 9R45 (c8a.4xlarge, Windows Server 2025), 8 / 14 workers | +0.8% / +2.1% (22.42 vs 21.97); full 2 GiB parity | confirms Zen 5 server on Windows |
 | Worker placement explains high-count flattening | 7443P, 24 workers, affinity off/os/auto | 14.28 / 14.13 / 14.11 | rejected (placement-neutral) |
 
 Open: Zen 3 still flattens past ~12 workers (seine ~14.8 H/s) while a
