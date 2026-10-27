@@ -207,19 +207,21 @@ fn initial_threads(
     }
 }
 
-// Cold start for CPUs whose cohort mines on a streaming kernel (AMD Zen 2-5):
-// every allowed logical CPU, bounded by RAM and current availability. SMT
-// hides memory latency on many-channel servers: EPYC 9355 mined 58.0 H/s at
-// 32 workers and 74.7 at 64, and competitors default to all logical CPUs.
-// The physical-core start left a 32-core/64-thread Turin host ~29% short, and
-// the generic midpoint started a 32-core Zen 5 VM at 14 of 28 workers.
-// Repeated count trials still decide the sustained setting.
-fn cohort_cold_start(cfg: &Config, max: usize) -> Option<usize> {
-    // Unit tests stay host-independent; `initial_threads` covers the policy.
-    (!cfg!(test)
-        && cfg.cpu_profile != CpuPerformanceProfile::Efficiency
-        && super::adaptive_kernel::cohort_kernel().is_some())
-    .then_some(max)
+// Cold start for CPUs whose cohort mines on a streaming kernel. Zen 4/5
+// (AVX-512 streaming) start at every allowed logical CPU that fits in RAM: SMT
+// hides memory latency on many-channel servers (EPYC 9355 mined 58.0 H/s at 32
+// workers, 74.7 at 64; 15 min live +4.7% vs a physical-core start). Zen 2/3
+// (AVX2 streaming) plateau by the physical core count, where a full-logical
+// start measured -3.3% live on EPYC 7R13. Count trials still decide afterwards.
+fn cohort_cold_start(cfg: &Config, host: &CpuAutotuneHostFingerprint, max: usize) -> Option<usize> {
+    if cfg!(test) || cfg.cpu_profile == CpuPerformanceProfile::Efficiency {
+        // Unit tests stay host-independent; `initial_threads` covers the policy.
+        return None;
+    }
+    match super::adaptive_kernel::cohort_kernel()? {
+        CpuKernel::Avx2Stream => host.physical_cores,
+        _ => Some(max),
+    }
     .filter(|&workers| workers > 0)
 }
 
@@ -329,7 +331,7 @@ fn prepare_with_resources(
         ));
     let cohort_start = seed
         .is_none()
-        .then(|| cohort_cold_start(cfg, max))
+        .then(|| cohort_cold_start(cfg, &cpu_autotune_host_fingerprint(), max))
         .flatten();
     let threads = initial_threads(
         seed.as_ref(),
@@ -359,7 +361,7 @@ fn prepare_with_resources(
     } else if seed.is_some() {
         "cached starting point"
     } else if cohort_start.is_some() && !full_count {
-        "all logical CPUs that fit in RAM for this CPU family"
+        "validated starting count for this CPU family"
     } else {
         "initial estimate"
     };
