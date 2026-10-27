@@ -1018,7 +1018,11 @@ impl Policy {
                         candidate_sample.hps
                             >= self.peak_hps * cpu_autotune_peak_floor_frac(self.profile)
                     } else {
-                        candidate_sample.hps > baseline.hps * 1.02 + quantization
+                        // Highest hashrate is the default objective: a higher
+                        // count wins on any measured gain over a stable baseline.
+                        // A 2% step margin stalled at the foot of flat plateaus
+                        // (Ryzen 7 9700X stayed at 8 of 16 workers, ~1.5% short).
+                        candidate_sample.hps > baseline.hps
                             // Discover the peak initially, then retain fewer
                             // workers when they already satisfy the profile.
                             // Probes still update the peak before this choice.
@@ -1730,6 +1734,22 @@ mod tests {
         assert!(p.tick(0, 0, false, 8, false, 1).is_none());
         assert!(p.tick(29, 0, false, 8, false, 1).is_none());
         assert_eq!(p.tick(30, 0, false, 8, false, 1).unwrap().threads, 4);
+    }
+
+    #[test]
+    fn higher_count_wins_on_small_stable_gain() {
+        for (candidate_hps, expected) in [(100.5, 9), (99.5, 8)] {
+            let mut p = policy(8);
+            p.phase = Phase::Confirm {
+                base: 8,
+                before: sample(100.0),
+                candidate: 9,
+                candidate_sample: sample(candidate_hps),
+            };
+            p.tick(0, 0, true, 16, false, 8);
+            let d = p.tick(30, 3000, true, 16, false, 8).unwrap();
+            assert_eq!(d.threads, expected, "candidate {candidate_hps} H/s");
+        }
     }
 
     #[test]
