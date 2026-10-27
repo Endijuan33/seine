@@ -1,6 +1,6 @@
 # Privacy policy
 
-Last updated: October 26, 2026.
+Last updated: October 27, 2026.
 
 This policy describes hardware, performance and reliability telemetry in the Seine miner.
 Telemetry helps the project understand which hardware is in use, identify
@@ -63,6 +63,10 @@ for an interrupted previous run, its last observed phase, elapsed runtime and
 build revision and release. Checkpoints preserve up to eight diagnostic groups
 from that run, prioritizing panics/errors and structured causes, with an indication
 when groups were omitted. These checkpoints do not identify the termination cause.
+They can also retain a fixed code for an observed interrupt, console close, logoff
+or system shutdown request. This records the request, not whether cleanup completed.
+Loader failures can identify an unavailable NVIDIA driver or CUDA compiler library
+without uploading library search paths or error messages.
 
 Seine creates a random installation ID in its data directory to distinguish
 installations and avoid counting frequent reports as additional users. This ID

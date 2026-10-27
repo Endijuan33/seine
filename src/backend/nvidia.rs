@@ -32,6 +32,102 @@ use crate::backend::{
 };
 use crate::types::hash_meets_target;
 const BACKEND_NAME: &str = "nvidia";
+
+// Check the dependency's own library search before its infallible accessor can
+// panic. Successful checks are cached; a failed check can be retried next start.
+fn require_cuda_libraries() -> Result<()> {
+    static READY: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if READY.get().is_some() {
+        return Ok(());
+    }
+    check_cuda_libraries(
+        || unsafe { cudarc::driver::sys::is_culib_present() },
+        || unsafe { nvrtc_sys::is_culib_present() },
+    )?;
+    let _ = READY.set(());
+    Ok(())
+}
+
+fn check_cuda_libraries(driver: impl FnOnce() -> bool, nvrtc: impl FnOnce() -> bool) -> Result<()> {
+    use seine_telemetry::{
+        DiagnosticCode, DiagnosticKind, DiagnosticOperation, FailureDetail, FailureReason,
+    };
+    let failure = if !driver() {
+        Some((
+            FailureReason::NvidiaDriverUnavailable,
+            DiagnosticKind::Driver,
+            "NVIDIA driver library is unavailable; install or repair the NVIDIA driver",
+        ))
+    } else if !nvrtc() {
+        Some((FailureReason::NvrtcUnavailable, DiagnosticKind::Compilation,
+            "CUDA NVRTC library is unavailable; install the CUDA Toolkit or restore the bundled NVRTC libraries"))
+    } else {
+        None
+    };
+    if let Some((reason, kind, message)) = failure {
+        crate::diagnostics::record_failure(
+            DiagnosticCode::BackendError,
+            kind,
+            Some(BACKEND_NAME),
+            FailureDetail::new(reason, DiagnosticOperation::BackendStartup),
+        );
+        bail!("{message}");
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+
+    // Run in a fresh subprocess with the test shim blocking only the named library.
+    #[test]
+    #[ignore = "requires scripts/test_cuda_missing_library.py loader isolation"]
+    fn missing_library_probe() {
+        let reason = match std::env::var("SEINE_TEST_MISSING_CUDA_LIBRARY")
+            .unwrap()
+            .as_str()
+        {
+            "driver" => seine_telemetry::FailureReason::NvidiaDriverUnavailable,
+            "nvrtc" => seine_telemetry::FailureReason::NvrtcUnavailable,
+            _ => panic!("invalid test library"),
+        };
+        let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        assert!(require_cuda_libraries().is_err());
+        let events = guard.0.snapshot(true).events;
+        assert_eq!(
+            events.len(),
+            1,
+            "expected one typed error and no loader panic"
+        );
+        assert_eq!(events[0].detail.as_ref().unwrap().reason, reason);
+    }
+
+    #[test]
+    fn missing_libraries_return_typed_errors_without_panicking() {
+        let _lock = crate::diagnostics::TEST_LOCK.lock().unwrap();
+        let guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        assert!(
+            check_cuda_libraries(|| false, || panic!("must not probe NVRTC without driver"))
+                .is_err()
+        );
+        assert!(check_cuda_libraries(|| true, || false).is_err());
+        assert!(check_cuda_libraries(|| true, || true).is_ok());
+        let snapshot = guard.0.snapshot(true);
+        assert_eq!(snapshot.events.len(), 2);
+        let reasons: Vec<_> = snapshot
+            .events
+            .iter()
+            .map(|e| {
+                assert_eq!(e.code, seine_telemetry::DiagnosticCode::BackendError);
+                assert_eq!(e.backend.as_deref(), Some("nvidia"));
+                e.detail.as_ref().unwrap().reason
+            })
+            .collect();
+        assert!(reasons.contains(&seine_telemetry::FailureReason::NvidiaDriverUnavailable));
+        assert!(reasons.contains(&seine_telemetry::FailureReason::NvrtcUnavailable));
+    }
+}
+
 const CUDA_KERNEL_SRC: &str = include_str!("nvidia_kernel.cu");
 const MAX_LANES_HARD_LIMIT: usize = 1024;
 const ASSIGN_CHANNEL_CAPACITY: usize = 256;
@@ -412,6 +508,7 @@ impl CudaArgon2Engine {
         fused_target_check: bool,
         cubin_cache_dir: &Path,
     ) -> Result<Self> {
+        require_cuda_libraries()?;
         let ctx = CudaContext::new(device_index as usize).map_err(|err| {
             anyhow!("failed to open CUDA context on device {device_index}: {err:?}")
         })?;
@@ -1401,6 +1498,7 @@ impl PowBackend for NvidiaBackend {
             }
         }
 
+        require_cuda_libraries()?;
         let selected = self.validate_or_select_device()?;
         let tuning = self.resolve_kernel_tuning(&selected);
         let mut engine = CudaArgon2Engine::new(

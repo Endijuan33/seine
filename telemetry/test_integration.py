@@ -272,6 +272,27 @@ del trial['policy']['short_minimum_hashes']
 assert send(alternative) == 422
 print('PASS: schema 6 mixed short/full window rules and incomplete alternative rejection')
 
+# Schema 7 adds fixed shutdown requests and loader causes, never free text.
+shutdown = json.loads(Path(__file__).with_name('reliability-fixture.json').read_text())
+shutdown['schema_version'] = 7
+shutdown['installation_id'] = uuid.uuid4().hex
+shutdown['report_id'] = uuid.uuid4().hex
+shutdown['diagnostics']['previous_run']['shutdown_request'] = 'console_close'
+shutdown['diagnostics']['events'][0]['detail'] = {
+    'reason': 'nvrtc_unavailable', 'operation': 'backend_startup'}
+assert send(shutdown) == 204
+assert query(f"SELECT payload#>>'{{diagnostics,previous_run,shutdown_request}}' FROM telemetry_reports WHERE report_id='{shutdown['report_id']}'") == 'console_close'
+for change in ('downgrade', 'private'):
+    bad = json.loads(json.dumps(shutdown))
+    bad['installation_id'] = uuid.uuid4().hex
+    bad['report_id'] = uuid.uuid4().hex
+    if change == 'downgrade':
+        bad['schema_version'] = 6
+    else:
+        bad['diagnostics']['previous_run']['shutdown_request'] = 'private free text'
+    assert send(bad) == 422
+print('PASS: schema 7 shutdown requests and loader causes, persistence, downgrade and free-text rejection')
+
 # Optional artifact emitted by the real runtime Monitor test. Keep this boundary
 # check separate from the handwritten collector fixture and production data.
 if runtime_fixture := os.environ.get('TELEMETRY_TEST_TRIAL_FIXTURE'):

@@ -90,6 +90,8 @@ def main():
         'the restarting clients. Previous-run event clusters are checkpoint context, may duplicate '
         'earlier uploads, and do not establish a termination cause. Hardware in those clusters is '
         'observed after restart. Dependency source IDs come from a fixed allowlist.'
+        ' shutdown_request records an observed OS stop request; it does not prove cleanup '
+        'completed or establish why a process terminated. Null includes older clients.'
     )
     if diagnostics.get('status') == 'attention':
         failed = True

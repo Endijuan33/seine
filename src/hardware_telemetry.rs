@@ -487,12 +487,14 @@ fn start_with_context(
             let mut since = Instant::now();
             // Regular reports stay hourly; shutdown/failure wakes the worker immediately.
             let mut next_report = Instant::now() + Duration::from_secs(300);
+            let mut next_checkpoint = Instant::now();
+            let mut saved_shutdown = None;
             loop {
                 let final_report = !matches!(
                     stopped.recv_timeout(
                         next_report
                             .saturating_duration_since(Instant::now())
-                            .min(Duration::from_secs(5))
+                            .min(Duration::from_secs(1))
                     ),
                     Err(crossbeam_channel::RecvTimeoutError::Timeout)
                 );
@@ -503,15 +505,26 @@ fn start_with_context(
                     }
                     break;
                 }
-                // Checkpoints stay in the reporting thread. A forced stop may lose
-                // up to one tick; they describe the last observation, not its cause.
+                // Observe console close within one second while keeping ordinary
+                // checkpoint disk writes at five seconds. No IO in the OS handler.
                 if let Some(store) = &store {
-                    store.checkpoint(&options.installation_id, diagnostics.checkpoint());
+                    if final_report {
+                        // Mining has already released this worker. Do not leave a
+                        // false unfinished marker while final HTTP delivery waits.
+                        store.finish();
+                    } else if Instant::now() >= next_checkpoint
+                        || saved_shutdown != crate::shutdown::requested()
+                    {
+                        let checkpoint = diagnostics.checkpoint();
+                        saved_shutdown = checkpoint.shutdown_request;
+                        store.checkpoint(&options.installation_id, checkpoint);
+                        next_checkpoint = Instant::now() + Duration::from_secs(5);
+                    }
                 }
                 if !final_report && Instant::now() < next_report {
                     continue;
                 }
-                if let Some(store) = &store {
+                if let Some(store) = store.as_ref().filter(|_| !final_report) {
                     if let Some(pending) = store.pending(&options.installation_id) {
                         if send_report(&client, &options, &pending, Some(store)) {
                             store.clear_pending();
@@ -722,6 +735,41 @@ mod tests {
         assert_eq!(tuning.trials[0].trial_id, 1);
         resolve(&dir.0, Some(false), None).unwrap();
         assert!(!dir.0.join("seine.diagnostics.pending.json").exists());
+    }
+
+    #[test]
+    fn completed_run_marker_is_cleared_before_slow_final_upload() {
+        let _guard = WORKER_TEST.lock().unwrap();
+        let dir = Temp::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let endpoint = format!("http://{}/reports", listener.local_addr().unwrap());
+        let options = resolve(&dir.0, Some(true), Some(&endpoint))
+            .unwrap()
+            .unwrap();
+        let (_, worker) = start_with_context(&options, crate::diagnostics::test_context()).unwrap();
+        crate::diagnostics::allocation_failure(true, 2147483648, Some(12));
+        let finished = std::thread::spawn(move || drop(worker));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut socket = loop {
+            match listener.accept() {
+                Ok((socket, _)) => break socket,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline, "final upload never arrived");
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(e) => panic!("{e}"),
+            }
+        };
+        assert!(!finished.is_finished());
+        assert!(!dir.0.join("seine.diagnostics.running").exists());
+        assert!(!dir.0.join("seine.diagnostics.phase.json").exists());
+        use std::io::Write;
+        socket
+            .write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+            .unwrap();
+        drop(socket);
+        finished.join().unwrap();
     }
 
     #[test]

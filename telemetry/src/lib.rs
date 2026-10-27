@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -69,6 +69,19 @@ pub enum FailureReason {
     BackendStartFailed,
     NoBackendAvailable,
     CpuStartupTimedOut,
+    NvidiaDriverUnavailable,
+    NvrtcUnavailable,
+}
+
+/// An observed OS shutdown request, not proof that cleanup finished or the cause
+/// of a later termination. Raw signal payloads and user input are never collected.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShutdownRequest {
+    Interrupt,
+    ConsoleClose,
+    Logoff,
+    SystemShutdown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -126,6 +139,8 @@ impl FailureDetail {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreviousRun {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shutdown_request: Option<ShutdownRequest>,
     pub phase: RunPhase,
     pub uptime_secs: u64,
     pub build_commit: String,
@@ -187,6 +202,14 @@ pub struct DiagnosticEvent {
 }
 
 impl DiagnosticEvent {
+    fn schema6_compatible(&self) -> bool {
+        self.detail.as_ref().is_none_or(|d| {
+            !matches!(
+                d.reason,
+                FailureReason::NvidiaDriverUnavailable | FailureReason::NvrtcUnavailable
+            )
+        })
+    }
     fn validate(&self, uptime_secs: u64) -> bool {
         self.detail.as_ref().is_none_or(|d| {
             d.os_error
@@ -418,6 +441,14 @@ impl Report {
             && self.diagnostics.as_ref().is_none_or(|d| {
                 self.schema_version >= 3
                     && d.validate()
+                    && (self.schema_version >= 7
+                        || (d.events.iter().all(DiagnosticEvent::schema6_compatible)
+                            && d.previous_run.as_ref().is_none_or(|r| {
+                                r.shutdown_request.is_none()
+                                    && r.recent_events
+                                        .iter()
+                                        .all(DiagnosticEvent::schema6_compatible)
+                            })))
                     && (self.schema_version >= 5
                         || (d.previous_run.as_ref().is_none_or(|r| {
                             r.miner_version.is_none()
@@ -462,6 +493,66 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shutdown_requests_and_loader_causes_require_schema7() {
+        let mut report: Report =
+            serde_json::from_str(include_str!("../reliability-fixture.json")).unwrap();
+        report.schema_version = 7;
+        report
+            .diagnostics
+            .as_mut()
+            .unwrap()
+            .previous_run
+            .as_mut()
+            .unwrap()
+            .shutdown_request = Some(ShutdownRequest::ConsoleClose);
+        assert!(report.validate());
+        report.schema_version = 6;
+        assert!(!report.validate());
+        report
+            .diagnostics
+            .as_mut()
+            .unwrap()
+            .previous_run
+            .as_mut()
+            .unwrap()
+            .shutdown_request = None;
+        assert!(report.validate());
+        for reason in [
+            FailureReason::NvidiaDriverUnavailable,
+            FailureReason::NvrtcUnavailable,
+        ] {
+            report.diagnostics.as_mut().unwrap().events[0].detail = Some(FailureDetail::new(
+                reason,
+                DiagnosticOperation::BackendStartup,
+            ));
+            assert!(!report.validate());
+            report.schema_version = 7;
+            assert!(report.validate());
+            report.schema_version = 6;
+            report.diagnostics.as_mut().unwrap().events[0].detail = None;
+            report
+                .diagnostics
+                .as_mut()
+                .unwrap()
+                .previous_run
+                .as_mut()
+                .unwrap()
+                .recent_events[0]
+                .detail = Some(FailureDetail::new(
+                reason,
+                DiagnosticOperation::BackendStartup,
+            ));
+            assert!(!report.validate());
+            report.schema_version = 7;
+            assert!(report.validate());
+            report.schema_version = 6;
+        }
+        let mut value = serde_json::to_value(&report).unwrap();
+        value["diagnostics"]["previous_run"]["shutdown_request"] = "private free text".into();
+        assert!(serde_json::from_value::<Report>(value).is_err());
+    }
 
     #[test]
     fn recovered_diagnostics_are_bounded_private_and_schema5_only() {

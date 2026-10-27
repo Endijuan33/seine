@@ -57,6 +57,7 @@ WITH reports AS (
            payload #>> '{hardware,runtime_environment}' AS environment,
            diagnostics #>> '{previous_run,phase}' AS last_observed_phase,
            diagnostics #>> '{previous_run,build_commit}' AS previous_build_commit,
+           diagnostics #>> '{previous_run,shutdown_request}' AS shutdown_request,
            min((diagnostics #>> '{previous_run,uptime_secs}')::bigint) AS minimum_previous_uptime_secs,
            max((diagnostics #>> '{previous_run,uptime_secs}')::bigint) AS maximum_previous_uptime_secs,
            count(DISTINCT installation_id) AS affected_installations,
@@ -70,7 +71,7 @@ WITH reports AS (
                (diagnostics #>> '{previous_run,events_truncated}')::boolean
            ) AS installations_with_truncated_previous_events
     FROM unclean
-    GROUP BY 1,2,3,4,5,6,7
+    GROUP BY 1,2,3,4,5,6,7,8
 ), previous_events AS (
     SELECT previous_version AS version,
            diagnostics #>> '{previous_run,build_commit}' AS build_commit,

@@ -22,6 +22,21 @@ class DiagnosticSQLTests(unittest.TestCase):
     def diagnostics(self):
         return json.loads(self.query((Path(__file__).parent / 'diagnostics.sql').read_text()))
 
+    def test_shutdown_request_is_context_not_proof_of_clean_exit(self):
+        fixture = json.loads((Path(__file__).parent / 'reliability-fixture.json').read_text())
+        fixture['schema_version'] = 7
+        fixture['diagnostics']['previous_run']['miner_version'] = fixture['miner_version']
+        for reason in (None, 'console_close', 'interrupt'):
+            value = copy.deepcopy(fixture)
+            if reason:
+                value['diagnostics']['previous_run']['shutdown_request'] = reason
+            self.insert_diagnostic(value)
+        result = self.diagnostics()
+        self.assertEqual({c['shutdown_request'] for c in result['unclean_run_clusters']},
+                         {None, 'console_close', 'interrupt'})
+        self.assertEqual(result['recent_unclean_versions'][0]['affected_installations'], 3)
+        self.assertEqual(result['status'], 'attention')
+
     def test_typed_causes_phases_and_legacy_fields_remain_distinct(self):
         fixture = json.loads((Path(__file__).parent / 'diagnostics-fixture.json').read_text())
         fixture['diagnostics']['events'][0]['count'] = 100

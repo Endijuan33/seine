@@ -465,6 +465,7 @@ impl Recorder {
     pub(crate) fn checkpoint(&self) -> PreviousRun {
         let recent = self.recent.lock().unwrap_or_else(|e| e.into_inner());
         PreviousRun {
+            shutdown_request: crate::shutdown::requested(),
             phase: *self.phase.lock().unwrap_or_else(|e| e.into_inner()),
             uptime_secs: self.started.elapsed().as_secs(),
             build_commit: self.context.build_commit.clone(),
@@ -819,11 +820,17 @@ mod tests {
             181,
         );
         let (store, _) = Store::open(&settings, id).unwrap();
-        store.checkpoint(id, recorder.checkpoint());
+        let mut checkpoint = recorder.checkpoint();
+        checkpoint.shutdown_request = Some(seine_telemetry::ShutdownRequest::ConsoleClose);
+        store.checkpoint(id, checkpoint);
         drop(store);
         let (store, unclean) = Store::open(&settings, id).unwrap();
         assert!(unclean);
         let previous = store.previous_run.as_ref().unwrap();
+        assert_eq!(
+            previous.shutdown_request,
+            Some(seine_telemetry::ShutdownRequest::ConsoleClose)
+        );
         assert_eq!(
             previous.miner_version.as_deref(),
             Some(crate::version::RELEASE_VERSION)
@@ -1074,6 +1081,7 @@ mod tests {
         store.checkpoint(
             &report.installation_id,
             PreviousRun {
+                shutdown_request: None,
                 phase: RunPhase::Tuning,
                 uptime_secs: 42,
                 build_commit: "abcdef".into(),
@@ -1125,6 +1133,7 @@ mod tests {
         store.checkpoint(
             id,
             PreviousRun {
+                shutdown_request: None,
                 phase: RunPhase::Mining,
                 uptime_secs: 90,
                 build_commit: "abcdef".into(),
@@ -1147,6 +1156,7 @@ mod tests {
         store.checkpoint(
             id,
             PreviousRun {
+                shutdown_request: None,
                 phase: RunPhase::Mining,
                 uptime_secs: 90,
                 build_commit: "abcdef".into(),

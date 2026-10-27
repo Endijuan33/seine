@@ -10,6 +10,8 @@ supported hardware only.
 ## Unreleased
 
 - **Up to about 6% faster CPU hashing on Linux with AMD Zen 3 processors** (measured on EPYC 7R13).
+- Windows console windows now allow a brief cleanup period when closed, reducing false interrupted-run reports.
+- Missing NVIDIA driver or CUDA compiler libraries now produce clearer startup errors while other mining backends can continue.
 
 ## v0.2.38
 

@@ -4,6 +4,18 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 7 adds a fixed `previous_run.shutdown_request` enum and typed unavailable
+NVIDIA driver/NVRTC library causes. The collector continues to accept schemas 1–6;
+deploy schema-7 support before releasing schema-7 miners. No database migration is
+needed. The request is checkpoint context, not proof of a clean exit or a crash
+cause; existing unclean-run alert thresholds remain unchanged. Windows console
+close now permits up to four seconds of normal cleanup, and a completed run clears
+its marker before final HTTP delivery. Ordinary checkpoints remain five seconds;
+the reporting worker checks for a shutdown request every second, subject to ongoing
+IO. Abrupt termination can still beat a checkpoint. Windows automatic large-page
+fallbacks now retain their numeric error at the source. See the
+[investigation and validation](../docs/validation/reliability-followup-20261027.md).
+
 Schema 6 adds [paired CPU trial evidence](TUNING.md), including inconclusive and
 aborted comparisons, bounded delivery and installation-weighted research hints.
 The productive CPU kernel tuner emits these trials when telemetry is enabled.
@@ -74,7 +86,7 @@ The strict upload schema is in [src/lib.rs](src/lib.rs), with an example in
 
 The [reliability fixture](reliability-fixture.json) demonstrates schema 5; the
 [diagnostic fixture](diagnostics-fixture.json) retains schema-4 compatibility coverage.
-The current schema-6 collector accepts schemas 1–5. Deploy it before schema-6 miners.
+The current schema-7 collector accepts schemas 1–6. Deploy it before schema-7 miners.
 The recorder starts after configuration parsing, before address resolution,
 backend initialization and tuning. UI warnings/errors identify their original
 call site through `track_caller`; backend error and quarantine paths also report
