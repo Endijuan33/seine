@@ -10,6 +10,7 @@ and timing scopes are documented with each measurement below. Evidence
 for each row is linked, and chart data lives in
 [`assets/charts/benchmarks.json`](assets/charts/benchmarks.json).
 
+- [AMD EPYC 9355P bare metal, default settings](#amd-epyc-9355p-bare-metal-default-settings)
 - [AMD EPYC 9375F bare metal](#amd-epyc-9375f-bare-metal)
 - [AMD EPYC 9554P bare metal](#amd-epyc-9554p-bare-metal)
 - [AMD EPYC 9355P bare metal](#amd-epyc-9355p-bare-metal)
@@ -23,6 +24,17 @@ for each row is linked, and chart data lives in
 
 A thread here is one hashing thread with its own 2 GiB arena, the same number you set
 with `--threads` or see as "Threads" on the dashboard.
+
+## AMD EPYC 9355P bare metal, default settings
+
+**97.1 H/s** while mining (median of minutes 2-15; 96.4 H/s averaged over all
+15 minutes from a cold start) on a 32-core/64-thread Zen 5 EPYC 9355P with 192 GiB of
+RAM on Linux. seine ran with no tuning flags and an empty data directory, and
+chose 64 threads, the `avx512-stream` kernel and transparent huge pages itself.
+It mined against a local Stratum fixture that accepts every hash, and the rate is
+accepted hashes over the 900 seconds since launch, startup included. Source
+revision `c9c9638`; per-minute rates are in
+[experiments/9355p-live-20261028](../experiments/9355p-live-20261028/README.md).
 
 ## AMD EPYC 9375F bare metal
 

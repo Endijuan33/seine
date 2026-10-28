@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-28",
+  "host": "Cherry Servers bare metal, AMD EPYC 9355P (Zen 5, 32 cores / 64 threads), 192 GiB RAM, Ubuntu 24.04",
+  "source_revision": "c9c96389bbcf61e459e49a4b3904dcbe3b2e5dfa",
+  "command": "seine --mode pool --address <fixture> --pool-url stratum+tcp://127.0.0.1:<port> --ui plain --telemetry off --data-dir <empty>",
+  "settings": "defaults (automatic threads, kernel and page mode; no tuning flags); empty data directory (cold start)",
+  "threads": 64,
+  "kernel": "avx512-stream",
+  "page_backing": "transparent_huge_pages",
+  "method": "Local all-target Stratum fixture (every hash is a share) on the same host, network-isolated; 900 s from launch; rate = accepted hashes / 900 s, including startup and the developer-fee slice",
+  "duration_secs": 900,
+  "hps_15_minute_average": 96.39,
+  "hps_steady_median_minutes_2_15": 97.1,
+  "hps_per_minute": [
+    92.9,
+    96.8,
+    96.8,
+    97.1,
+    97.2,
+    97.1,
+    97.2,
+    97.2,
+    96.8,
+    97.2,
+    92.2,
+    96.3,
+    97.1,
+    97.1,
+    96.8
+  ]
+}
