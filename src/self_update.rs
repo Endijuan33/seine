@@ -5,11 +5,12 @@
 //! when the periodic release check finds a newer version, then restarts the
 //! miner with its original arguments.
 //!
-//! Trust model: the release archive is fetched over HTTPS from GitHub and its
-//! SHA-256 must match the `SHA256SUMS.txt` published with the same release, which
-//! catches corrupt or truncated downloads and mismatched assets. It does not
-//! prove authorship beyond control of the GitHub release; signature verification
-//! with a key embedded here is the next step once releases are signed.
+//! Trust model: the release's `SHA256SUMS.txt` must carry an Ed25519 signature
+//! (`SHA256SUMS.txt.sig`, raw 64 bytes over the file's exact bytes) that verifies
+//! against the release signing key embedded below, and the downloaded archive's
+//! SHA-256 must match that signed list. A release without a valid signature is
+//! refused, so control of the GitHub account or a tampered download cannot push
+//! a binary; only the holder of the signing key can.
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -22,6 +23,14 @@ use sha2::{Digest, Sha256};
 
 const RELEASE_API_URL: &str = "https://api.github.com/repos/zpalmtree/seine/releases/latest";
 const CHECKSUMS_ASSET: &str = "SHA256SUMS.txt";
+const SIGNATURE_ASSET: &str = "SHA256SUMS.txt.sig";
+/// Raw Ed25519 public key of the seine release signing key (generated
+/// 2026-10-28; the private key lives outside the repository). Rotate by
+/// shipping a release signed by both keys, then switching this constant.
+const RELEASE_SIGNING_PUBLIC_KEY_HEX: &str =
+    "f60ad032847909721c79cc299fe126653119f43d1ee50864a566d08bef0aecee";
+/// Checksum lists and signatures are tiny; refuse anything larger.
+const MAX_TEXT_ASSET_BYTES: usize = 64 * 1024;
 /// Release archives are a few MiB; refuse anything that could fill a disk.
 const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -131,10 +140,28 @@ pub(crate) fn run() -> Result<Outcome> {
     })?;
     let asset = find_asset(&release.assets, name)?;
     let checksums = find_asset(&release.assets, CHECKSUMS_ASSET)?;
-    let expected = expected_sha256(
-        &download_text(&client, &checksums.browser_download_url)?,
-        name,
-    )?;
+    let signature = find_asset(&release.assets, SIGNATURE_ASSET).map_err(|_| {
+        anyhow!(
+            "release {} has no {SIGNATURE_ASSET}; refusing to install an unsigned release",
+            release.tag_name
+        )
+    })?;
+    let checksum_bytes = download_bytes(&client, &checksums.browser_download_url)?;
+    let signature_bytes = download_bytes(&client, &signature.browser_download_url)?;
+    verify_release_signature(
+        &checksum_bytes,
+        &signature_bytes,
+        RELEASE_SIGNING_PUBLIC_KEY_HEX,
+    )
+    .with_context(|| {
+        format!(
+            "release {} is not signed by the seine release key",
+            release.tag_name
+        )
+    })?;
+    let checksum_text =
+        String::from_utf8(checksum_bytes).context("checksum list is not UTF-8 text")?;
+    let expected = expected_sha256(&checksum_text, name)?;
 
     let exe = std::env::current_exe().context("cannot locate the running executable")?;
     let dir = exe
@@ -219,15 +246,40 @@ fn find_asset<'a>(assets: &'a [Asset], name: &str) -> Result<&'a Asset> {
         .ok_or_else(|| anyhow!("the newest release has no {name} asset"))
 }
 
-fn download_text(client: &reqwest::blocking::Client, url: &str) -> Result<String> {
-    client
+fn download_bytes(client: &reqwest::blocking::Client, url: &str) -> Result<Vec<u8>> {
+    let bytes = client
         .get(url)
         .send()
         .with_context(|| format!("download of {url} failed"))?
         .error_for_status()
         .with_context(|| format!("download of {url} rejected"))?
-        .text()
-        .context("checksum list is not text")
+        .bytes()
+        .with_context(|| format!("download of {url} was cut short"))?;
+    if bytes.len() > MAX_TEXT_ASSET_BYTES {
+        bail!("{url} is implausibly large ({} bytes)", bytes.len());
+    }
+    Ok(bytes.to_vec())
+}
+
+/// Checks the raw Ed25519 signature over `message` against the hex-encoded
+/// release public key.
+fn verify_release_signature(message: &[u8], signature: &[u8], public_key_hex: &str) -> Result<()> {
+    let public_key = hex::decode(public_key_hex).context("release signing key is not hex")?;
+    if public_key.len() != 32 {
+        bail!(
+            "release signing key has {} bytes, expected 32",
+            public_key.len()
+        );
+    }
+    if signature.len() != 64 {
+        bail!(
+            "{SIGNATURE_ASSET} has {} bytes, expected a raw 64-byte Ed25519 signature",
+            signature.len()
+        );
+    }
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, public_key)
+        .verify(message, signature)
+        .map_err(|_| anyhow!("signature does not verify"))
 }
 
 fn stage_update(
@@ -383,6 +435,37 @@ fn replace_executable(exe: &Path, staged: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_signing_key_is_a_32_byte_ed25519_key() {
+        assert_eq!(
+            hex::decode(RELEASE_SIGNING_PUBLIC_KEY_HEX).unwrap().len(),
+            32
+        );
+    }
+
+    #[test]
+    fn signature_verification_accepts_the_signing_key_and_rejects_others() {
+        use ring::signature::{Ed25519KeyPair, KeyPair};
+        let rng = ring::rand::SystemRandom::new();
+        let key =
+            Ed25519KeyPair::from_pkcs8(Ed25519KeyPair::generate_pkcs8(&rng).unwrap().as_ref())
+                .unwrap();
+        let other =
+            Ed25519KeyPair::from_pkcs8(Ed25519KeyPair::generate_pkcs8(&rng).unwrap().as_ref())
+                .unwrap();
+        let message = b"0123  seine-linux-x86_64.tar.gz\n";
+        let signature = key.sign(message);
+        let public_hex = hex::encode(key.public_key().as_ref());
+        let other_hex = hex::encode(other.public_key().as_ref());
+        assert!(verify_release_signature(message, signature.as_ref(), &public_hex).is_ok());
+        assert!(verify_release_signature(message, signature.as_ref(), &other_hex).is_err());
+        let mut tampered = message.to_vec();
+        tampered[0] ^= 1;
+        assert!(verify_release_signature(&tampered, signature.as_ref(), &public_hex).is_err());
+        assert!(verify_release_signature(message, &signature.as_ref()[..63], &public_hex).is_err());
+        assert!(verify_release_signature(message, signature.as_ref(), "abcd").is_err());
+    }
 
     #[test]
     fn reads_the_matching_checksum_line_only() {

@@ -101,10 +101,16 @@ spread is about 3%); a one-block-ahead reference prefetch for the
 data-independent half was bit-exact but 7-11% slower and was dropped. Package
 power stayed near 320 W, so the card now does about 0.11 H/s per watt.
 
-Follow-ups, in order of expected value: a wave64-native kernel (one lane per
-64-thread wavefront, or four lanes per wave with 16-wide shuffles) and launch
-depth > 1; a run on an RDNA wave32 card, which is the fleet target and has not
-run the wave-scoped barrier yet. Do not quote these numbers as AMD GPU
+The kernel compiles for every RDNA target with the wave32 options the engine
+uses (`hipcc --offload-arch=<arch> -mno-wavefrontsize64 -DSEINE_WAVE_SYNC=1
+-DSEINE_WARPS_PER_BLOCK=1U`, ROCm 6.4.1 clang 19): gfx1030, gfx1100, gfx1101,
+gfx1102, gfx1151 (Strix Halo) and gfx1200/gfx1201 all build cleanly (2026-10-28,
+static check only; no RDNA device has executed it).
+
+Follow-ups, in order of expected value: a run on an RDNA wave32 card, which is
+the fleet target and has not executed the kernel or the wave-scoped barrier yet;
+a wave64-native kernel (one lane per 64-thread wavefront, or four lanes per wave
+with 16-wide shuffles) and launch depth > 1 for CDNA. Do not quote these numbers as AMD GPU
 performance for the README until an RDNA card has been measured.
 
 ## Qualify the rental and software stack

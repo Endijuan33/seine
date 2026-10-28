@@ -704,10 +704,15 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     self_update: bool,
 
-    /// Install new stable releases while mining: download, verify, swap the
-    /// executable and restart with the same arguments (needs the update check).
-    #[arg(long, default_value_t = false)]
+    /// Install new stable releases while mining (the default): download, verify
+    /// the release signature and checksum, swap the executable and restart with
+    /// the same arguments. Needs the update check.
+    #[arg(long, default_value_t = true, action = ArgAction::SetTrue)]
     auto_update: bool,
+
+    /// Keep mining the current version: only log that a newer release exists.
+    #[arg(long, action = ArgAction::SetTrue, conflicts_with = "auto_update")]
+    no_auto_update: bool,
 
     /// Experimental: side-buffer slots (1 KiB each) that serve scheduled
     /// data-independent references in the AVX-512 streaming kernels; 0 disables,
@@ -836,7 +841,8 @@ pub struct Config {
     pub sub_round_rebalance_interval: Option<Duration>,
     pub sse_enabled: bool,
     pub update_check_enabled: bool,
-    /// `--auto-update`: apply newer releases found by the update check.
+    /// Apply newer releases found by the update check (default; off with
+    /// `--no-auto-update` or `--disable-update-check`).
     pub auto_update: bool,
     /// Experimental side-cache slots for the AVX-512 streaming kernels (0 = off).
     pub cpu_side_cache_blocks: usize,
@@ -1409,7 +1415,7 @@ impl Config {
             sub_round_rebalance_interval: optional_duration_from_millis(cli.sub_round_rebalance_ms),
             sse_enabled: !cli.disable_sse,
             update_check_enabled: !cli.disable_update_check,
-            auto_update: cli.auto_update && !cli.disable_update_check,
+            auto_update: cli.auto_update && !cli.no_auto_update && !cli.disable_update_check,
             cpu_side_cache_blocks: cli.cpu_side_cache_blocks.unwrap_or_else(|| {
                 crate::miner::cohort_side_cache_blocks(
                     cli.threads.unwrap_or(auto_threads_cap),
@@ -3655,6 +3661,7 @@ mod tests {
             bench: false,
             self_update: false,
             auto_update: false,
+            no_auto_update: false,
             cpu_side_cache_blocks: None,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
