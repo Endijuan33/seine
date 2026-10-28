@@ -154,6 +154,103 @@ pub struct FixedArgon2id {
     segment_length: usize,
     data_independent_ref_indexes: Box<[usize]>,
     isa: u8,
+    side_cache: Option<SideCacheSchedule>,
+}
+
+const NO_SLOT: u16 = u16::MAX;
+
+/// Static schedule for a small cache-resident side buffer in the streaming ring
+/// kernels. The first half of a fill uses data-independent references, which are
+/// known in advance and identical for every hash, and Argon2's index mapping skews
+/// them toward recent blocks: the share of references within `D` blocks of the
+/// current one is about `sqrt(D / area)`. Non-temporal arena stores leave those
+/// blocks uncached, so each costs a DRAM read. The schedule keeps a block in a
+/// side slot only when a reference to it falls within `max_distance`, and frees
+/// the slot after that block's last such reader, so a few hundred 1 KiB slots stay
+/// L2-resident and are overwritten in place rather than evicted dirty (the large
+/// rings rejected on 2026-10-27 kept every recent block and paid those evictions).
+/// Slots in excess of demand simply stay unused; blocks that find no free slot are
+/// read from the arena as before. Output is identical either way.
+#[derive(Debug, Clone)]
+struct SideCacheSchedule {
+    slots: usize,
+    /// Slot that receives a copy of the block written at this index, or `NO_SLOT`.
+    write_slot: Box<[u16]>,
+    /// Slot holding this index's reference block, or `NO_SLOT` (read the arena).
+    read_slot: Box<[u16]>,
+}
+
+impl SideCacheSchedule {
+    fn new(refs: &[usize], ring: usize, slots: usize, max_distance: usize) -> Self {
+        use std::cmp::Reverse;
+        use std::collections::BinaryHeap;
+        let slots = slots.min(usize::from(NO_SLOT - 1)).max(1);
+        let len = refs.len();
+        let mut write_slot = vec![NO_SLOT; len].into_boxed_slice();
+        let mut read_slot = vec![NO_SLOT; len].into_boxed_slice();
+        // Readers of each block, in reading order, restricted to references the
+        // ring cannot serve (distance >= ring) and within the kept window.
+        let eligible = |reader: usize, block: usize| {
+            reader > block && reader - block >= ring && reader - block <= max_distance
+        };
+        let mut counts = vec![0u32; len + 1];
+        for (reader, &block) in refs.iter().enumerate().skip(2) {
+            if eligible(reader, block) {
+                counts[block + 1] += 1;
+            }
+        }
+        for i in 1..=len {
+            counts[i] += counts[i - 1];
+        }
+        let mut readers = vec![0u32; counts[len] as usize];
+        let mut fill = counts.clone();
+        for (reader, &block) in refs.iter().enumerate().skip(2) {
+            if eligible(reader, block) {
+                readers[fill[block] as usize] = reader as u32;
+                fill[block] += 1;
+            }
+        }
+        let mut free: Vec<u16> = (0..slots as u16).rev().collect();
+        // (last reader, slot): a slot is free again once its last reader is past.
+        let mut busy: BinaryHeap<Reverse<(usize, u16)>> = BinaryHeap::new();
+        // Blocks 0 and 1 are the seeds, written before the fill loop with ordinary
+        // stores and never copied, so their readers keep reading the arena.
+        for block in 2..len {
+            while let Some(Reverse((last, slot))) = busy.peek().copied() {
+                if last < block {
+                    busy.pop();
+                    free.push(slot);
+                } else {
+                    break;
+                }
+            }
+            let block_readers = &readers[counts[block] as usize..counts[block + 1] as usize];
+            if block_readers.is_empty() {
+                continue;
+            }
+            let Some(slot) = free.pop() else {
+                continue;
+            };
+            write_slot[block] = slot;
+            for &reader in block_readers {
+                read_slot[reader as usize] = slot;
+            }
+            busy.push(Reverse((
+                *block_readers.last().expect("non-empty") as usize,
+                slot,
+            )));
+        }
+        Self {
+            slots,
+            write_slot,
+            read_slot,
+        }
+    }
+
+    #[inline(always)]
+    fn read(&self, index: usize) -> u16 {
+        self.read_slot.get(index).copied().unwrap_or(NO_SLOT)
+    }
 }
 
 impl FixedArgon2id {
@@ -194,7 +291,26 @@ impl FixedArgon2id {
             segment_length,
             data_independent_ref_indexes,
             isa,
+            side_cache: None,
         }
+    }
+
+    /// Serve data-independent references to recently written blocks from a side
+    /// buffer of `blocks` 1 KiB slots in the AVX-512 streaming ring kernels; 0
+    /// disables it (the default). Research knob, see [`SideCacheSchedule`].
+    pub fn set_side_cache_blocks(&mut self, blocks: usize) {
+        self.side_cache = (blocks > 0).then(|| {
+            SideCacheSchedule::new(
+                &self.data_independent_ref_indexes,
+                2,
+                blocks,
+                blocks.saturating_mul(16),
+            )
+        });
+    }
+
+    pub fn side_cache_blocks(&self) -> usize {
+        self.side_cache.as_ref().map_or(0, |s| s.slots)
     }
 
     pub const fn block_count(&self) -> usize {
@@ -308,6 +424,12 @@ impl FixedArgon2id {
         debug_assert_eq!(arena as usize % 64, 0);
         debug_assert_eq!(cache as usize % 64, 0);
         let mut committed_end = 2; // Seeds use ordinary stores.
+        let side = self.side_cache.as_ref();
+        let mut side_buffer: Box<[PowBlock]> = match side {
+            Some(schedule) => vec![PowBlock::default(); schedule.slots].into_boxed_slice(),
+            None => Box::default(),
+        };
+        let side_ptr = side_buffer.as_mut_ptr();
         for slice in 0..SYNC_POINTS {
             let first = if slice == 0 { 2 } else { 0 };
             let di = slice < 2;
@@ -321,9 +443,16 @@ impl FixedArgon2id {
                     reference_index(cur - 1, prev.0[0])
                 };
                 debug_assert!(reference < cur - 1);
+                let side_read = if di {
+                    side.map_or(NO_SLOT, |schedule| schedule.read(cur))
+                } else {
+                    NO_SLOT
+                };
                 // A distance of exactly RING aliases the output slot, so use the
                 // arena in that case, never the cached ring. Fence first if needed.
-                let reference_ptr = if cur - reference < RING {
+                let reference_ptr = if side_read != NO_SLOT {
+                    side_ptr.add(usize::from(side_read))
+                } else if cur - reference < RING {
                     cache.add(reference & mask)
                 } else {
                     if DEMAND_FENCE && reference >= committed_end {
@@ -340,7 +469,10 @@ impl FixedArgon2id {
                     if FAR > 0 {
                         let far_index = cur + FAR;
                         if let Some(&far) = self.data_independent_ref_indexes.get(far_index) {
-                            if far < cur && cur - far >= RING {
+                            if far < cur
+                                && cur - far >= RING
+                                && side.map_or(true, |schedule| schedule.read(far_index) == NO_SLOT)
+                            {
                                 prefetch_pow_block_l2(&*arena.add(far));
                             }
                         }
@@ -349,7 +481,10 @@ impl FixedArgon2id {
                         let ahead = self.data_independent_ref_indexes[cur + DEPTH];
                         // Recent references are already cached, or are not yet
                         // produced. Only issue an arena prefetch for older blocks.
-                        if ahead < cur && cur - ahead >= RING {
+                        if ahead < cur
+                            && cur - ahead >= RING
+                            && side.map_or(true, |schedule| schedule.read(cur + DEPTH) == NO_SLOT)
+                        {
                             prefetch_pow_block::<ISA_AVX512_256_STREAM>(&*arena.add(ahead));
                         }
                     }
@@ -357,6 +492,18 @@ impl FixedArgon2id {
                         avx512_reg::compress_into(prev, &*reference_ptr, &mut *dst);
                     } else {
                         avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
+                    }
+                    if let Some(schedule) = side {
+                        let slot = schedule.write_slot[cur];
+                        if slot != NO_SLOT {
+                            // Ordinary stores: the slot stays cache-resident and is
+                            // overwritten in place by its next occupant.
+                            std::ptr::copy_nonoverlapping(
+                                (*dst).0.as_ptr(),
+                                (*side_ptr.add(usize::from(slot))).0.as_mut_ptr(),
+                                (*dst).0.len(),
+                            );
+                        }
                     }
                 } else if block + 1 < self.segment_length {
                     if FULL_WIDTH {
@@ -3200,6 +3347,117 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(actual, expected, "path {kernel}");
+        }
+    }
+
+    #[test]
+    fn side_cache_schedule_serves_only_live_copies() {
+        let mut fixed = FixedArgon2id::new(4096);
+        // Few slots and a short window force slot reuse and refusals.
+        fixed.side_cache = Some(super::SideCacheSchedule::new(
+            &fixed.data_independent_ref_indexes,
+            2,
+            16,
+            256,
+        ));
+        let schedule = fixed.side_cache.as_ref().unwrap();
+        let refs = &fixed.data_independent_ref_indexes;
+        assert_eq!(schedule.slots, 16);
+        assert_eq!(schedule.read_slot.len(), refs.len());
+        let mut served = 0usize;
+        for reader in 2..refs.len() {
+            let slot = schedule.read_slot[reader];
+            if slot == super::NO_SLOT {
+                continue;
+            }
+            served += 1;
+            let block = refs[reader];
+            assert!(
+                reader - block >= 2 && reader - block <= 256,
+                "reader={reader}"
+            );
+            assert_eq!(
+                schedule.write_slot[block], slot,
+                "reader={reader} block={block}"
+            );
+            // No other block took the slot between the write and this read.
+            for other in block + 1..reader {
+                assert_ne!(
+                    schedule.write_slot[other], slot,
+                    "slot {slot} reused at {other} before {reader}"
+                );
+            }
+        }
+        assert!(served > 0, "the schedule should serve some references");
+        assert!(
+            schedule
+                .write_slot
+                .iter()
+                .filter(|&&s| s != super::NO_SLOT)
+                .count()
+                >= served / 4,
+            "kept blocks should cover the served reads"
+        );
+        assert_eq!(schedule.read(refs.len() + 10), super::NO_SLOT);
+        for reader in 2..refs.len() {
+            if reader - refs[reader] < 2 {
+                assert_eq!(
+                    schedule.read_slot[reader],
+                    super::NO_SLOT,
+                    "ring distance is never scheduled"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn side_cache_matches_reference_on_streaming_kernels() {
+        if !super::CpuKernel::Avx512Stream.is_supported() {
+            return;
+        }
+        for isa in [
+            super::ISA_AVX512_STREAM,
+            super::ISA_AVX512_256_STREAM,
+            super::ISA_AVX512_256_STREAM_L2,
+            super::ISA_AVX512_STREAM_L2,
+        ] {
+            for slots in [8usize, 256] {
+                let memory_kib = 4096u32;
+                let params = Params::new(memory_kib, 1, 1, Some(32)).unwrap();
+                let reference = Argon2::new(Algorithm::Argon2id, Version::V0x13, params.clone());
+                let mut reference_memory = vec![argon2::Block::default(); params.block_count()];
+                let mut fixed = FixedArgon2id::new(memory_kib);
+                fixed.isa = isa;
+                fixed.set_side_cache_blocks(slots);
+                assert_eq!(fixed.side_cache_blocks(), slots);
+                let mut fixed_memory = vec![PowBlock::default(); fixed.block_count()];
+                for nonce in [0u64, 7, 1_000_003] {
+                    let nonce_bytes = nonce.to_le_bytes();
+                    let (mut expected, mut actual) = ([0u8; 32], [0u8; 32]);
+                    reference
+                        .hash_password_into_with_memory(
+                            &nonce_bytes,
+                            b"side-cache-salt",
+                            &mut expected,
+                            &mut reference_memory,
+                        )
+                        .unwrap();
+                    fixed
+                        .hash_password_into_with_memory(
+                            &nonce_bytes,
+                            b"side-cache-salt",
+                            &mut actual,
+                            &mut fixed_memory,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        actual,
+                        expected,
+                        "isa={} slots={slots} nonce={nonce}",
+                        fixed.isa_label()
+                    );
+                }
+            }
         }
     }
 

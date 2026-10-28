@@ -709,6 +709,11 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     auto_update: bool,
 
+    /// Experimental: side-buffer slots (1 KiB each) that serve scheduled
+    /// data-independent references in the AVX-512 streaming kernels; 0 disables.
+    #[arg(long, hide = true, default_value_t = 0)]
+    cpu_side_cache_blocks: usize,
+
     /// Benchmark mode.
     /// `kernel-effective` measures kernel throughput with wall-time accounting and the backend's
     /// target/eval path enabled so results are directly comparable to backend-mode overhead.
@@ -831,6 +836,8 @@ pub struct Config {
     pub update_check_enabled: bool,
     /// `--auto-update`: apply newer releases found by the update check.
     pub auto_update: bool,
+    /// Experimental side-cache slots for the AVX-512 streaming kernels (0 = off).
+    pub cpu_side_cache_blocks: usize,
     pub refresh_on_same_height: bool,
     pub ui_mode: UiMode,
     pub data_dir: PathBuf,
@@ -1398,6 +1405,7 @@ impl Config {
             sse_enabled: !cli.disable_sse,
             update_check_enabled: !cli.disable_update_check,
             auto_update: cli.auto_update && !cli.disable_update_check,
+            cpu_side_cache_blocks: cli.cpu_side_cache_blocks,
             refresh_on_same_height: cli.refresh_on_same_height,
             ui_mode: cli.ui,
             data_dir: cli.data_dir,
@@ -3636,6 +3644,7 @@ mod tests {
             bench: false,
             self_update: false,
             auto_update: false,
+            cpu_side_cache_blocks: 0,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
             bench_secs: 20,

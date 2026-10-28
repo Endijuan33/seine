@@ -74,6 +74,9 @@ pub struct CpuBackendTuning {
     pub event_dispatch_capacity: usize,
     pub page_mode: CpuPageMode,
     pub kernel: Option<fixed_argon::CpuKernel>,
+    /// Research knob: side-buffer slots for scheduled data-independent references
+    /// in the AVX-512 streaming kernels (0 = off, the default).
+    pub side_cache_blocks: usize,
 }
 
 impl Default for CpuBackendTuning {
@@ -84,6 +87,7 @@ impl Default for CpuBackendTuning {
             hash_flush_interval: DEFAULT_HASH_FLUSH_INTERVAL,
             event_dispatch_capacity: DEFAULT_EVENT_DISPATCH_CAPACITY,
             page_mode: CpuPageMode::Auto,
+            side_cache_blocks: 0,
             kernel: None,
         }
     }
@@ -97,6 +101,7 @@ impl CpuBackendTuning {
             hash_flush_interval: self.hash_flush_interval.max(Duration::from_millis(1)),
             event_dispatch_capacity: self.event_dispatch_capacity.max(1),
             page_mode: self.page_mode,
+            side_cache_blocks: self.side_cache_blocks,
             kernel: self.kernel,
         }
     }
@@ -179,6 +184,7 @@ struct Shared {
     hash_flush_interval: Duration,
     event_dispatch_capacity: usize,
     page_mode: CpuPageMode,
+    side_cache_blocks: usize,
     kernel: fixed_argon::CpuKernel,
     // Low byte identifies the path; upper bits identify this particular switch.
     kernel_request: AtomicU64,
@@ -267,6 +273,7 @@ impl CpuBackend {
                 hash_flush_interval: tuning.hash_flush_interval,
                 event_dispatch_capacity: tuning.event_dispatch_capacity,
                 page_mode: tuning.page_mode,
+                side_cache_blocks: tuning.side_cache_blocks,
                 kernel_request: AtomicU64::new(kernel_id(
                     tuning
                         .kernel
@@ -943,9 +950,10 @@ impl CpuBackend {
                 {
                     let _ = core_affinity::set_for_current(core_id);
                 }
-                let hasher =
+                let mut hasher =
                     fixed_argon::FixedArgon2id::with_kernel(POW_MEMORY_KB, self.shared.kernel)
                         .expect("kernel support checked before benchmark workers start");
+                hasher.set_side_cache_blocks(self.shared.side_cache_blocks);
                 let block_count = hasher.block_count();
                 let mut arena = kernel::PowArena::new(block_count, page_mode).map_err(|err| {
                     anyhow!(
