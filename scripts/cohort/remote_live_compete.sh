@@ -4,7 +4,7 @@
 # bntpool.com resolves to the fixture, so Seine's fee work is captured as non-user
 # shares; competitor fee connections fail offline, so apply their nominal fee.
 # Usage (root, /opt/cohort): remote_live_compete.sh <seconds> [seine|ntmminer|longhorn ...]
-# Seine is candidate/seine with no flags; NTM extra/NTMminer-BNT; Longhorn extra/longhorn-*.
+# Seine is candidate/seine with no flags (seine-base: baseline/seine); NTM extra/NTMminer-BNT; Longhorn extra/longhorn-*.
 set -u
 SECS=$1; shift
 MINERS=${*:-seine ntmminer longhorn}
@@ -36,6 +36,8 @@ for m in $MINERS; do
   tls=() extra=()
   case $m in
     seine) exe=$W/candidate/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off) ;;
+    # A/B on one host: baseline/seine (ab.sh's baseline build) on the same defaults.
+    seine-base) exe=$W/baseline/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off) ;;
     ntmminer) exe=$W/extra/NTMminer-BNT; tls=(--tls-cert "$R/tls/cert.pem" --tls-key "$R/tls/key.pem" --tls-name "$TLS_NAME") ;;
     longhorn) exe=$(ls -d $W/extra/longhorn-* | head -1)/longhorn ;;
   esac
