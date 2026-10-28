@@ -4,6 +4,7 @@
 # bntpool.com resolves to the fixture, so Seine's fee work is captured as non-user
 # shares; competitor fee connections fail offline, so apply their nominal fee.
 # Usage (root, /opt/cohort): remote_live_compete.sh <seconds> [seine|ntmminer|longhorn ...]
+# CPUSET pins the runs to a CPU list ("node0" = that node's CPUs).
 # JOB_SECS rotates the job at that interval (default static); STALE_GRACE accepts superseded
 # work like bntpool's 8 s stale_submit_grace (default 8).
 # Seine is candidate/seine with no flags (seine-base: baseline/seine); NTM extra/NTMminer-BNT; Longhorn extra/longhorn-*.
@@ -36,6 +37,13 @@ if [[ " $MINERS " == *" ntmminer "* ]]; then
   if [ -n "$crt" ] && [ -n "$key" ]; then cp "$crt" "$R/tls/cert.pem"; cp "$key" "$R/tls/key.pem"
   else echo "ntmminer: certificate issuance failed (see lego.log)" | tee -a "$R/summary.txt"; MINERS=${MINERS/ntmminer/}; fi
 fi
+# CPUSET pins every miner (and the fixture) to a CPU list, e.g. one socket: "node0"
+# expands to that NUMA node's CPUs. It mimics a host whose process mask covers one socket.
+PIN=()
+if [ -n "${CPUSET:-}" ]; then
+  case $CPUSET in node*) CPUSET=$(cat "/sys/devices/system/node/$CPUSET/cpulist") ;; esac
+  PIN=(taskset -c "$CPUSET"); echo "cpuset $CPUSET" >> "$R/summary.txt"
+fi
 printf '127.0.0.1 localhost bntpool.com\n' > "$R/hosts"
 chown -R bench:bench "$W"
 for m in $MINERS; do
@@ -50,7 +58,7 @@ for m in $MINERS; do
   [ -x "$exe" ] || { echo "$m missing"; continue; }
   rm -rf "/home/bench/live-$m" "$R/$m"; mkdir -p "/home/bench/live-$m"; chown bench:bench "/home/bench/live-$m"
   sync; echo 3 > /proc/sys/vm/drop_caches
-  unshare -n -m bash -c 'ip link set lo up && mount --bind "$0" /etc/hosts && cd "$1" && exec setpriv --reuid=bench --regid=bench --init-groups --reset-env -- env HOME=/home/bench PATH=/usr/bin:/bin "${@:2}"' \
+  ${PIN[@]+"${PIN[@]}"} unshare -n -m bash -c 'ip link set lo up && mount --bind "$0" /etc/hosts && cd "$1" && exec setpriv --reuid=bench --regid=bench --init-groups --reset-env -- env HOME=/home/bench PATH=/usr/bin:/bin "${@:2}"' \
     "$R/hosts" "/home/bench/live-$m" python3 "$W/pool_fixture.py" --output "$R/$m" --seconds "$SECS" --warmup 0 \
     --job-secs "${JOB_SECS:-0}" --stale-grace "${STALE_GRACE:-8}" --window-origin launch --startup-timeout "$SECS" --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
     > "$R/$m.out" 2>&1
