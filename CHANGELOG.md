@@ -9,6 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
+- **Up to about 49% faster CPU hashing on Windows when fewer workers than cores run on AMD Zen 4 and Zen 5 EPYC** (measured on an AWS instance with 16 Zen 5 EPYC cores: +14% at 4 workers, +49% at 8, +1% at 14): Windows now spreads workers across the processor's cache domains the way Linux already did.
 - **About 8% faster CPU hashing on 4th and 5th Gen Intel Xeon servers** (measured on Xeon Platinum 8488C).
 - **About 4% faster CPU hashing on AMD Zen 4 EPYC servers** (EPYC 9004 series, measured on EPYC 9124P and 9R14), and up to 12% faster at lower thread counts.
 - **More accepted shares on every machine:** work in progress when the pool sends a new job, or when a dev-fee round starts or ends, is now submitted instead of discarded.
