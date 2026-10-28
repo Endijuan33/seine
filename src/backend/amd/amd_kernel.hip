@@ -15,11 +15,13 @@
 //     backend. Correctness over speed for bring-up; AMD-specific scheduling
 //     experiments come after the differential tests pass.
 //
-// Wavefront contract: this kernel REQUIRES wave32 execution (RDNA gfx10/gfx11
-// compiled with -mno-wavefrontsize64). The cooperative group is exactly one
-// 32-thread wavefront per hash lane (SEINE_WARPS_PER_BLOCK == 1 keeps the
-// thread block equal to that single wavefront). The host engine refuses to
-// run on devices reporting warpSize != 32 (CDNA/wave64 support comes later).
+// Wavefront contract: the cooperative group is exactly 32 threads per hash
+// lane and the thread block is exactly one wavefront. On wave32 (RDNA
+// gfx10-gfx12, compiled with -mno-wavefrontsize64) SEINE_WARPS_PER_BLOCK == 1;
+// on wave64 (CDNA gfx9, -mwavefrontsize64) the host sets
+// SEINE_WARPS_PER_BLOCK == 2 so two lanes share one wavefront, and every
+// __shfl below passes ARGON2_COOP_THREADS as its width so shuffles stay inside
+// each lane's 32-thread segment. The host engine refuses any other warpSize.
 //
 // hipRTC compiles HIP device code without explicit includes (__global__,
 // __shfl, atomics and friends are predeclared, mirroring NVRTC).
@@ -49,8 +51,8 @@ constexpr unsigned int CANCEL_CHECK_BLOCK_INTERVAL = SEINE_CANCEL_CHECK_BLOCK_IN
 #endif
 constexpr unsigned int WARPS_PER_BLOCK = SEINE_WARPS_PER_BLOCK;
 
-// Cooperative-group barrier. With WARPS_PER_BLOCK == 1 the thread block is
-// exactly one wave32 wavefront, so __syncthreads() is the conservative,
+// Cooperative-group barrier. The thread block is exactly one wavefront (one
+// lane on wave32, two on wave64), so __syncthreads() is the conservative,
 // correctness-first barrier (also a shared-memory fence). CUDA's
 // __syncwarp(mask) has no direct HIP equivalent; revisit with
 // __builtin_amdgcn_wave_barrier()/fences only after differential tests pass.

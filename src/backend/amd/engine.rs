@@ -26,15 +26,25 @@ pub(crate) const MAX_LANES_HARD_LIMIT: usize = 1024;
 pub(crate) const KERNEL_THREADS: u32 = 32;
 pub(crate) const SEED_KERNEL_THREADS: u32 = 64;
 pub(crate) const EVAL_KERNEL_THREADS: u32 = 64;
-pub(crate) const WARPS_PER_BLOCK: u32 = 1;
+/// Hash lanes per thread block. The cooperative group is always 32 threads, so a
+/// block is exactly one wavefront: one lane on wave32 (RDNA), two lanes on wave64
+/// (CDNA), where `__shfl` with a width of 32 keeps each lane's shuffles inside its
+/// own half of the wavefront.
+pub(crate) fn warps_per_block(wavefront_size: u32) -> u32 {
+    (wavefront_size / KERNEL_THREADS).max(1)
+}
 /// AMD keeps the conservative default cancel-check cadence; the Ampere+
 /// widening in the CUDA backend is NVIDIA-measured and does not carry over.
 pub(crate) const CANCEL_CHECK_BLOCK_INTERVAL: u32 = 64;
 pub(crate) const AMD_MEMORY_RESERVE_MIB_FLOOR: u64 = 64;
 pub(crate) const AMD_MEMORY_RESERVE_RATIO_DENOM: u64 = 64;
-/// Required cooperative-group width. RDNA (gfx10/gfx11) exposes wave32;
-/// CDNA (gfx9xx) is wave64-only and unsupported until a dedicated port.
-pub(crate) const REQUIRED_WAVEFRONT_SIZE: u32 = 32;
+/// Wavefront sizes the kernel contract covers: wave32 (RDNA gfx10-gfx12, one
+/// lane per wavefront) and wave64 (CDNA gfx9, two lanes per wavefront).
+pub(crate) const SUPPORTED_WAVEFRONT_SIZES: [u32; 2] = [32, 64];
+
+pub(crate) fn supports_wavefront_size(wavefront_size: u32) -> bool {
+    SUPPORTED_WAVEFRONT_SIZES.contains(&wavefront_size)
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct AmdDeviceInfo {
@@ -113,19 +123,20 @@ pub(crate) fn validate_device_props(props: &HipDevicePropR0000, index: u32) -> R
     Ok(())
 }
 
-/// Enforce the wave32 kernel contract; wave64 (CDNA) devices are refused
-/// with a clear message so the runtime quarantines them at startup.
+/// Enforce the kernel's wavefront contract (32-thread cooperative groups packed
+/// one per wave32 wavefront or two per wave64 wavefront); anything else is
+/// refused with a clear message so the runtime quarantines it at startup.
 pub(crate) fn validate_wavefront_size(
     wavefront_size: u32,
     device_index: u32,
     device_name: &str,
     gcn_arch_name: &str,
 ) -> Result<()> {
-    if wavefront_size != REQUIRED_WAVEFRONT_SIZE {
+    if !supports_wavefront_size(wavefront_size) {
         bail!(
             "AMD device {device_index} ({device_name}, {gcn_arch_name}) reports wavefront size \
-             {wavefront_size}; the AMD backend currently requires wave32 (RDNA gfx10/gfx11, \
-             e.g. RX 7900 XTX). CDNA/wave64 support comes later."
+             {wavefront_size}; the AMD backend supports wave32 (RDNA gfx10-gfx12) and \
+             wave64 (CDNA gfx9) devices only."
         );
     }
     Ok(())
@@ -162,24 +173,39 @@ pub(crate) fn lane_capacity_from_budget(memory_budget_mib: u64, lane_bytes: u64)
         .max(1)
 }
 
-/// hipRTC options for the wave32 kernel build.
+/// hipRTC options for the kernel build.
 ///
 /// `--offload-arch` pins the exact device target (full target-id including
-/// sramecc/xnack features as reported by gcnArchName). `-mno-wavefrontsize64`
-/// pins wave32 at compile time; gfx10/gfx11 default to wave32 anyway, so if a
-/// hipRTC build rejects the flag the engine retries without it and relies on
-/// the runtime `warpSize == 32` guard instead.
-pub(crate) fn build_hiprtc_options(gcn_arch_name: &str, m_blocks: u32, t_cost: u32) -> Vec<String> {
+/// sramecc/xnack features as reported by gcnArchName). The wavefront flag pins
+/// the compile-time wavefront size to what the device reported (gfx10+ default
+/// to wave32 and gfx9 to wave64 anyway); if a hipRTC build rejects the flag the
+/// engine retries without it and relies on the reported `warpSize`.
+/// `SEINE_WARPS_PER_BLOCK` tells the kernel how many 32-thread lanes share one
+/// block, which is always exactly one wavefront.
+pub(crate) fn build_hiprtc_options(
+    gcn_arch_name: &str,
+    wavefront_size: u32,
+    m_blocks: u32,
+    t_cost: u32,
+) -> Vec<String> {
+    let wavefront_flag = if wavefront_size == 64 {
+        "-mwavefrontsize64"
+    } else {
+        "-mno-wavefrontsize64"
+    };
     vec![
         format!("--offload-arch={}", gcn_arch_name.trim()),
-        "-mno-wavefrontsize64".to_string(),
+        wavefront_flag.to_string(),
         format!("-DSEINE_FIXED_M_BLOCKS={}U", m_blocks),
         format!("-DSEINE_FIXED_T_COST={}U", t_cost),
         format!(
             "-DSEINE_CANCEL_CHECK_BLOCK_INTERVAL={}U",
             CANCEL_CHECK_BLOCK_INTERVAL
         ),
-        format!("-DSEINE_WARPS_PER_BLOCK={}U", WARPS_PER_BLOCK),
+        format!(
+            "-DSEINE_WARPS_PER_BLOCK={}U",
+            warps_per_block(wavefront_size)
+        ),
     ]
 }
 
@@ -376,6 +402,8 @@ pub(crate) struct HipArgon2Engine {
     found_index: DeviceBuffer,
     cached_header_base: Vec<u8>,
     cached_target: Option<[u8; POW_OUTPUT_LEN]>,
+    /// Lanes per fill-kernel block (one wavefront): 1 on wave32, 2 on wave64.
+    warps_per_block: u32,
 }
 
 struct EngineBuffers {
@@ -417,8 +445,13 @@ impl HipArgon2Engine {
         let m_cost_kib = params.m_cost();
         let t_cost = params.t_cost();
 
-        let options = build_hiprtc_options(&device.gcn_arch_name, m_blocks, t_cost);
-        let code = compile_hip_module_with_wave32_fallback(api, &options)
+        let options = build_hiprtc_options(
+            &device.gcn_arch_name,
+            device.wavefront_size,
+            m_blocks,
+            t_cost,
+        );
+        let code = compile_hip_module_with_wavefront_fallback(api, &options)
             .context("failed to compile HIP module with hipRTC")?;
         let module = Module::load(api, &code)?;
         let kernel_nonfused = module.function("argon2id_fill_kernel")?;
@@ -523,6 +556,7 @@ impl HipArgon2Engine {
             found_index: buffers.found_index,
             cached_header_base: Vec::new(),
             cached_target: None,
+            warps_per_block: warps_per_block(device.wavefront_size),
         })
     }
 
@@ -772,7 +806,7 @@ impl HipArgon2Engine {
 
         // Fill kernel: one wave32 cooperative group per lane.
         {
-            let grid_x = (lanes_u32 + WARPS_PER_BLOCK - 1) / WARPS_PER_BLOCK;
+            let grid_x = (lanes_u32 + self.warps_per_block - 1) / self.warps_per_block;
             let cancel_flag = self
                 .cancel_flag
                 .lock()
@@ -802,7 +836,7 @@ impl HipArgon2Engine {
             self.launch(
                 &self.kernel_nonfused,
                 (grid_x, 1, 1),
-                (KERNEL_THREADS * WARPS_PER_BLOCK, 1, 1),
+                (KERNEL_THREADS * self.warps_per_block, 1, 1),
                 &mut params,
             )?;
         }
@@ -976,7 +1010,7 @@ fn probe_hip_lane_memory(
     stream.synchronize()
 }
 
-fn compile_hip_module_with_wave32_fallback(
+fn compile_hip_module_with_wavefront_fallback(
     api: &'static HipApi,
     options: &[String],
 ) -> Result<Vec<u8>> {
@@ -984,10 +1018,13 @@ fn compile_hip_module_with_wave32_fallback(
         Ok(code) => Ok(code),
         Err(primary_err) => {
             // Some hipRTC builds reject clang wavefront flags; retry without
-            // -mno-wavefrontsize64 and rely on the runtime warpSize guard.
+            // them and rely on the device's reported wavefront size, which the
+            // kernel's SEINE_WARPS_PER_BLOCK already matches.
             let reduced: Vec<String> = options
                 .iter()
-                .filter(|opt| opt.as_str() != "-mno-wavefrontsize64")
+                .filter(|opt| {
+                    opt.as_str() != "-mno-wavefrontsize64" && opt.as_str() != "-mwavefrontsize64"
+                })
                 .cloned()
                 .collect();
             if reduced.len() == options.len() {
@@ -995,7 +1032,7 @@ fn compile_hip_module_with_wave32_fallback(
             }
             compile_hip_module(api, &reduced).map_err(|fallback_err| {
                 anyhow!(
-                    "hipRTC compile failed with wave32 flag ({primary_err:#}) \
+                    "hipRTC compile failed with the wavefront flag ({primary_err:#}) \
                      and without it ({fallback_err:#})"
                 )
             })
@@ -1147,23 +1184,37 @@ mod tests {
     }
 
     #[test]
-    fn hiprtc_options_pin_arch_wave32_and_pow_parameters() {
-        let options = build_hiprtc_options("gfx1100:sramecc-:xnack-", 2_097_152, 1);
+    fn hiprtc_options_pin_arch_wavefront_and_pow_parameters() {
+        let options = build_hiprtc_options("gfx1100:sramecc-:xnack-", 32, 2_097_152, 1);
         assert!(options.contains(&"--offload-arch=gfx1100:sramecc-:xnack-".to_string()));
         assert!(options.contains(&"-mno-wavefrontsize64".to_string()));
         assert!(options.contains(&"-DSEINE_FIXED_M_BLOCKS=2097152U".to_string()));
         assert!(options.contains(&"-DSEINE_FIXED_T_COST=1U".to_string()));
         assert!(options.contains(&"-DSEINE_WARPS_PER_BLOCK=1U".to_string()));
+
+        let options = build_hiprtc_options("gfx942:sramecc+:xnack-", 64, 2_097_152, 1);
+        assert!(options.contains(&"--offload-arch=gfx942:sramecc+:xnack-".to_string()));
+        assert!(options.contains(&"-mwavefrontsize64".to_string()));
+        assert!(!options.contains(&"-mno-wavefrontsize64".to_string()));
+        assert!(options.contains(&"-DSEINE_WARPS_PER_BLOCK=2U".to_string()));
     }
 
     #[test]
-    fn wavefront_guard_accepts_wave32_and_refuses_wave64() {
+    fn lanes_per_block_match_the_wavefront() {
+        assert_eq!(warps_per_block(32), 1);
+        assert_eq!(warps_per_block(64), 2);
+        assert_eq!(warps_per_block(0), 1);
+    }
+
+    #[test]
+    fn wavefront_guard_accepts_wave32_and_wave64_only() {
         assert!(validate_wavefront_size(32, 0, "RX 7900 XTX", "gfx1100").is_ok());
-        let err = validate_wavefront_size(64, 1, "MI250X", "gfx90a")
-            .expect_err("wave64 devices must be refused");
+        assert!(validate_wavefront_size(64, 1, "MI300X", "gfx942").is_ok());
+        let err = validate_wavefront_size(16, 2, "bogus", "gfx999")
+            .expect_err("other wavefront sizes must be refused");
         let message = format!("{err:#}");
         assert!(message.contains("wave32"));
-        assert!(message.contains("CDNA/wave64 support comes later"));
+        assert!(message.contains("wave64"));
     }
 
     #[test]
@@ -1251,10 +1302,11 @@ mod tests {
         let api = HipApi::load().expect("HIP runtime should load on a ROCm box");
         let options = build_hiprtc_options(
             &device.gcn_arch_name,
+            device.wavefront_size,
             params.block_count() as u32,
             params.t_cost(),
         );
-        let code = compile_hip_module_with_wave32_fallback(api, &options)
+        let code = compile_hip_module_with_wavefront_fallback(api, &options)
             .expect("HIP kernel should compile with hipRTC");
         assert!(!code.is_empty());
     }

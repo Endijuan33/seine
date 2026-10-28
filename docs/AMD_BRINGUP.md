@@ -15,12 +15,16 @@ first-hardware iteration checklist.
   mapping, A77/A78 unrolled loads/stores, A81 closed-form G-round indexing,
   and A82 shuffle fusion. The A73 dead-code-prefetch codegen hack and its
   first-8-threads guard are NVIDIA/PTXAS-specific and were omitted.
-- Wavefront strategy: **wave32 only**. hipRTC compiles with
-  `--offload-arch=<gcnArchName>` plus `-mno-wavefrontsize64` (with a retry
-  without the flag if a hipRTC build rejects it), and the engine hard-refuses
-  devices reporting `warpSize != 32` — so CDNA (wave64) boxes quarantine at
-  startup with a clear message. The cooperative barrier is `__syncthreads()`
-  (block == one wave32 wavefront), chosen for correctness over speed.
+- Wavefront strategy: the cooperative group is 32 threads per lane and the
+  thread block is one wavefront. hipRTC compiles with
+  `--offload-arch=<gcnArchName>` plus `-mno-wavefrontsize64` on wave32 devices
+  (RDNA gfx10-gfx12, one lane per wavefront) or `-mwavefrontsize64` on wave64
+  devices (CDNA gfx9 such as MI300X, two lanes per wavefront via
+  `SEINE_WARPS_PER_BLOCK=2`; every `__shfl` uses a width of 32 so shuffles stay
+  inside each lane's half), with a retry without the flag if a hipRTC build
+  rejects it. Any other reported `warpSize` is refused at startup. The
+  cooperative barrier is `__syncthreads()`, chosen for correctness over speed.
+  The wave64 path is untested on hardware until the MI300X bring-up runs.
 - Autotune: stub. Lanes derive from free VRAM with allocation/probe backoff
   (11 × 2 GiB lanes expected on 24 GB); launch depth fixed at 1. Regcap/depth
   sweeps and any AMD-specific scheduling work come after this checklist

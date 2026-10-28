@@ -1613,7 +1613,7 @@ pub(crate) fn detect_nvidia_devices() -> Result<Vec<DetectedGpu>> {
 #[cfg(all(feature = "amd", unix))]
 pub(crate) fn detect_amd_devices(notices: &mut Vec<String>) -> Result<Vec<DetectedGpu>> {
     let devices = crate::backend::amd::query_amd_devices()?;
-    let (usable, skipped) = partition_wave32_amd_devices(devices);
+    let (usable, skipped) = partition_supported_amd_devices(devices);
     notices.extend(skipped);
     Ok(usable)
 }
@@ -1624,13 +1624,13 @@ pub(crate) fn detect_amd_devices(_notices: &mut Vec<String>) -> Result<Vec<Detec
 }
 
 #[cfg(all(feature = "amd", unix))]
-fn partition_wave32_amd_devices(
+fn partition_supported_amd_devices(
     devices: Vec<crate::backend::amd::AmdDeviceInfo>,
 ) -> (Vec<DetectedGpu>, Vec<String>) {
     let mut usable = Vec::new();
     let mut skipped = Vec::new();
     for device in devices {
-        if device.wavefront_size == crate::backend::amd::REQUIRED_WAVEFRONT_SIZE {
+        if crate::backend::amd::supports_wavefront_size(device.wavefront_size) {
             usable.push(DetectedGpu {
                 index: device.index,
                 name: device.name,
@@ -1638,7 +1638,7 @@ fn partition_wave32_amd_devices(
             });
         } else {
             skipped.push(format!(
-                "skipping AMD device {} ({}, {}): wavefront size {} is unsupported (wave32 required)",
+                "skipping AMD device {} ({}, {}): wavefront size {} is unsupported (wave32 or wave64 required)",
                 device.index, device.name, device.gcn_arch_name, device.wavefront_size
             ));
         }

@@ -40,7 +40,7 @@ use crate::backend::{
 
 use engine::{HipArgon2Engine, HipInterruptController};
 
-pub(crate) use engine::{query_amd_devices, AmdDeviceInfo, REQUIRED_WAVEFRONT_SIZE};
+pub(crate) use engine::{query_amd_devices, supports_wavefront_size, AmdDeviceInfo};
 
 const BACKEND_NAME: &str = "amd";
 const ASSIGN_CHANNEL_CAPACITY: usize = 256;
