@@ -1057,8 +1057,16 @@ impl Policy {
                 let better = stable
                     && candidate <= cap
                     && if candidate < base {
-                        candidate_sample.hps
-                            >= self.peak_hps * cpu_autotune_peak_floor_frac(self.profile)
+                        let floor = cpu_autotune_peak_floor_frac(self.profile);
+                        // Fewer workers must beat the baseline's own window-to-window
+                        // spread: ties inside noise moved 14 -> 13 (Windows Zen 5),
+                        // 64 -> 62 (Turin) and 256 -> 254 (EPYC 9754) while mining.
+                        let noise = if floor >= 1.0 {
+                            (before.hps - sample.hps).abs()
+                        } else {
+                            0.0
+                        };
+                        candidate_sample.hps >= self.peak_hps * floor + noise
                     } else {
                         // Highest hashrate is the default objective: a higher
                         // count wins on any measured gain over a stable baseline.
