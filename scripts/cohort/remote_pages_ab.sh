@@ -23,8 +23,8 @@ one() { # one <mode> <tag>
     "$T" "$KERNEL" "$MODE" "$SECS" "$R/$2.json" > "$R/$2.log" 2>&1
   python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(sys.argv[2], round(d['avg_hps'], 3))" "$R/$2.json" "$2" 2>/dev/null || echo "$2 FAILED"
 }
-# MODES picks the backings (default "thp 2m 1g"); each runs once forward, once reversed.
-read -r -a modes <<< "${MODES:-thp 2m 1g}"
+# MODES picks the backings, comma-separated (default thp,2m,1g); each runs once forward, once reversed.
+read -r -a modes <<< "${MODES//,/ }"; [ ${#modes[@]} -gt 0 ] || modes=(thp 2m 1g)
 order=("${modes[@]}"); for ((i=${#modes[@]}-1; i>=0; i--)); do order+=("${modes[i]}"); done
 n=0
 for m in "${order[@]}"; do n=$((n+1)); one "$m" "$n-$m"; done | tee "$R/summary.txt"
