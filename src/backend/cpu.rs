@@ -1071,7 +1071,11 @@ pub(crate) fn affinity_topology_fingerprint() -> String {
             .into_iter()
             .map(|cpu| cpu.id)
             .collect();
-        physical_topology_fingerprint(&available, platform_physical_core_groups(&available))
+        format!(
+            "{}:{:?}",
+            physical_topology_fingerprint(&available, platform_physical_core_groups(&available)),
+            platform_l3_cache_groups(&available)
+        )
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     String::new()
@@ -1104,13 +1108,15 @@ fn order_core_ids_physical_first(
     let Some(groups) = platform_physical_core_groups(&available) else {
         return core_ids;
     };
-    order_core_ids_by_groups(core_ids, groups)
+    let caches = platform_l3_cache_groups(&available).unwrap_or_default();
+    order_core_ids_by_groups(core_ids, groups, &caches)
 }
 
 #[cfg(any(target_os = "windows", test))]
 fn order_core_ids_by_groups(
     core_ids: Vec<core_affinity::CoreId>,
     groups: Vec<Vec<usize>>,
+    caches: &[BTreeSet<usize>],
 ) -> Vec<core_affinity::CoreId> {
     let available = core_ids.iter().map(|core| core.id).collect::<BTreeSet<_>>();
     let mut topology_ids = BTreeSet::new();
@@ -1141,6 +1147,7 @@ fn order_core_ids_by_groups(
         })
         .collect::<Vec<_>>();
     normalized.sort_by_key(|group| group[0]);
+    let normalized = interleave_cores_by_cache(normalized, caches);
 
     let mut ordered = Vec::with_capacity(core_ids.len());
     let mut seen = BTreeSet::new();
@@ -1160,6 +1167,42 @@ fn order_core_ids_by_groups(
 
     debug_assert_eq!(seen, available);
     ordered
+}
+
+/// Alternates physical cores across L3 domains (Zen CCDs), as Linux placement does:
+/// each CCD has its own link to memory, so packing low worker counts onto one CCD
+/// caps them at that link. Cores keep their order within a domain. Missing or
+/// inconsistent cache data (a core outside exactly one domain) keeps core order.
+#[cfg(any(target_os = "windows", test))]
+fn interleave_cores_by_cache(
+    cores: Vec<Vec<usize>>,
+    caches: &[BTreeSet<usize>],
+) -> Vec<Vec<usize>> {
+    if caches.len() < 2 {
+        return cores;
+    }
+    let mut domains = vec![Vec::new(); caches.len()];
+    for core in &cores {
+        let mut owners = caches
+            .iter()
+            .enumerate()
+            .filter(|(_, cache)| core.iter().all(|cpu| cache.contains(cpu)));
+        match (owners.next(), owners.next()) {
+            (Some((index, _)), None) => domains[index].push(core.clone()),
+            _ => return cores,
+        }
+    }
+    domains.retain(|domain| !domain.is_empty());
+    domains.sort_by_key(|domain| domain[0][0]);
+    let mut spread = Vec::with_capacity(cores.len());
+    for index in 0..domains.iter().map(Vec::len).max().unwrap_or(0) {
+        for domain in &domains {
+            if let Some(core) = domain.get(index) {
+                spread.push(core.clone());
+            }
+        }
+    }
+    spread
 }
 
 #[cfg(target_os = "windows")]
@@ -1206,6 +1249,48 @@ fn platform_physical_core_groups(available: &BTreeSet<usize>) -> Option<Vec<Vec<
         }
     }
     (!groups.is_empty()).then_some(groups)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_l3_cache_groups(available: &BTreeSet<usize>) -> Option<Vec<BTreeSet<usize>>> {
+    use std::mem::{size_of, MaybeUninit};
+    use std::ptr;
+    use windows_sys::Win32::System::SystemInformation::{
+        GetLogicalProcessorInformation, RelationCache, SYSTEM_LOGICAL_PROCESSOR_INFORMATION,
+    };
+
+    let mut byte_len = 0u32;
+    unsafe {
+        let _ = GetLogicalProcessorInformation(ptr::null_mut(), &mut byte_len);
+    }
+    let entry_size = size_of::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION>();
+    let entry_count = (byte_len as usize).checked_div(entry_size)?;
+    let mut entries =
+        vec![MaybeUninit::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION>::uninit(); entry_count];
+    if entry_count == 0
+        || unsafe { GetLogicalProcessorInformation(entries.as_mut_ptr().cast(), &mut byte_len) }
+            == 0
+    {
+        return None;
+    }
+    let initialized_count = (byte_len as usize)
+        .checked_div(entry_size)?
+        .min(entry_count);
+    let mut caches = Vec::new();
+    for entry in &entries[..initialized_count] {
+        let entry = unsafe { entry.assume_init_ref() };
+        if entry.Relationship != RelationCache || unsafe { entry.Anonymous.Cache.Level } != 3 {
+            continue;
+        }
+        let cache = (0..usize::BITS as usize)
+            .filter(|bit| entry.ProcessorMask & (1usize << bit) != 0)
+            .filter(|bit| available.contains(bit))
+            .collect::<BTreeSet<_>>();
+        if !cache.is_empty() && !caches.contains(&cache) {
+            caches.push(cache);
+        }
+    }
+    Some(caches)
 }
 
 #[cfg(target_os = "macos")]
@@ -1864,11 +1949,37 @@ mod tests {
             .map(|id| core_affinity::CoreId { id })
             .collect::<Vec<_>>();
         let groups = vec![vec![0, 1], vec![2, 3], vec![4, 5], vec![6, 7]];
-        let ordered = order_core_ids_by_groups(cores, groups)
+        let ordered = order_core_ids_by_groups(cores, groups, &[])
             .into_iter()
             .map(|core| core.id)
             .collect::<Vec<_>>();
         assert_eq!(ordered, vec![0, 2, 4, 6, 1, 3, 5, 7]);
+    }
+
+    #[test]
+    fn affinity_order_alternates_l3_domains_before_smt() {
+        // Two CCDs of four SMT cores: CPUs 0-7 on CCD0, 8-15 on CCD1.
+        let cores = (0..16)
+            .map(|id| core_affinity::CoreId { id })
+            .collect::<Vec<_>>();
+        let groups = (0..8).map(|core| vec![2 * core, 2 * core + 1]).collect();
+        let caches = [(0..8).collect(), (8..16).collect()];
+        let ordered = order_core_ids_by_groups(cores.clone(), groups, &caches)
+            .into_iter()
+            .map(|core| core.id)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ordered,
+            vec![0, 8, 2, 10, 4, 12, 6, 14, 1, 9, 3, 11, 5, 13, 7, 15]
+        );
+        // A core split across caches leaves plain physical-first order.
+        let groups = (0..8).map(|core| vec![2 * core, 2 * core + 1]).collect();
+        let split = [(0..7).collect(), (7..16).collect()];
+        let ordered = order_core_ids_by_groups(cores, groups, &split)
+            .into_iter()
+            .map(|core| core.id)
+            .collect::<Vec<_>>();
+        assert_eq!(&ordered[..4], &[0, 2, 4, 6]);
     }
 
     #[test]
@@ -1946,7 +2057,7 @@ mod tests {
         let cores = (0..5)
             .map(|id| core_affinity::CoreId { id })
             .collect::<Vec<_>>();
-        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![2, 3]])
+        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![2, 3]], &[])
             .into_iter()
             .map(|core| core.id)
             .collect::<Vec<_>>();
@@ -1958,7 +2069,7 @@ mod tests {
         let cores = (0..4)
             .map(|id| core_affinity::CoreId { id })
             .collect::<Vec<_>>();
-        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![1, 2], vec![3]])
+        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![1, 2], vec![3]], &[])
             .into_iter()
             .map(|core| core.id)
             .collect::<Vec<_>>();
@@ -1970,7 +2081,7 @@ mod tests {
         let cores = (0..4)
             .map(|id| core_affinity::CoreId { id })
             .collect::<Vec<_>>();
-        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![2, 4], vec![3]])
+        let ordered = order_core_ids_by_groups(cores, vec![vec![0, 1], vec![2, 4], vec![3]], &[])
             .into_iter()
             .map(|core| core.id)
             .collect::<Vec<_>>();
