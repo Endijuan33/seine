@@ -25,9 +25,13 @@ $tlsName = $null
 if ($list -contains 'ntmminer') {
   $tlsName = (Invoke-RestMethod -TimeoutSec 10 'https://checkip.amazonaws.com').Trim()
   New-NetFirewallRule -Name 'CohortAcme80' -DisplayName 'Cohort ACME HTTP-01' -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow | Out-Null
-  & "$W\extra\lego.exe" run --server https://acme-v02.api.letsencrypt.org/directory --path "$W\acme" `
-    --account-id seine-disposable-benchmark --http-timeout 30 --domains $tlsName --accept-tos `
-    --http --http.address 0.0.0.0:80 --ipv4only --profile shortlived *> "$R\lego.log"
+  # Let's Encrypt occasionally rejects a nonce (badNonce); one more attempt usually succeeds.
+  foreach ($attempt in 1, 2) {
+    & "$W\extra\lego.exe" run --server https://acme-v02.api.letsencrypt.org/directory --path "$W\acme" `
+      --account-id seine-disposable-benchmark --http-timeout 30 --domains $tlsName --accept-tos `
+      --http --http.address 0.0.0.0:80 --ipv4only --profile shortlived *>> "$R\lego.log"
+    if (Get-ChildItem -Recurse "$W\acme\certificates" -Filter "$tlsName.crt" -ErrorAction SilentlyContinue) { break }
+  }
   Remove-NetFirewallRule -Name 'CohortAcme80'
   $crt = Get-ChildItem -Recurse "$W\acme\certificates" -Filter "$tlsName.crt" -ErrorAction SilentlyContinue | Select-Object -First 1
   $key = Get-ChildItem -Recurse "$W\acme\certificates" -Filter "$tlsName.key" -ErrorAction SilentlyContinue | Select-Object -First 1

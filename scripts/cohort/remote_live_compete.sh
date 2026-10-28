@@ -22,9 +22,13 @@ if [[ " $MINERS " == *" ntmminer "* ]]; then
     tar -C "$W" -xzf "$W/lego.tgz" lego
     echo "c7ccc528bb254bec3e8ca998a8994dab9653c3e1aa083fd3bfaaa0b75b527b62  $W/lego" | sha256sum -c --quiet || rm -f "$W/lego"
   fi
-  [ -x "$W/lego" ] && timeout 300 "$W/lego" run --server https://acme-v02.api.letsencrypt.org/directory --path "$W/acme" \
-    --account-id seine-disposable-benchmark --http-timeout 30 --domains "$TLS_NAME" --accept-tos \
-    --http --http.address 0.0.0.0:80 --ipv4only --profile shortlived > "$R/lego.log" 2>&1
+  # Let's Encrypt occasionally rejects a nonce (badNonce); one more attempt usually succeeds.
+  for attempt in 1 2; do
+    [ -x "$W/lego" ] && timeout 300 "$W/lego" run --server https://acme-v02.api.letsencrypt.org/directory --path "$W/acme" \
+      --account-id seine-disposable-benchmark --http-timeout 30 --domains "$TLS_NAME" --accept-tos \
+      --http --http.address 0.0.0.0:80 --ipv4only --profile shortlived >> "$R/lego.log" 2>&1
+    find "$W/acme/certificates" -name "$TLS_NAME.crt" 2>/dev/null | grep -q . && break
+  done
   crt=$(find "$W/acme/certificates" -name "$TLS_NAME.crt" | head -1)
   key=$(find "$W/acme/certificates" -name "$TLS_NAME.key" | head -1)
   if [ -n "$crt" ] && [ -n "$key" ]; then cp "$crt" "$R/tls/cert.pem"; cp "$key" "$R/tls/key.pem"
