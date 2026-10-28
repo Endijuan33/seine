@@ -1,5 +1,8 @@
 # Backlog
 
+Current cross-site priorities: [shared publishing plan](cross-site-publishing-plan.md).
+Its October 28 queue takes precedence over older deferred suggestions below.
+
 ## Current editorial direction — October 27, 2026
 
 Prioritize ordinary newcomer questions and broader Blocknet fundamentals: choosing software, receiving and sending, first mining setup, and understanding balances. Improve the existing owner when a question already has a guide. Defer narrow merchant/invoice workflows. Competitor comparisons and work requiring rented hardware remain on hold by owner preference.

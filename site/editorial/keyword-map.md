@@ -1,5 +1,8 @@
 # Keyword ownership map
 
+Shared priorities and cross-site ownership: [publishing plan](cross-site-publishing-plan.md).
+Broader Blocknet coverage is open to both sites when the reader job is distinct.
+
 Which seineminer.com URL owns which search intent. It records editorial intent, not current
 rankings. The build fails if a published post has no row here.
 

@@ -30,5 +30,5 @@ for (const name of thumbnails) {
     assert(width <= 440, `${name}: thumbnail exceeds 2x display width`);
     assert(statSync(file).size < 40_000, `${name}: thumbnail exceeds 40 KB`);
 }
-assert.match(blog, /\/assets\/blog\/thumbnails\/[^" ]+\.webp/);
+assert.match(blog, /\/assets\/blog\/covers\/[^" ]+-small\.webp/);
 console.log(`Performance budgets passed: ${gzipSync(home).length} B homepage gzip, ${fontBytes} B Latin fonts, ${thumbnails.length} optimized thumbnails`);

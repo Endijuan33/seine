@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/sync-brand-assets.mjs && node scripts/check-content.mjs && node scripts/check-release-facts.mjs && node scripts/check-benchmark-facts.mjs",
+    "prebuild": "node scripts/sync-brand-assets.mjs && node scripts/check-content.mjs && node scripts/check-release-facts.mjs && node scripts/check-benchmark-facts.mjs && node scripts/blog-covers.mjs",
     "build": "astro build",
-    "postbuild": "node scripts/check-performance.mjs",
-    "predev": "node scripts/sync-brand-assets.mjs",
+    "postbuild": "node scripts/check-performance.mjs && node scripts/check-covers.mjs",
+    "predev": "node scripts/sync-brand-assets.mjs && node scripts/blog-covers.mjs",
     "dev": "astro dev --port 8791",
     "preview": "astro preview --port 8791",
     "check": "node scripts/check-content.mjs && node scripts/check-release-facts.mjs && node scripts/check-benchmark-facts.mjs",

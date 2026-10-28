@@ -18,9 +18,9 @@
 .posts h3 { margin: 6px 0 8px; font-size: 1.5rem; }
 .posts p { margin: 0; color: var(--ink-2); }
 .posts time { font: 13px/1 var(--mono); color: var(--ink-3); }
-.posts img { border: 1px solid var(--rule); border-radius: var(--radius); }
+.posts img { aspect-ratio: 16 / 9; object-fit: contain; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--radius); }
 .posts a:hover h3 { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
-@media (max-width: 640px) { .posts a { grid-template-columns: 1fr; } .posts img { display: none; } } /* the card repeats the title */
+@media (max-width: 640px) { .posts a { grid-template-columns: 1fr; } .posts img { display: none; } } /* Keep the established compact text list on narrow screens. */
 
 /* article */
 .prose { max-width: 68ch; padding-bottom: 88px; font-size: 1.06rem; color: var(--ink-2); overflow-wrap: anywhere; }
