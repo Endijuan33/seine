@@ -11,7 +11,7 @@ faq:
     a: 'Un hash intensivo en memoria necesita gigabytes de memoria rápida en cada intento, así que un chip diseñado solo para calcular hashes seguiría necesitando grandes cantidades de RAM junto a cada núcleo. Las computadoras de escritorio, los portátiles y los servidores ya vienen con mucha RAM y controladores de memoria rápidos, lo que acerca el hardware que la gente ya tiene a lo que necesita el algoritmo.'
   - q: '¿Se puede minar con la CPU y la tarjeta gráfica a la vez?'
     a: 'Sí, al minar Blocknet con seine en Windows o Linux. seine mina a la vez con el procesador y con todas las tarjetas gráficas NVIDIA que detecta, y las tasas de hash se suman. Ajusta el procesador mientras mina y cada tarjeta en su primer inicio, así que no hay nada que configurar antes de empezar.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet cumple las cuatro. Es una moneda de privacidad con [privacidad por defe
 
 Tres cosas deciden cuántos hashes por segundo (H/s) produce un procesador en Blocknet.
 
-**La capacidad de RAM.** Cada hilo de minería necesita su propio bloque de 2 GiB para cada hash, así que divide tu RAM entre dos para saber el máximo de hilos que caben. Una computadora con 32 GB admite en teoría 16 bloques. seine deja un 5% de la RAM en reserva y espacio para el sistema operativo, lo que deja ese equipo en unos 14 hilos. A menudo la RAM limita el número de hilos antes que el número de núcleos. La guía para [minar con un PC antiguo o un portátil](/es/blog/mine-crypto-on-old-pc-or-laptop/) repasa equipos de 4-16 GB.
+**La capacidad de RAM.** Cada hilo de minería necesita su propio bloque de 2 GiB para cada hash, así que divide tu RAM entre dos para saber el máximo de hilos que caben. Una computadora con 32 GB admite en teoría 16 bloques. seine deja un 5% (como máximo 1 GiB por defecto) de la RAM en reserva y espacio para el sistema operativo, lo que deja ese equipo en unos 14 hilos. A menudo la RAM limita el número de hilos antes que el número de núcleos. La guía para [minar con un PC antiguo o un portátil](/es/blog/mine-crypto-on-old-pc-or-laptop/) repasa equipos de 4-16 GB.
 
 **El ancho de banda de memoria.** Cada hash mueve gigabytes por el sistema de memoria. A 85,1 H/s, el equipo más rápido medido con seine escribe unos 170,2 GiB de bloques de memoria nuevos cada segundo (85,1 × 2 GiB). Los procesadores con más canales de memoria y memoria más rápida toman la delantera.
 

@@ -11,7 +11,7 @@ faq:
     a: 'Một hàm băm memory-hard cần hàng gigabyte bộ nhớ nhanh cho mỗi lần thử, nên một con chip chỉ được chế tạo để băm vẫn cần lượng RAM lớn bên cạnh mỗi nhân. Máy để bàn, laptop và máy chủ vốn đã có nhiều RAM và bộ điều khiển bộ nhớ nhanh, điều này đưa phần cứng mọi người đang có đến gần với những gì thuật toán cần.'
   - q: 'Có thể đào bằng CPU và card đồ họa cùng lúc không?'
     a: 'Có, khi đào Blocknet bằng seine trên Windows hoặc Linux. seine đào trên bộ xử lý và mọi card đồ họa NVIDIA nó phát hiện được cùng một lúc, và hashrate được cộng dồn. Nó tinh chỉnh bộ xử lý trong khi đào và tinh chỉnh từng card ở lần chạy đầu tiên, nên bạn không cần cấu hình gì trước khi bắt đầu.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet đáp ứng cả bốn. Đây là một đồng coin riêng tư với [
 
 Ba yếu tố quyết định một bộ xử lý tạo ra bao nhiêu lần băm mỗi giây (H/s) trên Blocknet.
 
-**Dung lượng RAM.** Mỗi luồng đào cần một khối 2 GiB riêng cho mỗi lần băm, nên chia dung lượng RAM cho hai để có số luồng tối đa vừa đủ. Một máy tính 32 GB chứa được 16 khối trên lý thuyết. seine giữ lại 5% RAM dự phòng và chừa chỗ cho hệ điều hành, nên máy đó chạy được khoảng 14 luồng. RAM thường giới hạn số luồng trước cả số nhân. Hướng dẫn [đào coin trên PC cũ hoặc laptop](/vi/blog/mine-crypto-on-old-pc-or-laptop/) trình bày cho các máy 4-16 GB.
+**Dung lượng RAM.** Mỗi luồng đào cần một khối 2 GiB riêng cho mỗi lần băm, nên chia dung lượng RAM cho hai để có số luồng tối đa vừa đủ. Một máy tính 32 GB chứa được 16 khối trên lý thuyết. seine giữ lại 5% (mặc định tối đa 1 GiB) RAM dự phòng và chừa chỗ cho hệ điều hành, nên máy đó chạy được khoảng 14 luồng. RAM thường giới hạn số luồng trước cả số nhân. Hướng dẫn [đào coin trên PC cũ hoặc laptop](/vi/blog/mine-crypto-on-old-pc-or-laptop/) trình bày cho các máy 4-16 GB.
 
 **Băng thông bộ nhớ.** Mỗi lần băm chuyển hàng gigabyte dữ liệu qua hệ thống bộ nhớ. Ở 85,1 H/s, máy nhanh nhất đo được với seine ghi khoảng 170.2 GiB khối bộ nhớ mới mỗi giây (85,1 × 2 GiB). Những bộ xử lý có nhiều kênh bộ nhớ hơn và bộ nhớ nhanh hơn sẽ vượt lên.
 

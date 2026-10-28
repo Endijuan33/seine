@@ -11,7 +11,7 @@ faq:
     a: 'Hash wymagający dużo pamięci potrzebuje przy każdej próbie gigabajtów szybkiej pamięci, więc układ zbudowany wyłącznie do haszowania nadal potrzebowałby dużo RAM obok każdego rdzenia. Komputery stacjonarne, laptopy i serwery mają już mnóstwo RAM i szybkie kontrolery pamięci, dzięki czemu sprzęt, który ludzie już mają, jest bliski temu, czego potrzebuje algorytm.'
   - q: 'Czy można kopać jednocześnie na CPU i karcie graficznej?'
     a: 'Tak, kopiąc Blocknet z seine w systemie Windows lub Linux. seine kopie jednocześnie na procesorze i na każdej wykrytej karcie graficznej NVIDIA, a hashrate się sumuje. Procesor dostraja podczas kopania, a każdą kartę przy pierwszym uruchomieniu, więc przed startem nie trzeba niczego konfigurować.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet spełnia wszystkie cztery warunki. To kryptowaluta prywatności z [pryw
 
 O tym, ile hashy na sekundę (H/s) procesor wytwarza w Blocknet, decydują trzy rzeczy.
 
-**Ilość RAM.** Każdy wątek kopiący potrzebuje do każdego hasha własnego bloku 2 GiB, więc podziel swój RAM przez dwa, aby poznać maksymalną liczbę wątków, które się zmieszczą. Komputer z 32 GB teoretycznie mieści 16 bloków. seine zostawia 5% RAM w rezerwie i miejsce dla systemu operacyjnego, co daje na tej maszynie około 14 wątków. RAM często ogranicza liczbę wątków wcześniej niż liczba rdzeni. Poradnik o [kopaniu na starym komputerze lub laptopie](/pl/blog/mine-crypto-on-old-pc-or-laptop/) omawia komputery z 4–16 GB.
+**Ilość RAM.** Każdy wątek kopiący potrzebuje do każdego hasha własnego bloku 2 GiB, więc podziel swój RAM przez dwa, aby poznać maksymalną liczbę wątków, które się zmieszczą. Komputer z 32 GB teoretycznie mieści 16 bloków. seine zostawia 5% (domyślnie najwyżej 1 GiB) RAM w rezerwie i miejsce dla systemu operacyjnego, co daje na tej maszynie około 14 wątków. RAM często ogranicza liczbę wątków wcześniej niż liczba rdzeni. Poradnik o [kopaniu na starym komputerze lub laptopie](/pl/blog/mine-crypto-on-old-pc-or-laptop/) omawia komputery z 4–16 GB.
 
 **Przepustowość pamięci.** Każdy hash przesyła przez system pamięci gigabajty danych. Przy 85,1 H/s najszybsza maszyna zmierzona z seine zapisuje co sekundę około 170,2 GiB nowych bloków pamięci (85,1 × 2 GiB). Procesory z większą liczbą kanałów pamięci i szybszą pamięcią wychodzą na prowadzenie.
 

@@ -11,7 +11,7 @@ faq:
     a: 'Um hash memory-hard precisa de gigabytes de memória rápida a cada tentativa, então um chip feito só para calcular hashes ainda precisaria de muita RAM ao lado de cada núcleo. Desktops, notebooks e servidores já vêm com bastante RAM e controladores de memória rápidos, o que deixa o hardware que as pessoas já têm perto do que o algoritmo precisa.'
   - q: 'Dá para minerar com a CPU e a placa de vídeo ao mesmo tempo?'
     a: 'Sim, ao minerar Blocknet com o seine no Windows ou no Linux. O seine minera com o processador e todas as placas de vídeo NVIDIA que detecta ao mesmo tempo, e os hashrates se somam. Ele ajusta o processador enquanto minera e cada placa na primeira execução, então não há nada para configurar antes de começar.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ O Blocknet atende às quatro. É uma moeda de privacidade com [privacidade por p
 
 Três coisas decidem quantos hashes por segundo (H/s) um processador produz no Blocknet.
 
-**Capacidade de RAM.** Cada thread de mineração precisa do seu próprio bloco de 2 GiB para cada hash, então divida sua RAM por dois para saber o máximo de threads que cabem. Um computador com 32 GB comporta 16 blocos no papel. O seine mantém 5% da RAM em reserva e deixa espaço para o sistema operacional, o que leva essa máquina a cerca de 14 threads. A RAM costuma limitar o número de threads antes do número de núcleos. O guia de [mineração em um PC antigo ou notebook](/pt-br/blog/mine-crypto-on-old-pc-or-laptop/) analisa máquinas de 4-16 GB.
+**Capacidade de RAM.** Cada thread de mineração precisa do seu próprio bloco de 2 GiB para cada hash, então divida sua RAM por dois para saber o máximo de threads que cabem. Um computador com 32 GB comporta 16 blocos no papel. O seine mantém 5% (no máximo 1 GiB por padrão) da RAM em reserva e deixa espaço para o sistema operacional, o que leva essa máquina a cerca de 14 threads. A RAM costuma limitar o número de threads antes do número de núcleos. O guia de [mineração em um PC antigo ou notebook](/pt-br/blog/mine-crypto-on-old-pc-or-laptop/) analisa máquinas de 4-16 GB.
 
 **Largura de banda da memória.** Cada hash movimenta gigabytes pelo sistema de memória. A 85,1 H/s, a máquina mais rápida medida com o seine grava cerca de 170,2 GiB de blocos de memória novos por segundo (85,1 × 2 GiB). Processadores com mais canais de memória e memória mais rápida saem na frente.
 

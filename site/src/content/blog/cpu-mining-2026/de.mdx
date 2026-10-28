@@ -11,7 +11,7 @@ faq:
     a: 'Ein speicherintensiver Hash braucht für jeden Versuch Gigabytes an schnellem Speicher, sodass auch ein reiner Hash-Chip große Mengen RAM neben jedem Kern bräuchte. Desktop-PCs, Laptops und Server haben bereits reichlich RAM und schnelle Speichercontroller, womit die Hardware, die man ohnehin besitzt, nah an dem liegt, was der Algorithmus braucht.'
   - q: 'Kann man gleichzeitig mit CPU und Grafikkarte minen?'
     a: 'Ja, beim Blocknet-Mining mit seine unter Windows oder Linux. seine mint gleichzeitig auf dem Prozessor und jeder erkannten NVIDIA-Grafikkarte, und die Hashraten addieren sich. Den Prozessor optimiert es während des Minings und jede Karte beim ersten Start, es gibt also vor dem Start nichts zu konfigurieren.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet beantwortet alle vier Fragen. Es ist eine Privacy Coin mit [Privatsphä
 
 Drei Dinge entscheiden, wie viele Hashes pro Sekunde (H/s) ein Prozessor bei Blocknet schafft.
 
-**RAM-Kapazität.** Jeder Mining-Thread braucht für jeden Hash seinen eigenen 2-GiB-Block, teile deinen RAM also durch zwei, um die maximale Thread-Anzahl zu erhalten. Ein Computer mit 32 GB fasst auf dem Papier 16 Blöcke. seine hält 5 % des RAM in Reserve und lässt Platz für das Betriebssystem, womit dieser Rechner auf etwa 14 Threads kommt. Oft begrenzt der RAM die Thread-Anzahl, bevor es die Kernzahl tut. Die Anleitung zum [Mining auf einem alten PC oder Laptop](/de/blog/mine-crypto-on-old-pc-or-laptop/) rechnet Rechner mit 4–16 GB durch.
+**RAM-Kapazität.** Jeder Mining-Thread braucht für jeden Hash seinen eigenen 2-GiB-Block, teile deinen RAM also durch zwei, um die maximale Thread-Anzahl zu erhalten. Ein Computer mit 32 GB fasst auf dem Papier 16 Blöcke. seine hält 5 % (standardmäßig höchstens 1 GiB) des RAM in Reserve und lässt Platz für das Betriebssystem, womit dieser Rechner auf etwa 14 Threads kommt. Oft begrenzt der RAM die Thread-Anzahl, bevor es die Kernzahl tut. Die Anleitung zum [Mining auf einem alten PC oder Laptop](/de/blog/mine-crypto-on-old-pc-or-laptop/) rechnet Rechner mit 4–16 GB durch.
 
 **Speicherbandbreite.** Jeder Hash bewegt Gigabytes durch das Speichersystem. Bei 85,1 H/s schreibt der schnellste mit seine gemessene Rechner jede Sekunde etwa 170,2 GiB an frischen Speicherblöcken (85,1 × 2 GiB). Prozessoren mit mehr Speicherkanälen und schnellerem Speicher ziehen davon.
 

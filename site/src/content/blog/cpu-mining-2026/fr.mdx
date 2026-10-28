@@ -11,7 +11,7 @@ faq:
     a: 'Un hash gourmand en mémoire a besoin de gigaoctets de mémoire rapide à chaque tentative, si bien qu''une puce conçue uniquement pour hacher aurait quand même besoin de grandes quantités de RAM à côté de chaque cœur. Les ordinateurs de bureau, les portables et les serveurs sont déjà livrés avec beaucoup de RAM et des contrôleurs mémoire rapides, ce qui rapproche le matériel que les gens possèdent de ce dont l''algorithme a besoin.'
   - q: 'Peut-on miner avec son CPU et sa carte graphique en même temps ?'
     a: 'Oui, quand vous minez Blocknet avec seine sous Windows ou Linux. seine mine à la fois sur le processeur et sur toutes les cartes graphiques NVIDIA qu''il détecte, et les hashrates s''additionnent. Il optimise le processeur pendant qu''il mine et chaque carte lors de son premier lancement : il n''y a donc rien à configurer avant de commencer.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet répond aux quatre. C'est une cryptomonnaie de confidentialité, [confi
 
 Trois éléments déterminent combien de hashs par seconde (H/s) un processeur produit sur Blocknet.
 
-**La capacité de RAM.** Chaque thread de minage a besoin de son propre bloc de 2 GiB pour chaque hash : divisez votre RAM par deux pour obtenir le nombre maximal de threads. Un ordinateur de 32 GB contient 16 blocs sur le papier. seine garde 5 % de la RAM en réserve et laisse de la place au système d'exploitation, ce qui ramène cette machine à environ 14 threads. La RAM limite souvent le nombre de threads avant le nombre de cœurs. Le guide pour [miner sur un vieux PC ou un portable](/fr/blog/mine-crypto-on-old-pc-or-laptop/) détaille les machines de 4 à 16 GB.
+**La capacité de RAM.** Chaque thread de minage a besoin de son propre bloc de 2 GiB pour chaque hash : divisez votre RAM par deux pour obtenir le nombre maximal de threads. Un ordinateur de 32 GB contient 16 blocs sur le papier. seine garde 5 % (au maximum 1 GiB par défaut) de la RAM en réserve et laisse de la place au système d'exploitation, ce qui ramène cette machine à environ 14 threads. La RAM limite souvent le nombre de threads avant le nombre de cœurs. Le guide pour [miner sur un vieux PC ou un portable](/fr/blog/mine-crypto-on-old-pc-or-laptop/) détaille les machines de 4 à 16 GB.
 
 **La bande passante mémoire.** Chaque hash fait transiter des gigaoctets dans le système mémoire. À 85,1 H/s, la machine la plus rapide mesurée avec seine écrit environ 170,2 GiB de blocs mémoire neufs chaque seconde (85,1 × 2 GiB). Les processeurs dotés de plus de canaux mémoire et d'une mémoire plus rapide prennent l'avantage.
 

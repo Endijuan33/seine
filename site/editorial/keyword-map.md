@@ -285,3 +285,12 @@ Desktop setup owns creating and opening wallets. Backup/restore owns recovery an
 | how long does a Blocknet transfer take; Blocknet transaction pending; when can I spend received BNT | `/blog/blocknet-transfer-time/` | Follow an ordinary payment from mempool to block inclusion to spendable wallet balance, including the ten-block depth rule and differing confirmation counters |
 
 Sending/receiving owns payment construction and approval. Explorer owns public lookup. Wallet synchronization owns diagnosing a stale local view. The pool mining-reward confirmations article owns coinbase maturity and pool accounting, not ordinary recipient wallet timing. This article owns the ordinary-payment timeline, with released-interface screenshots of the same labeled demo receipt in three stages. Search demand is inferred from an ordinary user question, not measured volume.
+
+## Payment visibility and Faraday mechanisms (October 27, 2026)
+
+| Primary search intent | Owner | Distinct reader job |
+|---|---|---|
+| what can someone see about a Blocknet payment; Blocknet transaction privacy; sharing payment information | `/blog/blocknet-payment-visibility/` | Compare public explorer, sender, recipient and granted viewing/proof access; choose what to share for a particular payment question |
+| how Faraday privacy works; Faraday spend proofs; Faraday ML-KEM; Faraday proof aggregation | `/blog/blocknet-faraday-privacy/` | Understand proposed full-set membership, separate spending/receiving mechanisms, proof lifecycle and consequences for wallet use |
+
+Privacy overview remains the mechanism hub for today's released format. Payment-proof and view-only guides own their actual procedures; the new visibility article compares their disclosure scope. Existing Faraday upgrade guide owns activation, recovery material and migration. The new mechanism article explains the eligible Faraday coin set and the proposal's distinct cryptographic jobs. No measured search volume is claimed.

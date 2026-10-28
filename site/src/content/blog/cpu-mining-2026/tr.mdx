@@ -11,7 +11,7 @@ faq:
     a: 'Bellek yoğun bir hash her deneme için gigabaytlarca hızlı bellek ister, bu yüzden yalnızca hash için üretilmiş bir çip bile her çekirdeğin yanında büyük miktarda RAM''e ihtiyaç duyar. Masaüstü bilgisayarlar, dizüstüler ve sunucular zaten bol RAM ve hızlı bellek denetleyicileriyle gelir; bu da insanların sahip olduğu donanımı algoritmanın ihtiyacına yaklaştırır.'
   - q: 'CPU''nuz ve ekran kartınızla aynı anda madencilik yapabilir misiniz?'
     a: 'Evet, Windows veya Linux''ta seine ile Blocknet madenciliği yaparken. seine işlemcide ve algıladığı her NVIDIA ekran kartında aynı anda madencilik yapar ve hashrate''ler toplanır. İşlemciyi madencilik yaparken, her kartı ise ilk açılışta ayarlar; bu yüzden başlamadan önce yapılandırmanız gereken hiçbir şey yoktur.'
-sourceHash: 'd26b280238b6'
+sourceHash: ab5e7322d239
 translation: draft
 ---
 
@@ -56,7 +56,7 @@ Blocknet dördünü de karşılar. [Varsayılan olarak gizlilik](/tr/blog/blockn
 
 Bir işlemcinin Blocknet'te saniyede kaç hash (H/s) üreteceğini üç şey belirler.
 
-**RAM kapasitesi.** Her madencilik iş parçacığı her hash için kendi 2 GiB'lık bloğuna ihtiyaç duyar, bu yüzden sığabilecek en fazla iş parçacığı sayısı için RAM'inizi ikiye bölün. 32 GB'lık bir bilgisayar kağıt üzerinde 16 blok tutar. seine RAM'in %5'ini yedekte tutar ve işletim sistemine yer bırakır; bu da o makineyi yaklaşık 14 iş parçacığına getirir. İş parçacığı sayısını çoğu zaman çekirdek sayısından önce RAM sınırlar. [Eski bir bilgisayarda veya dizüstünde madencilik](/tr/blog/mine-crypto-on-old-pc-or-laptop/) rehberi 4–16 GB'lık makineleri ele alır.
+**RAM kapasitesi.** Her madencilik iş parçacığı her hash için kendi 2 GiB'lık bloğuna ihtiyaç duyar, bu yüzden sığabilecek en fazla iş parçacığı sayısı için RAM'inizi ikiye bölün. 32 GB'lık bir bilgisayar kağıt üzerinde 16 blok tutar. seine RAM'in %5'ini (varsayılan olarak en fazla 1 GiB) yedekte tutar ve işletim sistemine yer bırakır; bu da o makineyi yaklaşık 14 iş parçacığına getirir. İş parçacığı sayısını çoğu zaman çekirdek sayısından önce RAM sınırlar. [Eski bir bilgisayarda veya dizüstünde madencilik](/tr/blog/mine-crypto-on-old-pc-or-laptop/) rehberi 4–16 GB'lık makineleri ele alır.
 
 **Bellek bant genişliği.** Her hash bellek sistemi üzerinden gigabaytlarca veri taşır. seine ile ölçülen en hızlı makine, 85,1 H/s'de her saniye yaklaşık 170,2 GiB yeni bellek bloğu yazar (85,1 × 2 GiB). Daha fazla bellek kanalına ve daha hızlı belleğe sahip işlemciler öne geçer.
 

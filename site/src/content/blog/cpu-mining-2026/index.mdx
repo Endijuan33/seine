@@ -2,7 +2,7 @@
 title: "CPU mining in 2026: what to mine with a CPU"
 description: CPU mining in 2026 explained. Learn why memory-hard coins like Blocknet favor ordinary computers, what makes a CPU fast, and how to start mining with seine.
 date: 2026-10-25
-updated: 2026-10-26
+updated: 2026-10-27
 tags: [CPU mining, Argon2id, Mining guide, Hardware]
 faq:
   - q: Which coins can you mine with a CPU in 2026?
@@ -57,7 +57,7 @@ Blocknet answers all four. It is a privacy coin with [privacy by default](/blog/
 
 Three things decide how many hashes per second (H/s) a processor produces on Blocknet.
 
-**RAM capacity.** Each mining thread needs its own 2 GiB block for every hash, so divide your RAM by two for the most threads that fit. A 32 GB computer holds 16 blocks on paper. Seine keeps 5% of RAM in reserve and leaves room for the operating system, which brings that machine to about 14 threads. RAM often limits the thread count before the core count does. The guide to [mining on an old PC or laptop](/blog/mine-crypto-on-old-pc-or-laptop/) works through 4-16 GB machines.
+**RAM capacity.** Each mining thread needs its own 2 GiB block for every hash, so divide your RAM by two for the most threads that fit. A 32 GB computer holds 16 blocks on paper. Seine keeps 5% (at most 1 GiB by default) of RAM in reserve and leaves room for the operating system, which brings that machine to about 14 threads. RAM often limits the thread count before the core count does. The guide to [mining on an old PC or laptop](/blog/mine-crypto-on-old-pc-or-laptop/) works through 4-16 GB machines.
 
 **Memory bandwidth.** Every hash moves gigabytes through the memory system. At 85.1 H/s, the fastest machine measured with seine writes about 170.2 GiB of fresh memory blocks every second (85.1 × 2 GiB). Processors with more memory channels and faster memory pull ahead.
 
