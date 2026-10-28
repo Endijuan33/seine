@@ -4,6 +4,13 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 10 adds `hardware.memory_setup`: the populated memory module count, DDR
+type, whether the modules are registered, and the lowest rated and configured
+speed in MT/s, read from SMBIOS (Windows always, Linux only as root; absent
+otherwise). It sizes single-channel and below-rated-speed desktop setups. Deploy
+the schema-10 collector before releasing schema-10 miners; schemas 1-9 remain
+accepted, with no SQL storage migration.
+
 Schema 9 adds `hardware.resources.requested_threads` (the explicit `--threads`
 value, absent when sized automatically) and `hardware.resources.cpu_autotune_threads`,
 so fleet analysis can separate operator choices from automatic sizing, the host's

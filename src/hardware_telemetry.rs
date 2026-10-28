@@ -452,6 +452,7 @@ fn hardware(options: &Options) -> Hardware {
         physical_cores: sys.physical_core_count().map(|v| v as u32),
         numa_nodes: numa_node_count(),
         memory_gib: sys.total_memory().div_ceil(1024 * 1024 * 1024) as u32,
+        memory_setup: crate::memory_modules::host_memory_setup(),
         supported_cpu_kernels: blocknet_pow_kernel::CpuKernel::ALL
             .into_iter()
             .filter(|k| k.is_supported())

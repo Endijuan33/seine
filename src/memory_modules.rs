@@ -31,6 +31,36 @@ impl MemoryModule {
             _ => None,
         }
     }
+
+    /// SMBIOS memory type name for telemetry, covering the types miners run.
+    fn type_name(&self) -> Option<&'static str> {
+        match self.memory_type {
+            0x18 => Some("DDR3"),
+            0x1d => Some("LPDDR3"),
+            0x1e => Some("LPDDR4"),
+            0x23 => Some("LPDDR5"),
+            _ => self.generation(),
+        }
+    }
+}
+
+/// Telemetry summary of the populated modules; `None` when the table is
+/// unreadable or lists none.
+pub fn host_memory_setup() -> Option<seine_telemetry::MemorySetup> {
+    summarize(&parse_memory_modules(&smbios_table()?))
+}
+
+fn summarize(modules: &[MemoryModule]) -> Option<seine_telemetry::MemorySetup> {
+    let first = modules.first()?;
+    let lowest =
+        |speed: fn(&MemoryModule) -> u32| modules.iter().map(speed).filter(|&v| v > 0).min();
+    Some(seine_telemetry::MemorySetup {
+        modules: modules.len().min(1024) as u32,
+        memory_type: first.type_name().map(str::to_owned),
+        registered: modules.iter().any(|m| m.registered),
+        rated_mts: lowest(|m| m.rated_mts).filter(|&v| v <= 100_000),
+        configured_mts: lowest(|m| m.configured_mts).filter(|&v| v <= 100_000),
+    })
 }
 
 /// Populated memory devices in a raw SMBIOS structure table.
@@ -266,6 +296,23 @@ mod tests {
         assert!(memory_setup_notices(&soldered).is_empty());
         assert!(memory_setup_notices(&[]).is_empty());
         assert!(parse_memory_modules(&[17, 2]).is_empty());
+    }
+
+    #[test]
+    fn telemetry_summary_uses_lowest_known_speeds() {
+        let modules = parse_memory_modules(&table(&[
+            device(16384, FORM_DIMM, MEMORY_DDR5, 1 << 14, 4800, 6000),
+            device(16384, FORM_DIMM, MEMORY_DDR5, 1 << 14, 0, 5600),
+        ]));
+        let setup = summarize(&modules).unwrap();
+        assert_eq!(setup.modules, 2);
+        assert_eq!(setup.memory_type.as_deref(), Some("DDR5"));
+        assert!(!setup.registered);
+        assert_eq!(
+            (setup.rated_mts, setup.configured_mts),
+            (Some(4800), Some(5600))
+        );
+        assert!(summarize(&[]).is_none());
     }
 
     #[test]

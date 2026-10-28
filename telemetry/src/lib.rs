@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -408,10 +408,27 @@ pub struct Hardware {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub numa_nodes: Option<u32>,
     pub memory_gib: u32,
+    /// Installed memory modules from SMBIOS (schema 10); absent when unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_setup: Option<MemorySetup>,
     pub supported_cpu_kernels: Vec<String>,
     /// Report-time resource snapshot; absent in schema 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<Resources>,
+}
+
+/// Populated memory modules (SMBIOS type 17), so fleet analysis can size
+/// single-channel and below-rated-speed setups.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemorySetup {
+    pub modules: u32,
+    /// "DDR4", "DDR5", "LPDDR5", ...; absent when the table names another type.
+    pub memory_type: Option<String>,
+    pub registered: bool,
+    /// Lowest module rating and configured speed, in MT/s.
+    pub rated_mts: Option<u32>,
+    pub configured_mts: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -506,6 +523,13 @@ impl Report {
             && h.physical_cores.is_none_or(|v| v <= 65536)
             && h.numa_nodes.is_none_or(|v| (1..=1024).contains(&v))
             && (self.schema_version >= 9 || h.numa_nodes.is_none())
+            && h.memory_setup.as_ref().is_none_or(|m| {
+                (1..=1024).contains(&m.modules)
+                    && optional_short(&m.memory_type)
+                    && m.rated_mts.is_none_or(|v| (1..=100_000).contains(&v))
+                    && m.configured_mts.is_none_or(|v| (1..=100_000).contains(&v))
+            })
+            && (self.schema_version >= 10 || h.memory_setup.is_none())
             && h.memory_gib <= 1048576
             && h.resources.as_ref().is_none_or(|r| {
                 r.allowed_logical_cpus.is_none_or(|v| v <= 65536)
@@ -1031,6 +1055,35 @@ mod tests {
         report.schema_version = 9;
         report.hardware.numa_nodes = Some(0);
         assert!(!report.validate(), "a host has at least one node");
+    }
+
+    #[test]
+    fn memory_setup_requires_schema_10() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../fixture.json")).unwrap();
+        value["schema_version"] = 10.into();
+        value["hardware"]["memory_setup"] = serde_json::json!({
+            "modules": 1, "memory_type": "DDR5", "registered": false,
+            "rated_mts": 4800, "configured_mts": 4800
+        });
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate());
+        report.schema_version = 9;
+        assert!(!report.validate(), "memory_setup must advertise schema 10");
+        report.schema_version = 10;
+        report.hardware.memory_setup.as_mut().unwrap().modules = 0;
+        assert!(
+            !report.validate(),
+            "a reported setup has at least one module"
+        );
+        report.hardware.memory_setup.as_mut().unwrap().modules = 2;
+        report
+            .hardware
+            .memory_setup
+            .as_mut()
+            .unwrap()
+            .configured_mts = Some(0);
+        assert!(!report.validate(), "speeds are positive when present");
     }
 
     #[test]
