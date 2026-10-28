@@ -699,6 +699,16 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     bench: bool,
 
+    /// Replace this executable with the newest stable release for this platform
+    /// (checked against the release's SHA256SUMS.txt), then exit without mining.
+    #[arg(long, default_value_t = false)]
+    self_update: bool,
+
+    /// Install new stable releases while mining: download, verify, swap the
+    /// executable and restart with the same arguments (needs the update check).
+    #[arg(long, default_value_t = false)]
+    auto_update: bool,
+
     /// Benchmark mode.
     /// `kernel-effective` measures kernel throughput with wall-time accounting and the backend's
     /// target/eval path enabled so results are directly comparable to backend-mode overhead.
@@ -759,6 +769,9 @@ pub struct Config {
     pub mining_address: Option<String>,
     pub backend_specs: Vec<BackendSpec>,
     pub threads: usize,
+    /// The explicit `--threads` value, reported in telemetry so fleet data can tell
+    /// operator choices from automatic sizing. `None` when sized automatically.
+    pub cpu_threads_explicit: Option<usize>,
     pub cpu_auto_threads_cap: usize,
     /// Recheck RAM after teardown for interactive/API thread overrides.
     pub cpu_manual_memory_check: bool,
@@ -816,6 +829,8 @@ pub struct Config {
     pub sub_round_rebalance_interval: Option<Duration>,
     pub sse_enabled: bool,
     pub update_check_enabled: bool,
+    /// `--auto-update`: apply newer releases found by the update check.
+    pub auto_update: bool,
     pub refresh_on_same_height: bool,
     pub ui_mode: UiMode,
     pub data_dir: PathBuf,
@@ -1158,6 +1173,13 @@ impl Config {
             cpu_autotune_threads,
             auto_threads_cap,
         ));
+        startup_notices.extend(wsl_sizing_notice_for(
+            cpu_backend_instances,
+            gpu_memory_reservation,
+            cli.cpu_affinity,
+            cli.cpu_page_mode,
+            cli.cpu_memory_reserve_percent,
+        ));
         let cpu_autotune_config_path = cli
             .cpu_autotune_config
             .clone()
@@ -1288,6 +1310,7 @@ impl Config {
             mining_address: cli.mining_address.map(|address| address.trim().to_string()),
             backend_specs,
             threads: resolved_threads,
+            cpu_threads_explicit: cli.threads,
             cpu_auto_threads_cap: auto_threads_cap,
             cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,
@@ -1349,6 +1372,7 @@ impl Config {
             sub_round_rebalance_interval: optional_duration_from_millis(cli.sub_round_rebalance_ms),
             sse_enabled: !cli.disable_sse,
             update_check_enabled: !cli.disable_update_check,
+            auto_update: cli.auto_update && !cli.disable_update_check,
             refresh_on_same_height: cli.refresh_on_same_height,
             ui_mode: cli.ui,
             data_dir: cli.data_dir,
@@ -2907,6 +2931,53 @@ fn underused_threads_notice(
         })
 }
 
+/// WSL2 gives its Linux VM half of the PC's RAM by default, so desktops with the
+/// cores for a dozen workers often fit three. 499 of 2,124 telemetry installs
+/// (2026-10-28) ran under WSL2 at 2-4 lanes. Name the two fixes once at startup.
+fn wsl_sizing_notice_for(
+    cpu_backend_instances: usize,
+    gpu_memory_reservation: u64,
+    affinity: CpuAffinityMode,
+    page_mode: CpuPageMode,
+    reserve_percent: Option<u8>,
+) -> Option<String> {
+    if cpu_backend_instances == 0 {
+        return None;
+    }
+    let runtime_environment = crate::runtime_identity::runtime_environment();
+    if runtime_environment != "wsl2" {
+        return None;
+    }
+    let budget = detect_memory_budget_bytes(page_mode)?;
+    let memory_lanes = (auto_cpu_memory_bytes(budget, gpu_memory_reservation, reserve_percent)
+        / CPU_LANE_MEMORY_BYTES) as usize;
+    wsl_sizing_notice(
+        &runtime_environment,
+        cpu_backend_instances,
+        memory_lanes,
+        cpu_parallelism_cap(affinity),
+        budget.effective_total,
+    )
+}
+
+fn wsl_sizing_notice(
+    runtime_environment: &str,
+    cpu_backend_instances: usize,
+    memory_lanes: usize,
+    cpu_lanes: usize,
+    effective_total_bytes: u64,
+) -> Option<String> {
+    if runtime_environment != "wsl2" || cpu_backend_instances == 0 || memory_lanes >= cpu_lanes {
+        return None;
+    }
+    let gib = |bytes: u64| bytes.div_ceil(1024 * 1024 * 1024);
+    let needed_gib = gib(CPU_LANE_MEMORY_BYTES.saturating_mul(cpu_lanes as u64)) + 2;
+    Some(format!(
+        "WSL2 limits this Linux VM to {} GiB of RAM, which fits {memory_lanes} CPU worker(s) of the {cpu_lanes} this CPU allows; if the PC has more RAM, put \"[wsl2]\" and \"memory={needed_gib}GB\" in %UserProfile%\\.wslconfig and run `wsl --shutdown`, or run the native Windows build, which uses all of it",
+        gib(effective_total_bytes)
+    ))
+}
+
 fn distribute_auto_cpu_threads(total_lanes_cap: usize, cpu_backend_instances: usize) -> usize {
     let lanes = total_lanes_cap.max(1);
     let instances = cpu_backend_instances.max(1);
@@ -3520,6 +3591,8 @@ mod tests {
             api_token: None,
             api_cookie: None,
             bench: false,
+            self_update: false,
+            auto_update: false,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
             bench_secs: 20,
@@ -4456,6 +4529,20 @@ HugePages_Rsvd:          0
             13
         );
         assert_eq!(memory_reserve_bytes(8 * gib, None), 8 * gib / 100 * 5);
+    }
+
+    #[test]
+    fn wsl_sizing_notice_only_when_memory_caps_workers_under_wsl2() {
+        let gib = 1024 * 1024 * 1024;
+        let notice = wsl_sizing_notice("wsl2", 1, 3, 16, 8 * gib).unwrap();
+        assert!(notice.contains("memory=34GB"), "{notice}");
+        assert!(
+            notice.contains("8 GiB of RAM, which fits 3 CPU worker(s) of the 16"),
+            "{notice}"
+        );
+        assert!(wsl_sizing_notice("wsl2", 1, 16, 16, 64 * gib).is_none());
+        assert!(wsl_sizing_notice("native", 1, 3, 16, 8 * gib).is_none());
+        assert!(wsl_sizing_notice("wsl2", 0, 3, 16, 8 * gib).is_none());
     }
 
     #[test]

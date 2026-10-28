@@ -2750,6 +2750,8 @@ mod tests {
                 assign_timeout_strikes_override: None,
             }],
             threads: 1,
+            cpu_threads_explicit: None,
+            auto_update: false,
             cpu_auto_threads_cap: 1,
             cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,

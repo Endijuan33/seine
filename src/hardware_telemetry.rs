@@ -28,6 +28,10 @@ pub(crate) struct Options {
     pub endpoint: String,
     pub installation_id: String,
     pub state_path: PathBuf,
+    /// Explicit `--threads` value (schema 9); filled in by `start` from the config.
+    pub requested_threads: Option<u32>,
+    /// Whether automatic worker-count tuning is active (schema 9).
+    pub cpu_autotune_threads: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -134,6 +138,8 @@ fn resolve_with_default(
         endpoint,
         installation_id: preferences.installation_id.unwrap(),
         state_path: path,
+        requested_threads: None,
+        cpu_autotune_threads: None,
     }))
 }
 
@@ -415,7 +421,7 @@ impl Drop for Worker {
     }
 }
 
-fn hardware() -> Hardware {
+fn hardware(options: &Options) -> Hardware {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
     sys.refresh_cpu_all();
@@ -427,6 +433,8 @@ fn hardware() -> Hardware {
             available_parallelism: thread::available_parallelism().ok().map(|v| v.get() as u32),
             effective_memory_gib,
             available_memory_gib,
+            requested_threads: options.requested_threads,
+            cpu_autotune_threads: options.cpu_autotune_threads,
         }),
         os: std::env::consts::OS.into(),
         os_version: sysinfo::System::os_version(),
@@ -483,7 +491,14 @@ fn send_report(
 }
 
 pub(crate) fn start(options: &Options, cfg: &crate::config::Config) -> Result<(Recorder, Worker)> {
-    start_with_context(options, crate::diagnostics::context(cfg))
+    let options = Options {
+        requested_threads: cfg
+            .cpu_threads_explicit
+            .map(|threads| u32::try_from(threads).unwrap_or(u32::MAX)),
+        cpu_autotune_threads: Some(cfg.cpu_autotune_threads),
+        ..options.clone()
+    };
+    start_with_context(&options, crate::diagnostics::context(cfg))
 }
 
 fn start_with_context(
@@ -626,7 +641,7 @@ fn start_with_context(
                         }
                     },
                     debug_build: cfg!(debug_assertions),
-                    hardware: hardware(),
+                    hardware: hardware(&options),
                     window_secs,
                     backends,
                     diagnostics: Some(diagnostic_snapshot),

@@ -4,6 +4,14 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 9 adds `hardware.resources.requested_threads` (the explicit `--threads`
+value, absent when sized automatically) and `hardware.resources.cpu_autotune_threads`,
+so fleet analysis can separate operator choices from automatic sizing, plus the
+`auto_update` shutdown-request origin written when `--auto-update` restarts the
+miner. Deploy the schema-9 collector before releasing schema-9 miners: a schema-8
+collector rejects their reports. Schemas 1-8 remain accepted; no SQL storage
+migration or alert-threshold change is required.
+
 Schema 8 adds fixed API-stop, API-restart, TUI-quit and TUI-thread-change origins,
 plus the last entered cleanup step. Current-run reports and interrupted-run
 checkpoints retain these independently. Cleanup transitions are saved directly,

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -86,6 +86,8 @@ pub enum ShutdownRequest {
     ApiRestart,
     TuiQuit,
     TuiThreadChange,
+    /// `--auto-update` installed a newer release and restarted the miner (schema 9).
+    AutoUpdate,
 }
 
 impl ShutdownRequest {
@@ -94,6 +96,10 @@ impl ShutdownRequest {
             self,
             Self::Interrupt | Self::ConsoleClose | Self::Logoff | Self::SystemShutdown
         )
+    }
+
+    fn schema8_compatible(self) -> bool {
+        !matches!(self, Self::AutoUpdate)
     }
 }
 
@@ -413,6 +419,13 @@ pub struct Resources {
     pub available_parallelism: Option<u32>,
     pub effective_memory_gib: Option<u32>,
     pub available_memory_gib: Option<u32>,
+    /// Explicit `--threads` value, when the operator fixed the CPU worker count
+    /// (schema 9). Absent when workers were sized automatically.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_threads: Option<u32>,
+    /// Whether automatic CPU worker-count tuning was active (schema 9).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_autotune_threads: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -494,6 +507,9 @@ impl Report {
                     && r.available_parallelism.is_none_or(|v| v <= 65536)
                     && r.effective_memory_gib.is_none_or(|v| v <= 1048576)
                     && r.available_memory_gib.is_none_or(|v| v <= 1048576)
+                    && r.requested_threads.is_none_or(|v| (1..=65536).contains(&v))
+                    && (self.schema_version >= 9
+                        || (r.requested_threads.is_none() && r.cpu_autotune_threads.is_none()))
             })
             && (self.schema_version >= 2
                 || (h.resources.is_none()
@@ -526,6 +542,14 @@ impl Report {
                                     && r.nvidia_software.is_none()
                                     && r.shutdown_request
                                         .is_none_or(ShutdownRequest::schema7_compatible)
+                            })))
+                    && (self.schema_version >= 9
+                        || (d
+                            .shutdown_request
+                            .is_none_or(ShutdownRequest::schema8_compatible)
+                            && d.previous_run.as_ref().is_none_or(|r| {
+                                r.shutdown_request
+                                    .is_none_or(ShutdownRequest::schema8_compatible)
                             })))
                     && (self.schema_version >= 7
                         || (d.events.iter().all(DiagnosticEvent::schema6_compatible)
@@ -951,6 +975,42 @@ mod tests {
         extended.schema_version = 2;
         extended.backends[0].settings.cpu_backing_mib = Some([u64::MAX; 5]);
         assert!(!extended.validate());
+    }
+
+    #[test]
+    fn auto_update_shutdown_request_requires_schema_9() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../diagnostics-fixture.json")).unwrap();
+        value["schema_version"] = 9.into();
+        value["diagnostics"]["shutdown_request"] = serde_json::json!("auto_update");
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate(), "schema 9 accepts auto_update");
+        report.schema_version = 8;
+        assert!(!report.validate(), "auto_update must advertise schema 9");
+    }
+
+    #[test]
+    fn worker_sizing_fields_require_schema_9() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../fixture.json")).unwrap();
+        value["schema_version"] = 9.into();
+        value["hardware"]["resources"]["requested_threads"] = 6.into();
+        value["hardware"]["resources"]["cpu_autotune_threads"] = false.into();
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate());
+        report.schema_version = 8;
+        assert!(!report.validate(), "sizing fields must advertise schema 9");
+        report.schema_version = 9;
+        report
+            .hardware
+            .resources
+            .as_mut()
+            .unwrap()
+            .requested_threads = Some(0);
+        assert!(
+            !report.validate(),
+            "an explicit count is at least one worker"
+        );
     }
 
     #[test]
