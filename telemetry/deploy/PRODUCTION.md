@@ -1,12 +1,17 @@
 # Production collector
 
-The running collector now supports schema 7, deployed October 27 at 00:25 EDT
-from `f2d0217dbfd83e51c3b7eb2489806c0744d4acef`. See the
-[deployment receipt](../../docs/validation/collector-schema7-deployment-20261027.md).
-Its immutable build source is `/opt/seine-collector-releases/f2d0217`; the
+The running collector supports schema 9, deployed October 28 at 15:17 EDT
+from `36d26b5c8274b13800e6bede493ae4c1b3c98801`. See the
+[deployment receipt](../../docs/validation/collector-schema9-deployment-20261028.md)
+(schema 8 was deployed October 27 from `c92833dd13047a5ea5760edb3563bf99d145b27a`,
+see [its receipt](../../docs/validation/collector-schema8-deployment-20261027.md)).
+Its immutable build source is `/opt/seine-collector-releases/36d26b5`; the
 operational `/opt/seine` checkout and its existing alert-script modification were
-preserved. Use the retained image override recorded in that receipt for subsequent
-`up --no-build` operations. Schemas 1–6 remain accepted; no miner release was made.
+preserved. Use the candidate override in `/var/lib/seine-telemetry-schema9.um8YAZnA`
+for subsequent `up --no-build` operations. Schemas 1–8 remain accepted; no miner
+release was made. Collector-only deployments have the owner's standing approval
+(October 28, 2026); miner releases, pool deploys and daemon restarts still need
+explicit requests.
 
 - Host: `root@2.31.36.180` (Hetzner, Falkenstein; 4 vCPU, 8 GB RAM, 80 GB disk).
 - OS: Ubuntu 26.04 LTS; distro Docker Engine and Compose packages.
@@ -72,8 +77,7 @@ reviewed target and records acceptance checks, exact collector-only commands and
 image rollback. The approved collector-only rollout completed October 26 at
 14:49 EDT on exact source `af236c276e01080ff15863d4e716dd13e07f3b9d`; see the
 [deployment receipt](../../docs/validation/collector-schema6-deployment-20261026.md)
-for image IDs, retained overrides and verification. Further deployments require
-an explicit request.
+for image IDs, retained overrides and verification. Collector-only deployments have standing approval (see above).
 
 For deployment, first review the intended commit and create a fresh recovery backup.
 Then fast-forward the checkout and rebuild only the collector:
