@@ -12,6 +12,9 @@ supported hardware only.
 - **About 8% faster CPU hashing on 4th and 5th Gen Intel Xeon servers** (measured on Xeon Platinum 8488C).
 - **About 4% faster CPU hashing on AMD Zen 4 EPYC servers** (EPYC 9004 series, measured on EPYC 9124P and 9R14), and up to 12% faster at lower thread counts.
 - **More accepted shares on every machine:** work in progress when the pool sends a new job, or when a dev-fee round starts or ends, is now submitted instead of discarded.
+- **Seine can update itself:** `seine --self-update` installs the newest release for your platform, and `--auto-update` keeps a running miner current and restarts it with the same settings.
+- **WSL2 users are told how to unlock more workers** when the Linux VM's memory cap, not the CPU, limits the worker count: the exact `.wslconfig` setting and the native Windows build are named at startup.
+- Optional telemetry now records whether the worker count was set manually, so defaults can be tuned for how miners are actually run. Self-hosted collectors need the schema 9 update before this release.
 
 ## v0.2.44
 
