@@ -13,7 +13,7 @@
     "overlap": "node scripts/check-content.mjs --overlap",
     "indexnow": "node scripts/indexnow.mjs",
     "check:release": "node scripts/check-release-facts.mjs --live",
-    "test": "node --test scripts/check-release-facts.test.mjs"
+    "test": "node --test scripts/check-release-facts.test.mjs tests/*.test.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "8.0.3",

@@ -35,7 +35,7 @@ const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
 ];
 
 // Best measured hashrate per generation lives in src/data/benchmarks.json (one place to update).
-const bars = benchmarks.best.map((b) => ({ name: 'labelKey' in b ? t(b.labelKey as UiKey) : b.label, chip: b.chip, threads: b.threads, hps: b.hps })).sort((a, b) => b.hps - a.hps);
+const bars = benchmarks.best.map((b) => ({ id: b.chip.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: 'labelKey' in b ? t(b.labelKey as UiKey) : b.label, chip: b.chip, threads: b.threads, hps: b.hps })).sort((a, b) => b.hps - a.hps);
 const top = Math.max(...bars.map((b) => b.hps));
 // Hashrates in the locale's number format (49,4 in German, 49.4 in English).
 const hps = new Intl.NumberFormat(localeDef(locale).htmlLang, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format;
@@ -70,7 +70,7 @@ const scriptVars = {
 };
 ---
 <Base locale={locale} path="/" title={t('homeTitle')} description={t('homeDescription')} imageAlt={t('homeImageAlt')} schema={schema}>
-<main>
+<main data-metrics-article="home" data-metrics-locale={locale}>
   <div class="hero">
     <div class="wrap">
       <div>
@@ -146,8 +146,8 @@ const scriptVars = {
       <div class="sec-head"><h2>{t('perfTitle')}</h2><p>{t('perfSub')}</p></div>
       <div class="bars">
         {bars.map((b) => (
-          <div class="bar">
-            <div class="who"><b>{b.name}</b><span>{b.chip} · {t('perfThreads', { n: b.threads })}</span></div>
+          <div class="bar" id={`benchmark-${b.id}`}>
+            <div class="who"><b><a href={localizePath('/blog/blocknet-mining-hardware-hashrate/', locale) + '#benchmark-results'}>{b.name}</a></b><span>{b.chip} · {t('perfThreads', { n: b.threads })}</span></div>
             <div class="track"><i style={`width:${((100 * b.hps) / top).toFixed(1)}%`}></i></div>
             <div class="v">{hps(b.hps)}<small>H/s</small></div>
           </div>
@@ -180,6 +180,7 @@ const scriptVars = {
     </div>
   </section>
 </main>
+<script is:inline type="module" src="/site-events.js"></script>
 
 <script slot="scripts" is:inline define:vars={scriptVars}>
   // Links work without JS; this marks the visitor's OS and fills in the version and sizes.

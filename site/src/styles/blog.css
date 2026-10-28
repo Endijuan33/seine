@@ -80,3 +80,8 @@
 .topic-section > h2:target { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
 .topic-section .posts { padding-bottom: 56px; }
 .crumbs { line-height: 1.6; }
+
+.benchmark-jumps { margin-block: 24px; padding: 16px 20px; border-block: 1px solid var(--rule); }
+.benchmark-jumps ul { margin-bottom: 0; }
+.benchmark-jumps a { text-underline-offset: 3px; }
+#benchmark-results, .prose h2 { scroll-margin-top: 100px; }
