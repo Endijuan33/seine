@@ -11,6 +11,7 @@ supported hardware only.
 
 - **About 8% faster CPU hashing on 4th and 5th Gen Intel Xeon servers** (measured on Xeon Platinum 8488C).
 - **About 4% faster CPU hashing on AMD Zen 4 EPYC servers** (EPYC 9004 series, measured on EPYC 9124P and 9R14), and up to 12% faster at lower thread counts.
+- **More accepted shares on every machine:** work in progress when the pool sends a new job, or when a dev-fee round starts or ends, is now submitted instead of discarded.
 
 ## v0.2.44
 
