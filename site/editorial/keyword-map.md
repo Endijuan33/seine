@@ -302,3 +302,13 @@ Privacy overview remains the mechanism hub for today's released format. Payment-
 | Blocknet transaction inputs and outputs; why two outputs; where transaction change goes | `/blog/blocknet-transaction-explained/` | Follow one payment's selected value into recipient outputs, change and fee; distinguish outputs from recipients and ring decoys from funding |
 
 The fee guide retains fee estimation and preview steps. Send/receive owns wallet procedure; transfer-time owns confirmation/maturity timing; payment-visibility owns observer/disclosure scope. This walkthrough owns the structure and change accounting of one payment. Closest existing fee coverage includes a short version of the same arithmetic; the new page expands output ownership and lifecycle without repeating rate calculations or CLI steps. Search demand is inferred from the user’s requested practical coverage, not measured analytics.
+
+## Currency, supply and privacy by default (October 28, 2026)
+
+| Primary search intent | Owner | Distinct reader job |
+|---|---|---|
+| Blocknet supply; maximum supply; issuance inflation and tail emission | `/blog/blocknet-supply/` | Understand the approximate target versus a cap, ongoing issuance, why rewards continue, and issuance versus transfers/spendability |
+| Blocknet fungibility; interchangeable privacy-coin units | `/blog/blocknet-fungibility/` | Understand fungibility as a currency property and the role of payment privacy, separate from acceptance, price and available balance |
+| Faraday currency continuity; block reward versus issuance rate | `/blog/blocknet-faraday-monetary-policy/` | Compare same-chain monetary continuity and proposed interval/reward pairing without treating proposal figures as live rules |
+
+The existing `/blog/blocknet-privacy-features/` remains the owner of privacy by default and its mechanisms. It receives a substantial update rather than a competing URL. The pool's `/blog/blocknet-block-reward-schedule/` retains the full monthly reward table and exact pre-tail arithmetic. The Faraday upgrade guide owns migration and preparation; the Faraday privacy guide owns proof mechanisms. Payment-visibility owns observer/disclosure scope, transaction anatomy owns inputs/change, and the generic privacy-coin article owns the category definition. The fungibility page develops the brief existing mention into a currency-focused explanation. No measured search-volume or ranking claim is made; these topics respond to the user's explicit currency/privacy direction.

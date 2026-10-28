@@ -66,3 +66,5 @@ Published October 27, 2026: `blocknet-transfer-time` answers the ordinary paymen
 Published October 27, 2026: `blocknet-payment-visibility` and `blocknet-faraday-privacy`, each in all 20 languages, with four original explanatory graphics. The existing privacy overview's Faraday section now distinguishes eligible Faraday coins from all historical outputs. User requested privacy/Faraday coverage and approved publication.
 
 Published October 28, 2026: `blocknet-transaction-explained`, all 20 languages, with an original numbered transaction-accounting diagram. User approved the proposed walkthrough with “proceed”; Android remains deferred.
+
+October 28, 2026: user approved all four currency/privacy topics. Published three new owners (`blocknet-supply`, `blocknet-fungibility`, `blocknet-faraday-monetary-policy`) and materially refreshed `blocknet-privacy-features`, each in all 20 languages. Added article-specific graphics and corrected adjacent Faraday-set wording. Android and hardware-rental work remain outside this batch.
