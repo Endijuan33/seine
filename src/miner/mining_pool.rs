@@ -16,12 +16,13 @@ use crate::config::{Config, WorkAllocation};
 use crate::daemon_api::{is_unauthorized_error, ApiClient};
 use crate::dev_fee::{DevFeeTracker, DEV_ADDRESS};
 use crate::pool::{
-    PoolClient, PoolEvent, PoolJob, PoolSubmitAck, PoolSubmitRetry,
+    PoolClient, PoolEvent, PoolJob, PoolSubmitAck, PoolSubmitRetry, SubmitTiming,
     POOL_NOTIFICATION_MINER_BLOCK_FOUND, POOL_NOTIFICATION_POOL_BLOCK_SOLVED,
 };
 use crate::types::{decode_hex, difficulty_to_target, parse_target};
 
 use super::auth::{refresh_api_token_from_cookie, TokenRefreshOutcome};
+use super::block_latency;
 use super::mining::MiningRuntimeBackends;
 use super::mining_tui::{
     init_tui_display, render_tui_now, set_tui_dev_fee_active, set_tui_pending_nvidia,
@@ -159,6 +160,8 @@ struct ActivePoolJob {
     recent_stale_submit_acks: VecDeque<Instant>,
     job_received_at: Instant,
     last_assignment_timing: Option<PoolAssignmentTiming>,
+    /// Job received → backends assigned, reported on the next submit.
+    pending_job_switch: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +288,7 @@ impl ActivePoolJob {
             recent_stale_submit_acks: VecDeque::new(),
             job_received_at: now,
             last_assignment_timing: None,
+            pending_job_switch: None,
         }
     }
 
@@ -530,6 +534,7 @@ fn maybe_log_pool_submit_timing(
         .submitted_at
         .saturating_duration_since(pending_submit.found_at);
     let submit_to_ack = acknowledged_at.saturating_duration_since(pending_submit.submitted_at);
+    block_latency::record(block_latency::POOL_SUBMIT_TO_ACK, submit_to_ack);
     if queued_for < POOL_TIMING_SLOW_QUEUE_THRESHOLD
         && submit_to_ack < POOL_TIMING_SLOW_ACK_THRESHOLD
     {
@@ -1978,6 +1983,7 @@ fn assign_pool_job(
     stats: &Stats,
     tui: &mut Option<TuiDisplay>,
 ) -> Result<()> {
+    let handled_at = Instant::now();
     let nonce_count = job.nonce_count();
     if nonce_count == 0 {
         if mode.is_user() {
@@ -2051,7 +2057,21 @@ fn assign_pool_job(
             backend_weights,
             job,
         )?;
-        record_pool_assignment_timing(job, "new-job", cancel_latency, assign_started.elapsed());
+        let assign_latency = assign_started.elapsed();
+        record_pool_assignment_timing(job, "new-job", cancel_latency, assign_latency);
+        if let Some(cancel_latency) = cancel_latency {
+            block_latency::record(block_latency::POOL_JOB_CANCEL, cancel_latency);
+        }
+        block_latency::record(block_latency::POOL_JOB_ASSIGN, assign_latency);
+        if let Some(received_at) = job.job.received_at {
+            block_latency::record(
+                block_latency::POOL_JOB_RECEIVED_TO_HANDLED,
+                handled_at.saturating_duration_since(received_at),
+            );
+            let switch = received_at.elapsed();
+            block_latency::record(block_latency::POOL_JOB_SWITCH, switch);
+            job.pending_job_switch = Some(switch);
+        }
     }
     set_tui_state_label(tui, "working");
     render_tui_now(tui);
@@ -2225,12 +2245,13 @@ fn service_pool_submit_backlog(
         mode,
         job,
         stats,
-        |job_id, nonce, claimed_hash, backend_label| {
-            pool_client.submit_share_with_backend(
+        |job_id, nonce, claimed_hash, backend_label, timing| {
+            pool_client.submit_share_with_timing(
                 job_id.to_string(),
                 nonce,
                 claimed_hash,
                 Some(backend_label),
+                Some(timing),
             )
         },
         recent_submit_lookup,
@@ -2244,7 +2265,7 @@ fn service_pool_submit_backlog_with_submitter<F>(
     mut submitter: F,
     recent_submit_lookup: &mut RecentPendingSubmitLookup,
 ) where
-    F: FnMut(&str, u64, Option<[u8; 32]>, &str) -> Result<()>,
+    F: FnMut(&str, u64, Option<[u8; 32]>, &str, SubmitTiming) -> Result<()>,
 {
     let now = Instant::now();
     let timed_out = reap_timed_out_pending_submits(job, now);
@@ -2325,7 +2346,7 @@ fn flush_deferred_pool_submits<F>(
     recent_submit_lookup: &mut RecentPendingSubmitLookup,
 ) -> (u64, bool)
 where
-    F: FnMut(&str, u64, Option<[u8; 32]>, &str) -> Result<()>,
+    F: FnMut(&str, u64, Option<[u8; 32]>, &str, SubmitTiming) -> Result<()>,
 {
     let mut flushed = 0u64;
     let mut submit_failed = false;
@@ -2337,11 +2358,16 @@ where
             stats.add_dropped(1);
             continue;
         };
+        let timing = SubmitTiming {
+            found_at: deferred.found_at,
+            job_switch: job.pending_job_switch.take(),
+        };
         match submitter(
             binding.job_id.as_str(),
             deferred.nonce,
             deferred.claimed_hash,
             &deferred.backend_label,
+            timing,
         ) {
             Ok(()) => {
                 job.pending_submit_nonces.insert(
@@ -2390,12 +2416,13 @@ fn submit_pool_solution(
         solution,
         backend_label,
         stats,
-        |job_id, nonce, claimed_hash, backend_label| {
-            pool_client.submit_share_with_backend(
+        |job_id, nonce, claimed_hash, backend_label, timing| {
+            pool_client.submit_share_with_timing(
                 job_id.to_string(),
                 nonce,
                 claimed_hash,
                 Some(backend_label),
+                Some(timing),
             )
         },
         recent_submit_lookup,
@@ -2412,12 +2439,13 @@ fn submit_pool_solution_with_submitter<F>(
     recent_submit_lookup: &mut RecentPendingSubmitLookup,
 ) -> PoolShareSubmitOutcome
 where
-    F: FnMut(&str, u64, Option<[u8; 32]>, &str) -> Result<()>,
+    F: FnMut(&str, u64, Option<[u8; 32]>, &str, SubmitTiming) -> Result<()>,
 {
     let Some(job) = active_job.as_mut() else {
         return PoolShareSubmitOutcome::StaleEpoch;
     };
-    let found_at = Instant::now();
+    let found_at = solution.found_at;
+    block_latency::record(block_latency::POOL_FOUND_TO_LOOP, found_at.elapsed());
     if solution.epoch != job.epoch {
         return PoolShareSubmitOutcome::StaleEpoch;
     }
@@ -2430,8 +2458,8 @@ where
         mode,
         job,
         stats,
-        |job_id, nonce, claimed_hash, backend_label| {
-            submitter(job_id, nonce, claimed_hash, backend_label)
+        |job_id, nonce, claimed_hash, backend_label, timing| {
+            submitter(job_id, nonce, claimed_hash, backend_label, timing)
         },
         recent_submit_lookup,
     );
@@ -2455,11 +2483,16 @@ where
         return PoolShareSubmitOutcome::Deferred;
     }
 
+    let job_switch = job.pending_job_switch.take();
     if submitter(
         binding.job_id.as_str(),
         solution.nonce,
         solution.hash,
         backend_label,
+        SubmitTiming {
+            found_at,
+            job_switch,
+        },
     )
     .is_ok()
     {
@@ -2487,6 +2520,7 @@ where
         }
         PoolShareSubmitOutcome::Submitted
     } else {
+        job.pending_job_switch = job_switch;
         job.submitted_nonces.remove(&solution.nonce);
         if mode.is_user() {
             warn(
@@ -3011,6 +3045,7 @@ mod tests {
                 height: 1,
                 nonce_start: 0,
                 nonce_end: 1_000,
+                received_at: None,
             },
             epoch,
             Arc::<[u8]>::from(vec![0u8; 1]),
@@ -3066,7 +3101,7 @@ mod tests {
                 &solution,
                 "cpu#1",
                 &stats,
-                |job_id, nonce, _, _| {
+                |job_id, nonce, _, _, _timing| {
                     submitted.push((job_id.to_string(), nonce));
                     Ok(())
                 },
@@ -3165,6 +3200,7 @@ mod tests {
             share_binding_id: 1,
             backend_id: 1,
             backend: "cpu",
+            found_at: std::time::Instant::now(),
         }
     }
 
@@ -3473,7 +3509,7 @@ mod tests {
             &test_solution(7, 99),
             "cpu#1",
             &stats,
-            |_job_id, _nonce, _hash, _backend| {
+            |_job_id, _nonce, _hash, _backend, _timing| {
                 submit_calls = submit_calls.saturating_add(1);
                 Ok(())
             },
@@ -3506,7 +3542,7 @@ mod tests {
             &test_solution(9, 42),
             "cpu#1",
             &stats,
-            |_job_id, nonce, _hash, _backend| {
+            |_job_id, nonce, _hash, _backend, _timing| {
                 submitted_nonces.push(nonce);
                 Ok(())
             },
@@ -3518,7 +3554,7 @@ mod tests {
             &test_solution(9, 42),
             "cpu#1",
             &stats,
-            |_job_id, nonce, _hash, _backend| {
+            |_job_id, nonce, _hash, _backend, _timing| {
                 submitted_nonces.push(nonce);
                 Ok(())
             },
@@ -3599,7 +3635,7 @@ mod tests {
             PoolConnectionMode::Dev,
             &mut job,
             &stats,
-            |_job_id, nonce, _hash, _backend| {
+            |_job_id, nonce, _hash, _backend, _timing| {
                 submitted.push(nonce);
                 Ok(())
             },

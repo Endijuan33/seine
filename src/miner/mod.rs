@@ -5,6 +5,7 @@ mod auth;
 mod backend_control;
 mod backend_executor;
 mod bench;
+pub(crate) mod block_latency;
 mod hash_poll;
 mod hashrate_tracker;
 mod mining;

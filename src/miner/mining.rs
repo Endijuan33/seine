@@ -3049,6 +3049,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             backend_label: "cpu#1".to_string(),
             is_dev_fee: false,
@@ -3104,6 +3105,7 @@ mod tests {
                     share_binding_id: 0,
                     backend_id: 1,
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 }),
                 42,
                 &mut solved,
@@ -3152,6 +3154,7 @@ mod tests {
                     share_binding_id: 0,
                     backend_id: 1,
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 }),
                 42,
                 &mut solved,
@@ -3194,6 +3197,7 @@ mod tests {
                     share_binding_id: 0,
                     backend_id: 1,
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 }),
                 42,
                 &mut solved,
@@ -3223,6 +3227,7 @@ mod tests {
             share_binding_id: 0,
             backend_id: 1,
             backend: "cpu",
+            found_at: std::time::Instant::now(),
         });
         let mut deferred = VecDeque::new();
         let mut deferred_keys = HashSet::new();
@@ -3248,6 +3253,7 @@ mod tests {
                     share_binding_id: 0,
                     backend_id: 1,
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 }),
                 42,
                 &mut solved,
@@ -3289,6 +3295,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }))
             .expect("enqueue current solution");
         event_tx
@@ -3299,6 +3306,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }))
             .expect("enqueue stale solution");
         event_tx
@@ -3309,6 +3317,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }))
             .expect("enqueue additional current solution");
 
@@ -3350,6 +3359,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 5,
@@ -3358,6 +3368,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 4,
@@ -3366,6 +3377,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 4,
@@ -3374,6 +3386,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 2,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 4,
@@ -3382,6 +3395,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 4,
@@ -3390,6 +3404,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
         ];
 
@@ -3412,6 +3427,7 @@ mod tests {
             share_binding_id: 0,
             backend_id: 1,
             backend: "cpu",
+            found_at: std::time::Instant::now(),
         };
         let mut deferred = vec![
             MiningSolution {
@@ -3421,6 +3437,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 5,
@@ -3429,6 +3446,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 2,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             MiningSolution {
                 epoch: 5,
@@ -3437,6 +3455,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
         ];
 
@@ -3458,6 +3477,7 @@ mod tests {
                     share_binding_id: 0,
                     backend_id: 1,
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 },
             );
         }
@@ -3478,6 +3498,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
         );
         push_deferred_solution(
@@ -3489,6 +3510,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 9,
                 backend: "nvidia",
+                found_at: std::time::Instant::now(),
             },
         );
 
@@ -3510,6 +3532,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             &stats,
         );
@@ -3523,6 +3546,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             &stats,
         );
@@ -3536,6 +3560,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             &stats,
         );
@@ -3552,6 +3577,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             },
             backend_label: "cpu#1".to_string(),
             template_height: Some(7),
@@ -3743,6 +3769,7 @@ mod tests {
             share_binding_id: 0,
             backend_id: 1,
             backend: "cpu",
+            found_at: std::time::Instant::now(),
         };
         let cross_backend = MiningSolution {
             epoch: 9,
@@ -3751,6 +3778,7 @@ mod tests {
             share_binding_id: 0,
             backend_id: 2,
             backend: "cpu",
+            found_at: std::time::Instant::now(),
         };
 
         remember_submitted_solution(&mut order, &mut keys, &solution);
@@ -3765,6 +3793,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             };
             remember_submitted_solution(&mut order, &mut keys, &entry);
         }

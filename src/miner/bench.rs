@@ -2691,6 +2691,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 1,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }),
             100,
             &mut backends,

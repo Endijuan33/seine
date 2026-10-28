@@ -106,6 +106,7 @@ impl MetalShared {
                 share_binding_id,
                 backend_id: instance_id,
                 backend: BACKEND_NAME,
+                found_at: std::time::Instant::now(),
             }),
         );
     }

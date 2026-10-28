@@ -2050,6 +2050,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 99,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }))
             .expect("prefill should succeed");
 
@@ -2119,6 +2120,7 @@ mod tests {
                 share_binding_id: 0,
                 backend_id: 99,
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }))
             .expect("prefill should succeed");
 

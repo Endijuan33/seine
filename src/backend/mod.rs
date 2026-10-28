@@ -513,6 +513,9 @@ pub struct MiningSolution {
     pub share_binding_id: ShareBindingId,
     pub backend_id: BackendInstanceId,
     pub backend: &'static str,
+    /// When the backend produced this solution; the start of the
+    /// found → submitted latency.
+    pub found_at: std::time::Instant,
 }
 
 #[cfg(any(

@@ -2441,6 +2441,7 @@ fn worker_loop(
                     share_binding_id: target_snapshot.share_binding_id,
                     backend_id: instance_id.load(Ordering::Acquire),
                     backend: BACKEND_NAME,
+                    found_at: std::time::Instant::now(),
                 }),
             );
             if !current.work.template.pause_on_solution {

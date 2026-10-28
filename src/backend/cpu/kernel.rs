@@ -55,6 +55,7 @@ fn handle_found_solution(
                     share_binding_id,
                     backend_id: shared.instance_id.load(Ordering::Acquire),
                     backend: "cpu",
+                    found_at: std::time::Instant::now(),
                 }),
             );
             return Ok(SolutionDisposition::PauseAssignment);
@@ -72,6 +73,7 @@ fn handle_found_solution(
                 share_binding_id,
                 backend_id: shared.instance_id.load(Ordering::Acquire),
                 backend: "cpu",
+                found_at: std::time::Instant::now(),
             }),
         );
     }

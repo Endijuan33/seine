@@ -37,6 +37,8 @@ const STRATUM_CAPABILITY_VALIDATION_STATUS: &str = "share_validation_status";
 const STRATUM_CAPABILITY_SUBMIT_CLAIMED_HASH: &str = "submit_claimed_hash";
 const STRATUM_CAPABILITY_DIFFICULTY_HINT: &str = "difficulty_hint";
 const STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1: &str = "same_template_rebind_v1";
+/// The pool accepts miner-side timing fields on submits.
+const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
 const STRATUM_METHOD_NOTIFICATION: &str = "notification";
 const SUBMIT_REJECT_REASON_DISCONNECTED: &str = "pool disconnected";
 const SUBMIT_REJECT_REASON_LOGIN_REJECTED: &str = "pool login rejected";
@@ -52,6 +54,7 @@ const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_SUBMIT_CLAIMED_HASH,
     STRATUM_CAPABILITY_DIFFICULTY_HINT,
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
+    STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
 ];
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,6 +71,10 @@ pub struct PoolJob {
     pub height: u64,
     pub nonce_start: u64,
     pub nonce_end: u64,
+    /// When the pool client decoded this job line; starts the job-switch
+    /// latency.
+    #[serde(skip)]
+    pub received_at: Option<Instant>,
 }
 
 impl PoolJob {
@@ -145,6 +152,17 @@ struct PoolSubmit {
     backend: Option<String>,
     /// Resubmits already sent for this share after retryable rejects.
     retries: u32,
+    timing: Option<SubmitTiming>,
+}
+
+/// Miner-side timings reported on a share's first submit when the pool
+/// advertises `submit_timing_v1`.
+#[derive(Debug, Clone, Copy)]
+pub struct SubmitTiming {
+    /// When the backend found the nonce.
+    pub found_at: Instant,
+    /// Job received → backends hashing it, sent once per job.
+    pub job_switch: Option<Duration>,
 }
 
 #[derive(Debug)]
@@ -204,12 +222,24 @@ impl PoolClient {
         self.submit_share_with_backend(job_id, nonce, claimed_hash, None)
     }
 
+    #[cfg(test)]
     pub fn submit_share_with_backend(
         &self,
         job_id: String,
         nonce: u64,
         claimed_hash: Option<[u8; 32]>,
         backend: Option<&str>,
+    ) -> Result<()> {
+        self.submit_share_with_timing(job_id, nonce, claimed_hash, backend, None)
+    }
+
+    pub fn submit_share_with_timing(
+        &self,
+        job_id: String,
+        nonce: u64,
+        claimed_hash: Option<[u8; 32]>,
+        backend: Option<&str>,
+        timing: Option<SubmitTiming>,
     ) -> Result<()> {
         self.submit_tx
             .send(PoolSubmit {
@@ -218,6 +248,7 @@ impl PoolClient {
                 claimed_hash,
                 backend: backend.map(str::to_string),
                 retries: 0,
+                timing,
             })
             .map_err(|_| anyhow!("pool submit channel closed"))
     }
@@ -277,6 +308,10 @@ struct SubmitParams<'a> {
     miner_version: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     backend: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    found_to_send_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    job_switch_us: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -451,6 +486,7 @@ async fn run_pool_client_loop(
                 let mut retry_queue = SubmitRetryQueue::new();
                 let mut login_confirmed = false;
                 let mut submit_claimed_hash_enabled = true;
+                let mut submit_timing_enabled = false;
                 let mut last_outbound = Instant::now();
                 let mut submit_tick = tokio::time::interval(SUBMIT_POLL_INTERVAL);
                 submit_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -542,6 +578,7 @@ async fn run_pool_client_loop(
                                         request_id,
                                         &submit,
                                         submit_claimed_hash_enabled,
+                                        submit_timing_enabled,
                                     ) {
                                         Ok(payload) => payload,
                                         Err(_) => {
@@ -677,6 +714,8 @@ async fn run_pool_client_loop(
                                     match evaluate_login_ack(ack) {
                                         Ok(include_claimed_hash) => {
                                             submit_claimed_hash_enabled = include_claimed_hash;
+                                            submit_timing_enabled = ack
+                                                .supports(STRATUM_CAPABILITY_SUBMIT_TIMING_V1);
                                             allow_login_difficulty_hint = ack
                                                 .supports(STRATUM_CAPABILITY_DIFFICULTY_HINT)
                                                 || ack.required_capabilities.iter().any(
@@ -963,11 +1002,30 @@ fn submit_payload(
     request_id: u64,
     submit: &PoolSubmit,
     include_claimed_hash: bool,
+    include_timing: bool,
 ) -> Result<String> {
     let claimed_hash_hex = if include_claimed_hash {
         submit.claimed_hash.map(hex::encode)
     } else {
         None
+    };
+    // Retries include the pool's backoff, so only a first submit is timed.
+    let timing = submit.timing.filter(|_| submit.retries == 0);
+    let found_to_send = timing.map(|timing| timing.found_at.elapsed());
+    if let Some(found_to_send) = found_to_send {
+        crate::miner::block_latency::record(
+            crate::miner::block_latency::POOL_FOUND_TO_SEND,
+            found_to_send,
+        );
+    }
+    let micros = |elapsed: Duration| elapsed.as_micros().min(u64::MAX as u128) as u64;
+    let (found_to_send_us, job_switch_us) = if include_timing {
+        (
+            found_to_send.map(micros),
+            timing.and_then(|timing| timing.job_switch).map(micros),
+        )
+    } else {
+        (None, None)
     };
     let request = StratumRequest {
         id: request_id,
@@ -978,6 +1036,8 @@ fn submit_payload(
             claimed_hash: claimed_hash_hex.as_deref(),
             miner_version: env!("CARGO_PKG_VERSION"),
             backend: submit.backend.as_deref(),
+            found_to_send_us,
+            job_switch_us,
         },
     };
     serde_json::to_string(&request).context("failed to serialize stratum submit payload")
@@ -1025,7 +1085,7 @@ fn send_submit(
     submit: &PoolSubmit,
     include_claimed_hash: bool,
 ) -> Result<()> {
-    let payload = submit_payload(request_id, submit, include_claimed_hash)?;
+    let payload = submit_payload(request_id, submit, include_claimed_hash, true)?;
     write_text_line(stream, &payload)
 }
 
@@ -1059,7 +1119,8 @@ fn decode_pool_message_with_submit(
     if let Some(method) = msg.method.as_deref() {
         if method == "job" {
             let params = msg.params?;
-            let job: PoolJob = serde_json::from_value(params).ok()?;
+            let mut job: PoolJob = serde_json::from_value(params).ok()?;
+            job.received_at = Some(Instant::now());
             return Some((PoolEvent::Job(job), None));
         }
         if method == STRATUM_METHOD_NOTIFICATION {
@@ -1451,6 +1512,44 @@ mod tests {
     }
 
     #[test]
+    fn submit_payload_reports_timing_only_when_negotiated_and_first_sent() {
+        let submit = PoolSubmit {
+            job_id: "job-1".to_string(),
+            nonce: 7,
+            claimed_hash: None,
+            backend: None,
+            retries: 0,
+            timing: Some(SubmitTiming {
+                found_at: Instant::now() - Duration::from_millis(3),
+                job_switch: Some(Duration::from_micros(1_500)),
+            }),
+        };
+        let params = |submit: &PoolSubmit, include_timing: bool| -> Value {
+            let payload =
+                submit_payload(1, submit, false, include_timing).expect("payload serializes");
+            serde_json::from_str::<Value>(&payload).expect("payload is json")["params"].clone()
+        };
+
+        let timed = params(&submit, true);
+        assert!(timed["found_to_send_us"]
+            .as_u64()
+            .is_some_and(|us| us >= 3_000));
+        assert_eq!(timed["job_switch_us"].as_u64(), Some(1_500));
+
+        let untimed = params(&submit, false);
+        assert!(untimed.get("found_to_send_us").is_none());
+        assert!(untimed.get("job_switch_us").is_none());
+
+        let retry = PoolSubmit {
+            retries: 1,
+            ..submit
+        };
+        let retried = params(&retry, true);
+        assert!(retried.get("found_to_send_us").is_none());
+        assert!(retried.get("job_switch_us").is_none());
+    }
+
+    #[test]
     fn send_login_includes_protocol_negotiation_fields() {
         let payload = capture_login_payload("XbTestAddress", "rig01", None);
 
@@ -1507,6 +1606,7 @@ mod tests {
                 claimed_hash: Some([0xAB; 32]),
                 backend: Some("nvidia#1".to_string()),
                 retries: 0,
+                timing: None,
             },
             99,
             true,
@@ -1564,6 +1664,7 @@ mod tests {
                 claimed_hash: Some([0xCD; 32]),
                 backend: None,
                 retries: 0,
+                timing: None,
             },
             100,
             false,
@@ -1668,6 +1769,7 @@ mod tests {
                 claimed_hash: None,
                 backend: None,
                 retries: 0,
+                timing: None,
             },
         );
         let raw = r#"{"id":42,"status":"ok","result":{"accepted":true,"difficulty":128}}"#;
@@ -1731,6 +1833,7 @@ mod tests {
                 claimed_hash: None,
                 backend: None,
                 retries: 0,
+                timing: None,
             },
         );
         let raw = r#"{"id":9,"result":{}}"#;
