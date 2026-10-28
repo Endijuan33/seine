@@ -104,7 +104,10 @@ for perf in sorted(r.glob('*.perf')):
         hps = [float(x) for x in re.findall(r'([0-9.]+) H/s', (r / 'ntm.log').read_text(errors='replace'))]
         hps = hps[-1] if hps else 0.0
     else:
-        hps = json.load(open(r / f'{tag}.json'))['avg_hps']
+        # Every finished hash moved its bytes, including the late ones the bench
+        # leaves out of avg_hps, so divide by all of them.
+        runs = json.load(open(r / f'{tag}.json'))['runs']
+        hps = sum(x['hashes'] for x in runs) / sum(x['elapsed_secs'] for x in runs)
     gb = {k: round((c.get(k, 0) - idle.get(k, 0)) * 64 / hps / 1e9, 3) if hps else None for k in ('rd', 'wr')}
     print(tag, 'hps', round(hps, 3), 'GB/hash rd', gb['rd'], 'wr', gb['wr'],
           'GB/s rd', round(c.get('rd', 0) * 64 / 1e9, 1), 'wr', round(c.get('wr', 0) * 64 / 1e9, 1))
