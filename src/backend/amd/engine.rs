@@ -23,6 +23,10 @@ const HIP_KERNEL_SRC: &str = include_str!("amd_kernel.hip");
 const HIP_KERNEL_PROGRAM_NAME: &str = "seine_argon2id_fill.hip";
 
 pub(crate) const MAX_LANES_HARD_LIMIT: usize = 1024;
+/// Lanes per lane-memory allocation. One hipMalloc per 32 lanes (64 GiB) stays
+/// well under the per-allocation ceiling seen on an MI325X (about 157 GiB of
+/// 256 GiB), which otherwise capped the probe at 78 lanes with 100 GiB free.
+pub(crate) const LANE_CHUNK_LANES: usize = 32;
 pub(crate) const KERNEL_THREADS: u32 = 32;
 pub(crate) const SEED_KERNEL_THREADS: u32 = 64;
 pub(crate) const EVAL_KERNEL_THREADS: u32 = 64;
@@ -193,7 +197,7 @@ pub(crate) fn build_hiprtc_options(
     } else {
         "-mno-wavefrontsize64"
     };
-    vec![
+    let mut options = vec![
         format!("--offload-arch={}", gcn_arch_name.trim()),
         wavefront_flag.to_string(),
         format!("-DSEINE_FIXED_M_BLOCKS={}U", m_blocks),
@@ -206,7 +210,16 @@ pub(crate) fn build_hiprtc_options(
             "-DSEINE_WARPS_PER_BLOCK={}U",
             warps_per_block(wavefront_size)
         ),
-    ]
+    ];
+    // Wave-scoped cooperative barriers instead of __syncthreads(): the
+    // cooperative group never spans more than one wavefront, so the LLVM AMDGPU
+    // memory model needs no waits at wavefront scope, and __syncthreads() was
+    // stalling every round on outstanding global stores (+6% on MI325X, bit-exact
+    // in the differential). SEINE_AMD_BLOCK_SYNC=1 restores the block barrier.
+    if std::env::var_os("SEINE_AMD_BLOCK_SYNC").is_none() {
+        options.push("-DSEINE_WAVE_SYNC=1".to_string());
+    }
+    options
 }
 
 pub(crate) fn is_hip_oom_error_message(message: &str) -> bool {
@@ -391,7 +404,10 @@ pub(crate) struct HipArgon2Engine {
     t_cost: u32,
     max_lanes: usize,
     hashes_per_launch_per_lane: usize,
-    lane_memory: DeviceBuffer,
+    /// Owns the per-chunk lane buffers the device-side table points into.
+    _lane_chunks: Vec<DeviceBuffer>,
+    lane_chunk_table: DeviceBuffer,
+    lanes_per_chunk: u32,
     seed_blocks: DeviceBuffer,
     last_blocks: DeviceBuffer,
     nonce_input: DeviceBuffer,
@@ -407,7 +423,9 @@ pub(crate) struct HipArgon2Engine {
 }
 
 struct EngineBuffers {
-    lane_memory: DeviceBuffer,
+    lane_chunks: Vec<DeviceBuffer>,
+    lane_chunk_table: DeviceBuffer,
+    lanes_per_chunk: u32,
     seed_blocks: DeviceBuffer,
     last_blocks: DeviceBuffer,
     nonce_input: DeviceBuffer,
@@ -480,13 +498,20 @@ impl HipArgon2Engine {
         let mut selected: Option<(usize, EngineBuffers)> = None;
         let mut last_error: Option<String> = None;
         for lanes in (1..=max_lanes).rev() {
-            match try_allocate_hip_buffers(api, m_blocks, lanes, hashes_per_launch_per_lane) {
+            match try_allocate_hip_buffers(
+                api,
+                &stream,
+                m_blocks,
+                lanes,
+                hashes_per_launch_per_lane,
+            ) {
                 Ok(buffers) => {
                     match probe_hip_lane_memory(
                         api,
                         &stream,
                         &touch_kernel,
-                        &buffers.lane_memory,
+                        &buffers.lane_chunk_table,
+                        buffers.lanes_per_chunk,
                         lane_stride_words,
                         lanes,
                     ) {
@@ -545,7 +570,9 @@ impl HipArgon2Engine {
             t_cost,
             max_lanes,
             hashes_per_launch_per_lane,
-            lane_memory: buffers.lane_memory,
+            _lane_chunks: buffers.lane_chunks,
+            lane_chunk_table: buffers.lane_chunk_table,
+            lanes_per_chunk: buffers.lanes_per_chunk,
             seed_blocks: buffers.seed_blocks,
             last_blocks: buffers.last_blocks,
             nonce_input: buffers.nonce_input,
@@ -817,11 +844,12 @@ impl HipArgon2Engine {
             let mut iters = lane_launch_iters_u32;
             let mut m_blocks = self.m_blocks;
             let mut t_cost = self.t_cost;
-            let mut lane_ptr = self.lane_memory.device_ptr();
+            let mut lane_ptr = self.lane_chunk_table.device_ptr();
+            let mut lanes_per_chunk = self.lanes_per_chunk;
             let mut last_ptr = self.last_blocks.device_ptr();
             let mut cancel_ptr = cancel_flag.device_ptr();
             let mut completed_ptr = self.completed_iters.device_ptr();
-            let mut params: [*mut c_void; 10] = [
+            let mut params: [*mut c_void; 11] = [
                 (&mut seed_ptr as *mut HipDeviceptr).cast(),
                 (&mut lanes as *mut u32).cast(),
                 (&mut active as *mut u32).cast(),
@@ -829,6 +857,7 @@ impl HipArgon2Engine {
                 (&mut m_blocks as *mut u32).cast(),
                 (&mut t_cost as *mut u32).cast(),
                 (&mut lane_ptr as *mut HipDeviceptr).cast(),
+                (&mut lanes_per_chunk as *mut u32).cast(),
                 (&mut last_ptr as *mut HipDeviceptr).cast(),
                 (&mut cancel_ptr as *mut HipDeviceptr).cast(),
                 (&mut completed_ptr as *mut HipDeviceptr).cast(),
@@ -947,20 +976,55 @@ pub(crate) fn plan_lane_launch_iters(requested_hashes: u64, lanes_active: u64) -
 
 fn try_allocate_hip_buffers(
     api: &'static HipApi,
+    stream: &Stream,
     m_blocks: u32,
     lanes: usize,
     hashes_per_launch_per_lane: usize,
 ) -> std::result::Result<EngineBuffers, HipError> {
     let lane_words = u64::from(m_blocks).saturating_mul(128);
-    let total_lane_bytes =
-        usize::try_from(lane_words.saturating_mul(lanes as u64).saturating_mul(8))
-            .unwrap_or(usize::MAX);
+    let lanes_per_chunk = LANE_CHUNK_LANES.max(1);
+    let mut lane_chunks = Vec::new();
+    let mut remaining = lanes.max(1);
+    while remaining > 0 {
+        let chunk_lanes = remaining.min(lanes_per_chunk);
+        let bytes = usize::try_from(
+            lane_words
+                .saturating_mul(chunk_lanes as u64)
+                .saturating_mul(8),
+        )
+        .unwrap_or(usize::MAX);
+        lane_chunks.push(DeviceBuffer::alloc(api, bytes)?);
+        remaining -= chunk_lanes;
+    }
+    // Device-side table of chunk base pointers, read by every lane kernel.
+    let table: Vec<u8> = lane_chunks
+        .iter()
+        .flat_map(|chunk| (chunk.device_ptr() as usize as u64).to_le_bytes())
+        .collect();
+    let lane_chunk_table = DeviceBuffer::alloc(api, table.len())?;
+    let code = unsafe {
+        (api.hip_memcpy_htod_async)(
+            lane_chunk_table.device_ptr(),
+            table.as_ptr().cast::<c_void>(),
+            table.len(),
+            stream.raw,
+        )
+    };
+    if code != HIP_SUCCESS {
+        return Err(code);
+    }
+    let code = unsafe { (api.hip_stream_synchronize)(stream.raw) };
+    if code != HIP_SUCCESS {
+        return Err(code);
+    }
     let launch_capacity = lanes
         .saturating_mul(hashes_per_launch_per_lane.max(1))
         .max(1);
 
     Ok(EngineBuffers {
-        lane_memory: DeviceBuffer::alloc(api, total_lane_bytes)?,
+        lane_chunks,
+        lane_chunk_table,
+        lanes_per_chunk: lanes_per_chunk as u32,
         seed_blocks: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(256 * 8))?,
         last_blocks: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(128 * 8))?,
         nonce_input: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(8))?,
@@ -976,16 +1040,19 @@ fn probe_hip_lane_memory(
     api: &'static HipApi,
     stream: &Stream,
     kernel: &Function,
-    lane_memory: &DeviceBuffer,
+    lane_chunk_table: &DeviceBuffer,
+    lanes_per_chunk: u32,
     lane_stride_words: u64,
     lanes: usize,
 ) -> Result<()> {
     let lanes_u32 = u32::try_from(lanes).unwrap_or(u32::MAX);
-    let mut lane_ptr = lane_memory.device_ptr();
+    let mut lane_ptr = lane_chunk_table.device_ptr();
+    let mut lanes_per_chunk_arg = lanes_per_chunk;
     let mut lanes_arg = lanes_u32;
     let mut stride_arg = lane_stride_words;
-    let mut params: [*mut c_void; 3] = [
+    let mut params: [*mut c_void; 4] = [
         (&mut lane_ptr as *mut HipDeviceptr).cast(),
+        (&mut lanes_per_chunk_arg as *mut u32).cast(),
         (&mut lanes_arg as *mut u32).cast(),
         (&mut stride_arg as *mut u64).cast(),
     ];
@@ -1191,6 +1258,7 @@ mod tests {
         assert!(options.contains(&"-DSEINE_FIXED_M_BLOCKS=2097152U".to_string()));
         assert!(options.contains(&"-DSEINE_FIXED_T_COST=1U".to_string()));
         assert!(options.contains(&"-DSEINE_WARPS_PER_BLOCK=1U".to_string()));
+        assert!(options.contains(&"-DSEINE_WAVE_SYNC=1".to_string()));
 
         let options = build_hiprtc_options("gfx942:sramecc+:xnack-", 64, 2_097_152, 1);
         assert!(options.contains(&"--offload-arch=gfx942:sramecc+:xnack-".to_string()));

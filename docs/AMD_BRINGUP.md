@@ -23,8 +23,11 @@ first-hardware iteration checklist.
   `SEINE_WARPS_PER_BLOCK=2`; every `__shfl` uses a width of 32 so shuffles stay
   inside each lane's half), with a retry without the flag if a hipRTC build
   rejects it. Any other reported `warpSize` is refused at startup. The
-  cooperative barrier is `__syncthreads()`, chosen for correctness over speed.
-  The wave64 path passed the differential on an MI325X on 2026-10-28.
+  cooperative barrier is wave-scoped (`__builtin_amdgcn_fence` at wavefront
+  scope plus `__builtin_amdgcn_wave_barrier()`), with `SEINE_AMD_BLOCK_SYNC=1`
+  restoring `__syncthreads()`. Lane memory is allocated in 32-lane chunks
+  (`LANE_CHUNK_LANES`) addressed through a device-side pointer table. Both
+  passed the differential on an MI325X on 2026-10-28.
 - Autotune: stub. Lanes derive from free VRAM with allocation/probe backoff
   (11 × 2 GiB lanes expected on 24 GB); launch depth fixed at 1. Regcap/depth
   sweeps and any AMD-specific scheduling work come after this checklist
@@ -87,11 +90,22 @@ hashes from this backend. A separate 60 s x 2 round run at 64 lanes gave
 273 W over 45 samples (125 W idle at the start, 290-298 W mining), about
 0.07 H/s per watt, below a Zen 5 desktop CPU on the same hash.
 
+Same-day tuning on the same card (details and rejected variants in
+`AMD_OPTIMIZATION_LOG.md`, 60 s rounds): the 78-lane cap was a per-allocation
+limit (one `hipMalloc` above about 157 GiB fails while 261 GiB is free), so lane
+memory is now allocated in 32-lane chunks behind a device-side pointer table,
+which reaches 125 lanes and 35.3 H/s (+60% over 22.0 at 78 lanes); the
+cooperative barrier is now wave-scoped instead of `__syncthreads()`, which adds
+1-8% depending on the run (35.7-37.4 H/s at 125 lanes; the card's run-to-run
+spread is about 3%); a one-block-ahead reference prefetch for the
+data-independent half was bit-exact but 7-11% slower and was dropped. Package
+power stayed near 320 W, so the card now does about 0.11 H/s per watt.
+
 Follow-ups, in order of expected value: a wave64-native kernel (one lane per
 64-thread wavefront, or four lanes per wave with 16-wide shuffles) and launch
-depth > 1 to raise occupancy; the lane budget on the VF; a run on an RDNA
-wave32 card, which is the fleet target. Do not quote these numbers as AMD
-GPU performance for the README: the backend has no tuning yet.
+depth > 1; a run on an RDNA wave32 card, which is the fleet target and has not
+run the wave-scoped barrier yet. Do not quote these numbers as AMD GPU
+performance for the README until an RDNA card has been measured.
 
 ## Qualify the rental and software stack
 

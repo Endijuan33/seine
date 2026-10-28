@@ -52,12 +52,19 @@ constexpr unsigned int CANCEL_CHECK_BLOCK_INTERVAL = SEINE_CANCEL_CHECK_BLOCK_IN
 constexpr unsigned int WARPS_PER_BLOCK = SEINE_WARPS_PER_BLOCK;
 
 // Cooperative-group barrier. The thread block is exactly one wavefront (one
-// lane on wave32, two on wave64), so __syncthreads() is the conservative,
-// correctness-first barrier (also a shared-memory fence). CUDA's
-// __syncwarp(mask) has no direct HIP equivalent; revisit with
-// __builtin_amdgcn_wave_barrier()/fences only after differential tests pass.
+// lane on wave32, two on wave64), so a wave-scoped fence (LDS/global ordering
+// for this wave only) plus a scheduling barrier is all the hardware needs per
+// the LLVM AMDGPU memory model; __syncthreads() additionally waited for every
+// outstanding global store before each round (-6% on MI325X). The wave-scoped
+// form is the default since the MI325X differential cleared it (2026-10-28);
+// the host passes SEINE_WAVE_SYNC unless SEINE_AMD_BLOCK_SYNC is set.
 __device__ __forceinline__ void coop_sync() {
+#if defined(SEINE_WAVE_SYNC) && SEINE_WAVE_SYNC
+    __builtin_amdgcn_fence(__ATOMIC_SEQ_CST, "wavefront");
+    __builtin_amdgcn_wave_barrier();
+#else
     __syncthreads();
+#endif
 }
 
 // Lane-to-lane value exchange inside the 32-thread cooperative group.
@@ -595,18 +602,33 @@ __device__ __forceinline__ void update_address_block_coop(
     );
 }
 
+// Lane memory is allocated in chunks of `lanes_per_chunk` lanes (one hipMalloc
+// each) because a single allocation hits per-allocation limits long before VRAM
+// runs out on large cards (MI325X: ~157 GiB of 256 GiB). `lane_chunks` is a
+// device-side table of chunk base pointers.
+__device__ __forceinline__ unsigned long long *lane_base(
+    unsigned long long *const *lane_chunks,
+    unsigned int lanes_per_chunk,
+    unsigned int lane,
+    unsigned long long lane_stride_words
+) {
+    return lane_chunks[lane / lanes_per_chunk]
+        + static_cast<unsigned long long>(lane % lanes_per_chunk) * lane_stride_words;
+}
+
 __global__ void touch_lane_memory_kernel(
-    unsigned long long *lane_memory,
+    unsigned long long *const *lane_chunks,
+    unsigned int lanes_per_chunk,
     unsigned int lanes_active,
     unsigned long long lane_stride_words
 ) {
     const unsigned int lane = blockIdx.x * blockDim.x + threadIdx.x;
-    if (lane >= lanes_active || lane_stride_words == 0ULL) {
+    if (lane >= lanes_active || lane_stride_words == 0ULL || lanes_per_chunk == 0U) {
         return;
     }
 
     volatile unsigned long long *lane_ptr =
-        lane_memory + static_cast<unsigned long long>(lane) * lane_stride_words;
+        lane_base(lane_chunks, lanes_per_chunk, lane, lane_stride_words);
 
     // Touch one 4 KiB page at a time (512 x u64) to force physical commit.
     for (unsigned long long word = 0ULL; word < lane_stride_words; word += 512ULL) {
@@ -626,7 +648,8 @@ __device__ __forceinline__ void argon2id_fill_kernel_impl(
     unsigned int lane_launch_iters,
     unsigned int m_blocks,
     unsigned int t_cost,
-    unsigned long long *__restrict__ lane_memory,
+    unsigned long long *const *__restrict__ lane_chunks,
+    unsigned int lanes_per_chunk,
     unsigned long long *__restrict__ out_last_blocks,
     const volatile unsigned int *__restrict__ cancel_flag,
     unsigned int *__restrict__ completed_iters,
@@ -641,14 +664,14 @@ __device__ __forceinline__ void argon2id_fill_kernel_impl(
         (SEINE_FIXED_M_BLOCKS > 0U) ? SEINE_FIXED_M_BLOCKS : m_blocks;
     const unsigned int effective_t_cost =
         (SEINE_FIXED_T_COST > 0U) ? SEINE_FIXED_T_COST : t_cost;
-    if (lane >= lanes_active || effective_m_blocks < 8U) {
+    if (lane >= lanes_active || effective_m_blocks < 8U || lanes_per_chunk == 0U) {
         return;
     }
 
     const unsigned long long lane_stride_words =
         static_cast<unsigned long long>(effective_m_blocks) * 128ULL;
     unsigned long long *memory =
-        lane_memory + static_cast<unsigned long long>(lane) * lane_stride_words;
+        lane_base(lane_chunks, lanes_per_chunk, lane, lane_stride_words);
     const unsigned int segment_length = effective_m_blocks / 4U;
     const unsigned int lane_length = effective_m_blocks;
 
@@ -879,7 +902,8 @@ __global__ void argon2id_fill_kernel(
     unsigned int lane_launch_iters,
     unsigned int m_blocks,
     unsigned int t_cost,
-    unsigned long long *__restrict__ lane_memory,
+    unsigned long long *const *__restrict__ lane_chunks,
+    unsigned int lanes_per_chunk,
     unsigned long long *__restrict__ out_last_blocks,
     const volatile unsigned int *__restrict__ cancel_flag,
     unsigned int *__restrict__ completed_iters
@@ -891,7 +915,8 @@ __global__ void argon2id_fill_kernel(
         lane_launch_iters,
         m_blocks,
         t_cost,
-        lane_memory,
+        lane_chunks,
+        lanes_per_chunk,
         out_last_blocks,
         cancel_flag,
         completed_iters,
@@ -908,7 +933,8 @@ __global__ void argon2id_fill_kernel_fused_target(
     unsigned int lane_launch_iters,
     unsigned int m_blocks,
     unsigned int t_cost,
-    unsigned long long *__restrict__ lane_memory,
+    unsigned long long *const *__restrict__ lane_chunks,
+    unsigned int lanes_per_chunk,
     unsigned long long *__restrict__ out_last_blocks,
     const volatile unsigned int *__restrict__ cancel_flag,
     unsigned int *__restrict__ completed_iters,
@@ -922,7 +948,8 @@ __global__ void argon2id_fill_kernel_fused_target(
         lane_launch_iters,
         m_blocks,
         t_cost,
-        lane_memory,
+        lane_chunks,
+        lanes_per_chunk,
         out_last_blocks,
         cancel_flag,
         completed_iters,
