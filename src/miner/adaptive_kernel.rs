@@ -239,6 +239,43 @@ pub(crate) fn fixed_count_trials_wanted() -> bool {
             .any(|kernel| matches!(kernel, CpuKernel::Avx512256Stream | CpuKernel::Avx2Stream))
 }
 
+/// Side-cache slots for this host (see `SideCacheSchedule` in the kernel crate),
+/// or 0. Zen 4 with SMT (EPYC 9R14, two workers per 1 MiB L2, far-L2 kernel)
+/// lost 0.5-2%, and Zen 5 desktop is unmeasured, so other cohorts stay off.
+/// Intel Sapphire/Emerald Rapids (Xeon 8488C, m7i.4xlarge, 8 cores / 16 threads,
+/// 2 MiB L2): 1024 slots +2.2% at the full 16-thread count, where the cohort's
+/// tuner starts and settles, but -0.9% at 8 workers, so only full counts.
+pub(crate) fn cohort_side_cache_blocks(
+    workers: usize,
+    physical_cores: Option<usize>,
+    logical_cpus: usize,
+) -> usize {
+    if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
+        return 0;
+    }
+    let identity = crate::runtime_identity::cpu_identity();
+    match identity.vendor.as_deref() {
+        // Zen 5 server-class: EPYC 9R45 (no SMT) +1.0% / +2.6% at 8 / 14 workers,
+        // bare-metal EPYC 9355 (32 cores / 64 threads) -0.1% at 32 and +1.0% at 64,
+        // so two workers per L2 are fine here, unlike Zen 4.
+        Some("AuthenticAMD")
+            if identity.family == Some(0x1a)
+                && identity.model.is_some_and(|model| model < 0x20) =>
+        {
+            let _ = physical_cores;
+            512
+        }
+        Some("GenuineIntel")
+            if identity.family == Some(6)
+                && matches!(identity.model, Some(0x8f | 0xcf))
+                && workers >= logical_cpus.max(2) =>
+        {
+            1024
+        }
+        _ => 0,
+    }
+}
+
 /// Kernel for fixed worker counts (explicit `--threads`), which run no trials.
 /// Uses the same cohort default the adaptive path starts from.
 pub(super) fn static_kernel_for(workers: usize) -> Option<CpuKernel> {

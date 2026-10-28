@@ -710,9 +710,11 @@ struct Cli {
     auto_update: bool,
 
     /// Experimental: side-buffer slots (1 KiB each) that serve scheduled
-    /// data-independent references in the AVX-512 streaming kernels; 0 disables.
-    #[arg(long, hide = true, default_value_t = 0)]
-    cpu_side_cache_blocks: usize,
+    /// data-independent references in the AVX-512 streaming kernels; 0 disables,
+    /// unset uses the measured default for this CPU (512 on Linux Zen 5 EPYC
+    /// with one worker per core, otherwise off).
+    #[arg(long, hide = true)]
+    cpu_side_cache_blocks: Option<usize>,
 
     /// Benchmark mode.
     /// `kernel-effective` measures kernel throughput with wall-time accounting and the backend's
@@ -1405,7 +1407,13 @@ impl Config {
             sse_enabled: !cli.disable_sse,
             update_check_enabled: !cli.disable_update_check,
             auto_update: cli.auto_update && !cli.disable_update_check,
-            cpu_side_cache_blocks: cli.cpu_side_cache_blocks,
+            cpu_side_cache_blocks: cli.cpu_side_cache_blocks.unwrap_or_else(|| {
+                crate::miner::cohort_side_cache_blocks(
+                    cli.threads.unwrap_or(auto_threads_cap),
+                    sysinfo::System::new().physical_core_count(),
+                    cpu_parallelism_cap(cli.cpu_affinity),
+                )
+            }),
             refresh_on_same_height: cli.refresh_on_same_height,
             ui_mode: cli.ui,
             data_dir: cli.data_dir,
@@ -3644,7 +3652,7 @@ mod tests {
             bench: false,
             self_update: false,
             auto_update: false,
-            cpu_side_cache_blocks: 0,
+            cpu_side_cache_blocks: None,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
             bench_secs: 20,

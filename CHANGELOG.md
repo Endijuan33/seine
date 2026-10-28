@@ -9,6 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
+- **About 1-3% faster CPU hashing on AMD Zen 5 EPYC Linux hosts** (measured on an AWS instance with 16 Zen 5 EPYC cores at 14 workers, and on a 64-thread EPYC 9355 at 64 workers) **and about 2% on 4th and 5th Gen Intel Xeon Linux hosts at their full thread count** (measured on Xeon Platinum 8488C at 16 workers): recently written blocks that the hash is known to need again are kept in a small cache instead of being read back from memory.
 - **Up to about 49% faster CPU hashing on Windows when fewer workers than cores run on AMD Zen 4 and Zen 5 EPYC** (measured on an AWS instance with 16 Zen 5 EPYC cores: +14% at 4 workers, +49% at 8, +1% at 14): Windows now spreads workers across the processor's cache domains the way Linux already did.
 - **About 8% faster CPU hashing on 4th and 5th Gen Intel Xeon servers** (measured on Xeon Platinum 8488C).
 - **About 4% faster CPU hashing on AMD Zen 4 EPYC servers** (EPYC 9004 series, measured on EPYC 9124P and 9R14), and up to 12% faster at lower thread counts.
