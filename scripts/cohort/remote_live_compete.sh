@@ -4,6 +4,7 @@
 # bntpool.com resolves to the fixture, so Seine's fee work is captured as non-user
 # shares; competitor fee connections fail offline, so apply their nominal fee.
 # Usage (root, /opt/cohort): remote_live_compete.sh <seconds> [seine|ntmminer|longhorn ...]
+# TAG suffixes the results directory; SEINE_ARGS (comma-separated) adds flags to seine.
 # CPUSET pins the runs to a CPU list ("node0" = that node's CPUs).
 # JOB_SECS rotates the job at that interval (default static); STALE_GRACE accepts superseded
 # work like bntpool's 8 s stale_submit_grace (default 8).
@@ -12,7 +13,7 @@ set -u
 SECS=$1; shift
 MINERS=${*:-seine ntmminer longhorn}
 W=/opt/cohort
-R=$W/results/live-compete-$SECS
+R=$W/results/live-compete-$SECS${TAG:+-$TAG}
 mkdir -p "$R/tls"
 # NTM speaks TLS only and trusts only bundled public roots, so it needs a publicly
 # trusted certificate: issue a short-lived Let's Encrypt IP certificate for this
@@ -49,7 +50,7 @@ chown -R bench:bench "$W"
 for m in $MINERS; do
   tls=() extra=()
   case $m in
-    seine) exe=$W/candidate/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off) ;;
+    seine) exe=$W/candidate/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off ${SEINE_ARGS:+${SEINE_ARGS//,/ }}) ;;
     # A/B on one host: baseline/seine (ab.sh's baseline build) on the same defaults.
     seine-base) exe=$W/baseline/seine; extra=(--ui plain --data-dir "/home/bench/live-$m" --telemetry off) ;;
     ntmminer) exe=$W/extra/NTMminer-BNT; tls=(--tls-cert "$R/tls/cert.pem" --tls-key "$R/tls/key.pem" --tls-name "$TLS_NAME") ;;
