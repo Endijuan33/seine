@@ -6,12 +6,12 @@
 # CAS / data-fabric DRAM event the host's perf knows. Each count is one 64-byte line,
 # so bytes/hash = sum(reads or writes) * 64 / hashes; the Argon2 floor is ~2.15 GB
 # read + ~2.15 GB written per hash. Restores the MSR on exit.
-# Usage (root, /opt/cohort): remote_dram_bytes.sh <kernel> <threads> [settings...]
+# Usage (root, /opt/cohort): [NTM=0] remote_dram_bytes.sh <kernel> <threads> [msr settings...]
 set -u
 W=/opt/cohort
-R=$W/results/dram
+R=$W/results/dram-$1-t$2
 KERNEL=$1 T=$2; shift 2
-SETTINGS=${*:-"0x8 0x24"}
+SETTINGS=${*:-}  # empty: no MSR sweep
 SECS=${SECS:-30}
 MSR=0xc0000108
 mkdir -p "$R"; chown -R bench:bench "$W"
@@ -68,7 +68,7 @@ if [ -n "${ORIG:-}" ]; then
   for s in $SETTINGS; do seine_run "seine-msr-$s" "$s"; done
   seine_run seine-default-b "0x$ORIG"
 fi
-if [ -x "$W/extra/NTMminer-BNT" ]; then
+if [ -x "$W/extra/NTMminer-BNT" ] && [ "${NTM:-1}" = 1 ]; then
   counted ntm isolated "$W/extra" ./NTMminer-BNT --bench $((SECS * 2)) -t "$T"
 fi
 python3 - "$R" <<'PY' | tee "$R/summary.txt"
