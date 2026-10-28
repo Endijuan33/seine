@@ -105,6 +105,7 @@ h2 { margin: 0; font-weight: 600; font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-
 .downloads td { padding: 18px 0; border-top: 1px solid var(--rule); vertical-align: middle; }
 .downloads tr:last-child td { border-bottom: 1px solid var(--rule); }
 .downloads .os { font-weight: 600; font-size: 1.05rem; }
+.downloads .platform-guide { display: block; width: fit-content; margin-top: 5px; font-size: 14px; font-weight: 400; color: var(--ink-2); }
 .downloads .size { font: 14px var(--mono); color: var(--ink-3); text-align: end; white-space: nowrap; padding-inline-end: 20px; }
 .downloads .get { text-align: end; width: 1%; white-space: nowrap; }
 .downloads .get a { font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--ink); border-radius: var(--radius); padding: 9px 14px; display: inline-block; }

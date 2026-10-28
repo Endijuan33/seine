@@ -19,10 +19,12 @@ const guides = (slugs: string[]) => slugs.map((slug) => {
     if (!post) throw new Error(`Missing homepage guide: ${slug} (${locale})`);
     return post;
 });
-const downloadGuides = guides(['mine-blocknet-on-linux', 'mine-blocknet-on-mac', 'mine-blocknet-nvidia-gpu', 'antivirus-flags-crypto-miner']);
+const downloadGuides = guides(['mine-blocknet-nvidia-gpu']);
 const setupGuides = guides(['how-to-mine-blocknet', 'blocknet-wallet-for-mining']);
 const performanceGuides = guides(['blocknet-mining-hardware-hashrate', 'huge-pages-blocknet-mining']);
 const RELEASE = `${REPO}/releases/latest/download/`;
+const poolStatsUrl = `https://bntpool.com/stats${locale === 'en' ? '' : `?lang=${locale}`}`;
+const platformGuide = (os: string) => localizePath(`/blog/mine-blocknet-on-${os === 'windows' ? 'windows' : os.startsWith('mac') ? 'mac' : 'linux'}/`, locale);
 
 const downloads: { os: string; name: UiKey; asset: string; detect: UiKey }[] = [
     { os: 'windows', name: 'dlWindows', asset: 'seine-windows-x86_64.zip', detect: 'detectWindows' },
@@ -99,7 +101,7 @@ const scriptVars = {
       <table class="downloads">
         {downloads.map((d) => (
           <tr data-os={d.os}>
-            <td class="os" data-match={t('dlMatch')}>{t(d.name)}</td>
+            <td class="os" data-match={t('dlMatch')}>{t(d.name)}<a class="platform-guide" href={platformGuide(d.os)} aria-label={`${t(d.name)}: ${t('setupGuide')}`}>{t('setupGuide')}</a></td>
             <td class="size" data-asset={d.asset}>{d.asset.endsWith('.zip') ? '.zip' : '.tar.gz'}</td>
             <td class="get"><a href={RELEASE + d.asset}>{t('dlGet')}</a></td>
           </tr>
@@ -107,7 +109,6 @@ const scriptVars = {
       </table>
       <div class="dl-foot">
         <span id="release-line" set:html={t('dlReleaseLineHtml')} />
-        <a href={localizePath('/blog/mine-blocknet-on-windows/', locale)}>{t('dlWindowsGuide')}</a>
         <a href={`https://bntpool.com/blog/${locale === 'en' ? '' : locale.toLowerCase() + '/'}track-your-miner-on-bntpool/#zero-hashrate`}>{t('poolHelp')}</a>
         <a href={`${REPO}/blob/master/docs/BUILDING.md`}>{t('dlBuild')}</a>
       </div>
@@ -126,6 +127,7 @@ const scriptVars = {
           <li><div><b>{t('step1')}</b><span>{t('step1Text')}</span></div></li>
           <li><div><b>{t('step2')}</b><span set:html={t('step2TextHtml')} /><br><span class="cmd"><code>./seine</code><button type="button" data-copy="./seine">{t('copy')}</button></span></div></li>
           <li><div><b>{t('step3')}</b><span set:html={t('step3TextHtml')} /></div></li>
+          <li><div><b>{t('trackWorker')}</b><span>{t('trackBody')}</span><div class="dl-foot"><a href={poolStatsUrl}>{t('trackWorker')} ↗</a></div></div></li>
         </ol>
         <div class="dl-foot">
           {setupGuides.map((post) => <a href={post.path}>{post.title}</a>)}
@@ -185,7 +187,8 @@ const scriptVars = {
     var ua = navigator.userAgent || "", plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
     if (/Win/i.test(plat) || /Windows/i.test(ua)) return "windows";
     if (/iPhone|iPad|Android/i.test(ua)) return null;
-    if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) return "mac-arm";
+    // Browsers do not reliably distinguish Apple Silicon from Intel Macs.
+    if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) return null;
     if (/Linux/i.test(plat) || /Linux/i.test(ua)) return /aarch64|arm64/i.test(plat + ua) ? "linux-arm" : "linux";
     return null;
   }
