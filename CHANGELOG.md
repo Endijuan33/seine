@@ -7,6 +7,10 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
+## Unreleased
+
+- Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
+
 ## v0.2.45
 
 - **Up to about 49% faster CPU hashing on Windows when fewer workers than cores run on AMD Zen 5 EPYC** (measured on an AWS instance with 16 Zen 5 EPYC cores: +14% at 4 workers, +49% at 8): Windows now spreads workers across the processor's cache domains the way Linux already did.

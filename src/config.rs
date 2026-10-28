@@ -1206,6 +1206,9 @@ impl Config {
             cli.cpu_page_mode,
             cli.cpu_memory_reserve_percent,
         ));
+        if cpu_backend_instances > 0 && !cli.bench {
+            startup_notices.extend(crate::memory_modules::host_memory_setup_notices());
+        }
         let cpu_autotune_config_path = cli
             .cpu_autotune_config
             .clone()

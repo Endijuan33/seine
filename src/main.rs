@@ -7,6 +7,7 @@ mod daemon_api;
 mod dev_fee;
 mod diagnostics;
 mod hardware_telemetry;
+mod memory_modules;
 mod miner;
 mod pool;
 mod runtime_identity;
