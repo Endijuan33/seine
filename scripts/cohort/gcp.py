@@ -53,6 +53,15 @@ def save(receipt):
     receipt_path(receipt['name']).write_text(json.dumps(receipt, indent=2))
 
 
+def default_boot_disk_type(machine_type):
+    # Bare metal and the whole C4D family refuse Persistent Disk; Hyperdisk Balanced
+    # is the boot disk that every current series accepts.
+    family = machine_type.split('-')[0]
+    if machine_type.endswith('-metal') or family in ('c4d', 'c4', 'c4a', 'x4', 'z3', 'm4'):
+        return 'hyperdisk-balanced'
+    return 'pd-balanced'
+
+
 def startup_script(public_key, minutes):
     # Runs as root on every boot. The task key goes straight into root's
     # authorized_keys (cloud-init's disable_root only rewrites keys it manages),
@@ -94,7 +103,7 @@ def cmd_up(args):
               '--machine-type', args.machine_type,
               '--image-family', args.image_family, '--image-project', args.image_project,
               '--boot-disk-size', f'{args.disk_gb}GB',
-              '--boot-disk-type', 'hyperdisk-balanced' if metal else 'pd-balanced',
+              '--boot-disk-type', args.boot_disk_type or default_boot_disk_type(args.machine_type),
               '--maintenance-policy', 'TERMINATE', '--no-restart-on-failure',
               '--metadata-from-file', f'startup-script={script_path}',
               '--no-service-account', '--no-scopes',
@@ -195,6 +204,7 @@ def main():
     up.add_argument('--hours', type=float, default=1.5)
     up.add_argument('--spot', action='store_true')
     up.add_argument('--disk-gb', type=int, default=50)
+    up.add_argument('--boot-disk-type', help='override the boot disk type (default: hyperdisk-balanced for C4D/C4/metal, else pd-balanced)')
     up.add_argument('--image-family', default=IMAGE_FAMILY)
     up.add_argument('--image-project', default=IMAGE_PROJECT)
     ip = sub.add_parser('ip')
