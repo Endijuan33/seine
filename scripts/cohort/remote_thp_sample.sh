@@ -16,7 +16,7 @@ for at in "$@"; do
       echo "pid $pid $(grep -E '^(Rss|AnonHugePages):' /proc/$pid/smaps_rollup | tr -s ' ' | tr '\n' ' ')"
       echo "pid $pid hugetlb $(grep -E 'HugetlbPages' /proc/$pid/status | tr -s ' ')"
     done
-    grep -E '^(thp_fault_alloc|thp_fault_fallback|thp_collapse_alloc|thp_collapse_alloc_failed|compact_stall|compact_fail) ' /proc/vmstat | tr '\n' ' '; echo
-    grep -E '^(MemFree|AnonHugePages|HugePages_Total|HugePages_Free|HugePages_Surp):' /proc/meminfo | tr -s ' ' | tr '\n' ' '; echo
+    grep -E '^(thp_fault_alloc|thp_fault_fallback|thp_collapse_alloc|thp_collapse_alloc_failed|thp_split_pmd|thp_deferred_split_page|compact_stall|compact_fail|numa_hint_faults|numa_pages_migrated) ' /proc/vmstat | tr '\n' ' '; echo
+    grep -E '^(MemFree|MemAvailable|AnonHugePages|HugePages_Total|HugePages_Free|HugePages_Rsvd|HugePages_Surp):' /proc/meminfo | tr -s ' ' | tr '\n' ' '; echo
   } >> "$OUT"
 done
