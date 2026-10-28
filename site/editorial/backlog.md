@@ -68,3 +68,5 @@ Published October 27, 2026: `blocknet-payment-visibility` and `blocknet-faraday-
 Published October 28, 2026: `blocknet-transaction-explained`, all 20 languages, with an original numbered transaction-accounting diagram. User approved the proposed walkthrough with “proceed”; Android remains deferred.
 
 October 28, 2026: user approved all four currency/privacy topics. Published three new owners (`blocknet-supply`, `blocknet-fungibility`, `blocknet-faraday-monetary-policy`) and materially refreshed `blocknet-privacy-features`, each in all 20 languages. Added article-specific graphics and corrected adjacent Faraday-set wording. Android and hardware-rental work remain outside this batch.
+
+October 28, 2026: user approved currency-trust coverage. Added `who-controls-blocknet` for developer/miner/node/holder authority and rule enforcement; expanded the existing `bulletproofs-explained` owner for authorization, private amount conservation, repeated-spend rejection and separate reward issuance. Both use the 20-language pipeline and original diagrams. No hardware rental or competitor comparison.

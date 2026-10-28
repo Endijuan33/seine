@@ -312,3 +312,11 @@ The fee guide retains fee estimation and preview steps. Send/receive owns wallet
 | Faraday currency continuity; block reward versus issuance rate | `/blog/blocknet-faraday-monetary-policy/` | Compare same-chain monetary continuity and proposed interval/reward pairing without treating proposal figures as live rules |
 
 The existing `/blog/blocknet-privacy-features/` remains the owner of privacy by default and its mechanisms. It receives a substantial update rather than a competing URL. The pool's `/blog/blocknet-block-reward-schedule/` retains the full monthly reward table and exact pre-tail arithmetic. The Faraday upgrade guide owns migration and preparation; the Faraday privacy guide owns proof mechanisms. Payment-visibility owns observer/disclosure scope, transaction anatomy owns inputs/change, and the generic privacy-coin article owns the category definition. The fungibility page develops the brief existing mention into a currency-focused explanation. No measured search-volume or ranking claim is made; these topics respond to the user's explicit currency/privacy direction.
+
+## Currency trust and validation (October 28, 2026)
+
+| Primary cluster | Owner | Reader job |
+|---|---|---|
+| Who controls Blocknet; who enforces Blocknet rules | `/blog/who-controls-blocknet/` | Distinguish developers, miners, validating nodes and wallet owners; understand software adoption versus block acceptance |
+
+The software-role guide owns choosing applications and what must stay running. This new guide owns authority and rule enforcement, without claiming a measured distribution of control or a formal governance vote. The existing `/blog/bulletproofs-explained/` remains the owner of hidden-amount verification and is expanded with the separate authorization, conservation, repeated-spend and issuance checks. Supply owns the emission schedule; Faraday upgrade owns preparation. Demand is inferred from newcomer questions; no measured search volume is claimed.

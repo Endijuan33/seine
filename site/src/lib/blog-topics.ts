@@ -61,6 +61,7 @@ const groups: Record<string, readonly string[]> = {
     "seine-dashboard-explained"
   ],
   "blocknet": [
+    "who-controls-blocknet",
     "blocknet-faraday-monetary-policy",
     "blocknet-fungibility",
     "blocknet-supply",
