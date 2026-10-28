@@ -128,6 +128,10 @@ set so stale caches from a different path get re-tuned, not reused.
   benefit, not an explanation of how we implemented or tested it.
 - Never show losses, regressions or no-gain results in release notes. Those
   belong in `CPU_OPTIMIZATION_LOG.md` / `NVIDIA_OPTIMIZATION_LOG.md`.
+- Name hardware the way miners know it: the generation in the headline (AMD Zen 4
+  EPYC, Ryzen 9000, 5th Gen Intel Xeon), the measured model in parentheses. Avoid
+  bare codenames (Genoa, Turin, Sapphire Rapids) and CPUID family numbers. Cloud-only
+  parts (EPYC 9R14 / 9R45 / 7R13, Xeon 8488C) are "AWS instances with AMD Zen 4 EPYC".
 - Quote only measured gains on named hardware, and don't extrapolate to
   untested models. Round sensibly, retain a short qualifier when needed for
   accuracy, and distinguish faster startup from higher sustained hashrate.
