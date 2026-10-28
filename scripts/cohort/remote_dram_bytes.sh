@@ -18,12 +18,14 @@ mkdir -p "$R"; chown -R bench:bench "$W"
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y -qq "linux-tools-$(uname -r)" linux-tools-common msr-tools > "$R/apt.log" 2>&1
 modprobe msr 2>/dev/null
-ls /sys/bus/event_source/devices > "$R/pmus.txt"
+modprobe amd_uncore 2>/dev/null  # amd_df / amd_umc PMUs are not always loaded at boot
+{ uname -r; ls /sys/bus/event_source/devices; for f in /sys/bus/event_source/devices/amd_umc_0/format/*; do
+  [ -e "$f" ] && echo "umc format $(basename "$f"): $(cat "$f")"; done; } > "$R/pmus.txt"
 perf list --no-desc 2>/dev/null > "$R/perf-list.txt"
 # Named DRAM events, plus raw UMC CAS reads/writes when an amd_umc PMU exists.
-CAND=$(grep -oiE '\b(umc_cas_cmd\.(rd|wr)|[a-z_]*dram[a-z0-9_]*)\b' "$R/perf-list.txt" | sort -u)
+CAND=$(grep -oiE '\b(umc_cas_cmd\.(rd|wr)|[a-z_]*dram[a-z0-9_]*|[a-z_]*data_beats[a-z0-9_]*)\b' "$R/perf-list.txt" | grep -v '^cxl' | sort -u)
 for u in /sys/bus/event_source/devices/amd_umc_*; do
-  [ -e "$u" ] || continue
+  [ -e "$u/format/rdwrmask" ] || continue
   n=$(basename "$u")
   CAND="$CAND $n/event=0x0a,rdwrmask=0x1/ $n/event=0x0a,rdwrmask=0x2/"
 done
