@@ -10,7 +10,7 @@ Initial research checked 2026-10-25; release, platform and pool facts rechecked 
   - `blocknet-core@upstream/master` is commit 514a8cf, the public `blocknetprivacy/core` master.
   - `blocknet@master` is commit 973e56e (2026-03-11).
   - `blocknet-pool@master` is commit 9bf4eb6.
-  - Original `seine@master` research used d20f253, the v0.2.22 line. The current reviewed release is `seine@v0.2.26` (`899ff7ea8bd547163ae48d636f569a0a8c7e25bb`).
+  - Original `seine@master` research used d20f253, the v0.2.22 line. The initial platform review used `seine@v0.2.26` (`899ff7ea8bd547163ae48d636f569a0a8c7e25bb`).
   - Seine and blocknet-pool were read from `master` with `git show`, because their working checkouts sit on feature branches.
 - **"Live"** means fetched from a public endpoint on 2026-10-25 at about 00:26 EDT. Live values can change.
 - **"Derived"** means computed by this sheet from the cited code. The math is shown so it can be checked.
@@ -271,8 +271,8 @@ Initial research checked 2026-10-25; release, platform and pool facts rechecked 
 
 ## 4. seine (the miner)
 - Seine is the external miner for Blocknet. License BSD-3-Clause. Repo: github.com/zpalmtree/seine.
-  - Latest reviewed release **v0.2.36**, published October 26, 2026 at 11:34:54 AM EDT.
-  - Source: GitHub latest-release API and `seine@v0.2.36:Cargo.toml`; rechecked October 26, 2026. `release-facts.json` records the immutable source and release assets.
+  - Latest reviewed release **v0.2.45**, published October 28, 2026 at 3:45:27 PM EDT.
+  - Source: GitHub latest-release API and `seine@v0.2.45:Cargo.toml`; rechecked October 28, 2026. `release-facts.json` records the immutable source and release assets.
 - Name styling: the wordmark is always lowercase, `seine.` with a lime full stop. README prose capitalizes "Seine" at sentence start.
   - Source: `seine@master:docs/BRAND.md:43-44`, `README.md:24` (checked 2026-10-25)
 - **Historical released miner fee (v0.2.26):** 1% of mining time on bntpool.com and its subdomains; 2.5% on other pools and in solo mode. The current calculator now uses v0.2.36's 2% fee and names that version.
