@@ -15,6 +15,7 @@ supported hardware only.
 - **Seine can update itself:** `seine --self-update` installs the newest release for your platform, and `--auto-update` keeps a running miner current and restarts it with the same settings.
 - **WSL2 users are told how to unlock more workers** when the Linux VM's memory cap, not the CPU, limits the worker count: the exact `.wslconfig` setting and the native Windows build are named at startup.
 - Optional telemetry now records whether the worker count was set manually, so defaults can be tuned for how miners are actually run. Self-hosted collectors need the schema 9 update before this release.
+- Miners that set `--threads` on CPUs without a validated kernel default (most Intel desktops and older Xeons) now keep their count but also try the memory-streaming kernel while mining, instead of staying on the plain kernel forever.
 
 ## v0.2.44
 

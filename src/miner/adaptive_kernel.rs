@@ -223,6 +223,22 @@ pub(super) fn cohort_kernel() -> Option<CpuKernel> {
     cohort_stream_kernel(&identity, &candidates_for(&identity, &supported_kernels()))
 }
 
+/// Whether a fixed `--threads` count on this host should still run the kernel
+/// comparisons at that count. True only where no cohort default exists but a
+/// streaming kernel is supported: the memory-streaming kernels were 25-67%
+/// faster on every measured AMD cohort and 14-19% on Sapphire Rapids, yet the
+/// fleet's Intel desktops and Broadwell servers run explicit counts (telemetry
+/// 2026-10-28: 83 Core i5-12400F installs with no kernel trial on record) and
+/// so never tried one. Hosts with a cohort default keep running no trials.
+pub(crate) fn fixed_count_trials_wanted() -> bool {
+    let identity = crate::runtime_identity::cpu_identity();
+    let supported = supported_kernels();
+    cohort_stream_kernel(&identity, &supported).is_none()
+        && candidates_for(&identity, &supported)
+            .iter()
+            .any(|kernel| matches!(kernel, CpuKernel::Avx512256Stream | CpuKernel::Avx2Stream))
+}
+
 /// Kernel for fixed worker counts (explicit `--threads`), which run no trials.
 /// Uses the same cohort default the adaptive path starts from.
 pub(super) fn static_kernel_for(workers: usize) -> Option<CpuKernel> {

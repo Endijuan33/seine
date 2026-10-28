@@ -1152,6 +1152,23 @@ impl Config {
         let profile_defaults = cpu_profile_defaults(cli.cpu_profile, auto_threads_cap);
         let resolved_threads = cli.threads.unwrap_or(profile_defaults.threads);
         let cpu_autotune_threads = cpu_autotune_enabled(&cli, cpu_backend_instances);
+        // An explicit count on a host without a validated streaming default keeps
+        // its count but runs the kernel comparisons there, which is the only way
+        // such a host ever tries the streaming kernels.
+        let pinned_kernel_trials = pinned_kernel_trials_wanted(
+            cli.threads.is_some(),
+            cpu_backend_instances,
+            !cli.cpu_threads_per_instance.is_empty(),
+            cpu_autotune_threads,
+            cli.disable_cpu_autotune_threads,
+            cli.bench,
+        ) && crate::miner::fixed_count_trials_wanted();
+        if pinned_kernel_trials {
+            startup_notices.push(format!(
+                "--threads {resolved_threads} is kept; the CPU kernel is still compared while mining because this CPU has no validated default"
+            ));
+        }
+        let cpu_autotune_threads = cpu_autotune_threads || pinned_kernel_trials;
         validate_benchmark_cpu_kernel(
             cli.bench_cpu_kernel,
             cli.bench,
@@ -1170,7 +1187,7 @@ impl Config {
         startup_notices.extend(underused_threads_notice(
             cli.threads,
             cpu_backend_instances,
-            cpu_autotune_threads,
+            cpu_autotune_threads && !pinned_kernel_trials,
             auto_threads_cap,
         ));
         startup_notices.extend(wsl_sizing_notice_for(
@@ -1330,8 +1347,16 @@ impl Config {
             cpu_hash_flush_interval: Duration::from_millis(effective_cpu_hash_flush_ms),
             cpu_event_dispatch_capacity: effective_cpu_event_dispatch_capacity,
             cpu_autotune_threads,
-            cpu_autotune_min_threads: cli.cpu_autotune_min_threads,
-            cpu_autotune_max_threads: cli.cpu_autotune_max_threads,
+            cpu_autotune_min_threads: if pinned_kernel_trials {
+                resolved_threads
+            } else {
+                cli.cpu_autotune_min_threads
+            },
+            cpu_autotune_max_threads: if pinned_kernel_trials {
+                Some(resolved_threads)
+            } else {
+                cli.cpu_autotune_max_threads
+            },
             cpu_autotune_secs: cli.cpu_autotune_secs.max(1),
             cpu_autotune_config_path,
             nvidia_autotune_secs: cli.nvidia_autotune_secs.max(1),
@@ -2865,6 +2890,24 @@ fn cpu_parallelism_cap(affinity: CpuAffinityMode) -> usize {
         let _ = affinity;
     }
     logical_parallelism
+}
+
+/// Explicit `--threads` without any tuning flag, on a host whose cohort has no
+/// validated kernel default, runs kernel comparisons at the fixed count.
+fn pinned_kernel_trials_wanted(
+    explicit_threads: bool,
+    instances: usize,
+    per_instance_overrides: bool,
+    autotune_threads: bool,
+    disable_autotune: bool,
+    bench: bool,
+) -> bool {
+    explicit_threads
+        && instances > 0
+        && !per_instance_overrides
+        && !autotune_threads
+        && !disable_autotune
+        && !bench
 }
 
 fn cpu_autotune_enabled(cli: &Cli, instances: usize) -> bool {
@@ -4529,6 +4572,31 @@ HugePages_Rsvd:          0
             13
         );
         assert_eq!(memory_reserve_bytes(8 * gib, None), 8 * gib / 100 * 5);
+    }
+
+    #[test]
+    fn pinned_kernel_trials_only_for_plain_explicit_counts() {
+        assert!(pinned_kernel_trials_wanted(
+            true, 1, false, false, false, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            false, 1, false, false, false, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            true, 0, false, false, false, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            true, 1, true, false, false, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            true, 1, false, true, false, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            true, 1, false, false, true, false
+        ));
+        assert!(!pinned_kernel_trials_wanted(
+            true, 1, false, false, false, true
+        ));
     }
 
     #[test]

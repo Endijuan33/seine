@@ -1,5 +1,6 @@
 mod adaptive_cpu;
 mod adaptive_kernel;
+pub(crate) use adaptive_kernel::fixed_count_trials_wanted;
 mod adaptive_telemetry;
 mod auth;
 mod backend_control;
