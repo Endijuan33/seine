@@ -32,6 +32,7 @@ fn defer_generic_trial(
             base,
             CpuKernel::Avx512256Stream
                 | CpuKernel::Avx512256StreamL2
+                | CpuKernel::Avx512StreamL2
                 | CpuKernel::Avx512Stream
                 | CpuKernel::Avx2Stream
         )
@@ -168,6 +169,11 @@ fn cohort_stream_kernel(
         }
         // Zen 4 adds a far L2 prefetch: EPYC 9124P +6% at 16 workers, Ryzen 7
         // 7700X +5% / +1% at 8 / 16. Zen 5 measured 1-3% slower with it.
+        // Full-width compression on top: EPYC 9R14 +12% / +4% at 8 / 16 workers,
+        // EPYC 9124P +4% at 16 and 28, Ryzen 7 7700X neutral (memory-bound).
+        Some(0x19) if supported.contains(&CpuKernel::Avx512StreamL2) => {
+            Some(CpuKernel::Avx512StreamL2)
+        }
         Some(0x19) if supported.contains(&CpuKernel::Avx512256StreamL2) => {
             Some(CpuKernel::Avx512256StreamL2)
         }
@@ -731,7 +737,10 @@ impl Tuner {
         // frontier and sample policies, which were measured on the 256-bit kernel.
         if super::adaptive_cpu::full_count_cold_start(cfg, &host, identity, 32, 32) {
             for kernel in &mut candidates {
-                if *kernel == CpuKernel::Avx512256StreamL2 {
+                if matches!(
+                    *kernel,
+                    CpuKernel::Avx512256StreamL2 | CpuKernel::Avx512StreamL2
+                ) {
                     *kernel = CpuKernel::Avx512256Stream;
                 }
             }
@@ -1969,7 +1978,7 @@ mod tests {
             ..CpuIdentity::default()
         };
         // Zen 5 server-class models use full-width streaming, client Zen 5 the
-        // 256-bit path and Zen 4 the 256-bit path with a far L2 prefetch.
+        // 256-bit path and Zen 4 full width with a far L2 prefetch.
         for (identity, stream) in [
             (turin.clone(), Some(CpuKernel::Avx512Stream)),
             (
@@ -1985,7 +1994,7 @@ mod tests {
                     model: Some(0x11),
                     ..turin.clone()
                 },
-                Some(CpuKernel::Avx512256StreamL2),
+                Some(CpuKernel::Avx512StreamL2),
             ),
             (
                 CpuIdentity {
@@ -2575,6 +2584,21 @@ mod tests {
         assert_eq!(
             candidates_for(&CpuIdentity::default(), &supported),
             supported[..2]
+        );
+        // Zen 4 prefers full width with the far L2 prefetch, else the 256-bit one.
+        let zen4 = CpuIdentity {
+            family: Some(0x19),
+            model: Some(0x11),
+            ..turin.clone()
+        };
+        let both_l2 = [CpuKernel::Avx512256StreamL2, CpuKernel::Avx512StreamL2];
+        assert_eq!(
+            startup_kernel_for(&zen4, &both_l2),
+            Some(CpuKernel::Avx512StreamL2)
+        );
+        assert_eq!(
+            startup_kernel_for(&zen4, &both_l2[..1]),
+            Some(CpuKernel::Avx512256StreamL2)
         );
         // A masked-CPUID AMD VM (family 06h) starts AVX2-only hosts on streaming.
         let masked = CpuIdentity {

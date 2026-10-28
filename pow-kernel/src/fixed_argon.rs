@@ -45,6 +45,8 @@ const ISA_AVX2_STREAM: u8 = 11;
 const ISA_AVX512_STREAM: u8 = 12;
 #[allow(dead_code)]
 const ISA_AVX512_256_STREAM_L2: u8 = 13;
+#[allow(dead_code)]
+const ISA_AVX512_STREAM_L2: u8 = 14;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
@@ -82,6 +84,7 @@ const fn isa_label(isa: u8) -> &'static str {
         ISA_AVX2_STREAM => "avx2-stream",
         ISA_AVX512_STREAM => "avx512-stream",
         ISA_AVX512_256_STREAM_L2 => "avx512-256-stream-l2",
+        ISA_AVX512_STREAM_L2 => "avx512-stream-l2",
         _ => "scalar",
     }
 }
@@ -107,6 +110,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Avx2Stream => ISA_AVX2_STREAM,
         CpuKernel::Avx512Stream => ISA_AVX512_STREAM,
         CpuKernel::Avx512256StreamL2 => ISA_AVX512_256_STREAM_L2,
+        CpuKernel::Avx512StreamL2 => ISA_AVX512_STREAM_L2,
     }
 }
 
@@ -130,6 +134,7 @@ pub fn compiled_isa_variants() -> &'static [&'static str] {
             "avx2-stream",
             "avx512-stream",
             "avx512-256-stream-l2",
+            "avx512-stream-l2",
         ]
     }
     #[cfg(target_arch = "aarch64")]
@@ -233,6 +238,10 @@ impl FixedArgon2id {
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_L2 => unsafe {
                 self.fill_streaming_ring::<2, 3, false, false, STREAM_FAR_PREFETCH>(memory_blocks)
+            },
+            #[cfg(target_arch = "x86_64")]
+            ISA_AVX512_STREAM_L2 => unsafe {
+                self.fill_streaming_ring::<2, 3, false, true, STREAM_FAR_PREFETCH>(memory_blocks)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_STREAM => unsafe {
