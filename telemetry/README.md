@@ -6,9 +6,10 @@ unchanged. A collector outage drops reports without stopping mining.
 
 Schema 9 adds `hardware.resources.requested_threads` (the explicit `--threads`
 value, absent when sized automatically) and `hardware.resources.cpu_autotune_threads`,
-so fleet analysis can separate operator choices from automatic sizing, plus the
-`auto_update` shutdown-request origin written when `--auto-update` restarts the
-miner. Deploy the schema-9 collector before releasing schema-9 miners: a schema-8
+so fleet analysis can separate operator choices from automatic sizing, the host's
+`hardware.numa_nodes` (so multi-socket placement work can be sized against the
+fleet), plus the `auto_update` shutdown-request origin written when
+`--auto-update` restarts the miner. Deploy the schema-9 collector before releasing schema-9 miners: a schema-8
 collector rejects their reports. Schemas 1-8 remain accepted; no SQL storage
 migration or alert-threshold change is required.
 

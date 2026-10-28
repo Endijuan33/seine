@@ -404,6 +404,9 @@ pub struct Hardware {
     pub cpu_model_id: Option<u32>,
     pub logical_cpus: u32,
     pub physical_cores: Option<u32>,
+    /// NUMA nodes on the host (schema 9); absent when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub numa_nodes: Option<u32>,
     pub memory_gib: u32,
     pub supported_cpu_kernels: Vec<String>,
     /// Report-time resource snapshot; absent in schema 1.
@@ -501,6 +504,8 @@ impl Report {
             && optional_short(&h.cpu_vendor)
             && h.logical_cpus <= 65536
             && h.physical_cores.is_none_or(|v| v <= 65536)
+            && h.numa_nodes.is_none_or(|v| (1..=1024).contains(&v))
+            && (self.schema_version >= 9 || h.numa_nodes.is_none())
             && h.memory_gib <= 1048576
             && h.resources.as_ref().is_none_or(|r| {
                 r.allowed_logical_cpus.is_none_or(|v| v <= 65536)
@@ -1011,6 +1016,21 @@ mod tests {
             !report.validate(),
             "an explicit count is at least one worker"
         );
+    }
+
+    #[test]
+    fn numa_node_count_requires_schema_9() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../fixture.json")).unwrap();
+        value["schema_version"] = 9.into();
+        value["hardware"]["numa_nodes"] = 2.into();
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate());
+        report.schema_version = 8;
+        assert!(!report.validate(), "numa_nodes must advertise schema 9");
+        report.schema_version = 9;
+        report.hardware.numa_nodes = Some(0);
+        assert!(!report.validate(), "a host has at least one node");
     }
 
     #[test]

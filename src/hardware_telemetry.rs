@@ -450,6 +450,7 @@ fn hardware(options: &Options) -> Hardware {
         cpu_model_id: identity.model,
         logical_cpus: sys.cpus().len() as u32,
         physical_cores: sys.physical_core_count().map(|v| v as u32),
+        numa_nodes: numa_node_count(),
         memory_gib: sys.total_memory().div_ceil(1024 * 1024 * 1024) as u32,
         supported_cpu_kernels: blocknet_pow_kernel::CpuKernel::ALL
             .into_iter()
@@ -701,9 +702,65 @@ fn start_with_context(
     ))
 }
 
+/// NUMA nodes on the host, independent of this process's cpuset.
+#[cfg(target_os = "linux")]
+fn numa_node_count() -> Option<u32> {
+    count_id_list(&std::fs::read_to_string("/sys/devices/system/node/online").ok()?)
+}
+
+#[cfg(target_os = "windows")]
+fn numa_node_count() -> Option<u32> {
+    let mut highest = 0u32;
+    // SAFETY: the call only writes its out-parameter.
+    let ok =
+        unsafe { windows_sys::Win32::System::Threading::GetNumaHighestNodeNumber(&mut highest) };
+    (ok != 0).then(|| highest + 1)
+}
+
+#[cfg(target_os = "macos")]
+fn numa_node_count() -> Option<u32> {
+    Some(1)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+fn numa_node_count() -> Option<u32> {
+    None
+}
+
+/// Number of ids in a sysfs list such as `0-1,3`.
+#[cfg(any(target_os = "linux", test))]
+fn count_id_list(raw: &str) -> Option<u32> {
+    let mut total = 0u32;
+    for part in raw.trim().split(',').filter(|p| !p.is_empty()) {
+        total += match part.split_once('-') {
+            Some((lo, hi)) => {
+                hi.parse::<u32>()
+                    .ok()?
+                    .checked_sub(lo.parse::<u32>().ok()?)?
+                    + 1
+            }
+            None => {
+                part.parse::<u32>().ok()?;
+                1
+            }
+        };
+    }
+    (total > 0).then_some(total)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sysfs_id_lists_count_ranges() {
+        assert_eq!(count_id_list("0\n"), Some(1));
+        assert_eq!(count_id_list("0-1"), Some(2));
+        assert_eq!(count_id_list("0-1,4-5,7"), Some(5));
+        assert_eq!(count_id_list(""), None);
+        assert_eq!(count_id_list("3-1"), None);
+        assert_eq!(count_id_list("x"), None);
+    }
     use crate::diagnostics::TEST_LOCK as WORKER_TEST;
 
     fn trial_fixture() -> TrialOutcome {
