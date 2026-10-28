@@ -77,6 +77,9 @@ pub struct CpuBackendTuning {
     /// Research knob: side-buffer slots for scheduled data-independent references
     /// in the AVX-512 streaming kernels (0 = off, the default).
     pub side_cache_blocks: usize,
+    /// Research knob: skip arena stores of odd blocks from this permille on and
+    /// rebuild them when referenced (0 = off, the default).
+    pub skip_store_permille: u16,
 }
 
 impl Default for CpuBackendTuning {
@@ -88,6 +91,7 @@ impl Default for CpuBackendTuning {
             event_dispatch_capacity: DEFAULT_EVENT_DISPATCH_CAPACITY,
             page_mode: CpuPageMode::Auto,
             side_cache_blocks: 0,
+            skip_store_permille: 0,
             kernel: None,
         }
     }
@@ -102,6 +106,7 @@ impl CpuBackendTuning {
             event_dispatch_capacity: self.event_dispatch_capacity.max(1),
             page_mode: self.page_mode,
             side_cache_blocks: self.side_cache_blocks,
+            skip_store_permille: self.skip_store_permille,
             kernel: self.kernel,
         }
     }
@@ -185,6 +190,7 @@ struct Shared {
     event_dispatch_capacity: usize,
     page_mode: CpuPageMode,
     side_cache_blocks: usize,
+    skip_store_permille: u16,
     kernel: fixed_argon::CpuKernel,
     // Low byte identifies the path; upper bits identify this particular switch.
     kernel_request: AtomicU64,
@@ -274,6 +280,7 @@ impl CpuBackend {
                 event_dispatch_capacity: tuning.event_dispatch_capacity,
                 page_mode: tuning.page_mode,
                 side_cache_blocks: tuning.side_cache_blocks,
+                skip_store_permille: tuning.skip_store_permille,
                 kernel_request: AtomicU64::new(kernel_id(
                     tuning
                         .kernel
@@ -954,6 +961,7 @@ impl CpuBackend {
                     fixed_argon::FixedArgon2id::with_kernel(POW_MEMORY_KB, self.shared.kernel)
                         .expect("kernel support checked before benchmark workers start");
                 hasher.set_side_cache_blocks(self.shared.side_cache_blocks);
+                hasher.set_skip_store_permille(self.shared.skip_store_permille);
                 let block_count = hasher.block_count();
                 let mut arena = kernel::PowArena::new(block_count, page_mode).map_err(|err| {
                     anyhow!(

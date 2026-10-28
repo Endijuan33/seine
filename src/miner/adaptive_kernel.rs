@@ -282,6 +282,29 @@ pub(crate) fn cohort_side_cache_blocks(
     }
 }
 
+/// Skipped-store permille for this host (see `set_skip_store_permille` in the
+/// kernel crate), or 0. Rebuilding late odd blocks trades ~4% less DRAM traffic
+/// for ~12% more compressions at 600, which only pays where the streaming
+/// kernels are bandwidth-bound. Zen 4 desktop (Ryzen 7700X, 8 cores / 16
+/// threads, two DDR5 channels): bench +5.5% at 16 workers and -0.3% at 8, live
+/// +7.4% over 15 minutes at the 16-thread count the tuner settles on. EPYC
+/// (9124P, 9355) lost 0.5-6%, so servers stay off.
+pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
+    if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
+        return 0;
+    }
+    let identity = crate::runtime_identity::cpu_identity();
+    match identity.vendor.as_deref() {
+        // Raphael and Dragon Range (Ryzen 7000 desktop and HX laptop).
+        Some("AuthenticAMD")
+            if identity.family == Some(0x19) && identity.model == Some(0x61) && workers >= 16 =>
+        {
+            600
+        }
+        _ => 0,
+    }
+}
+
 /// Kernel for fixed worker counts (explicit `--threads`), which run no trials.
 /// Uses the same cohort default the adaptive path starts from.
 pub(super) fn static_kernel_for(workers: usize) -> Option<CpuKernel> {

@@ -1,6 +1,8 @@
 mod adaptive_cpu;
 mod adaptive_kernel;
-pub(crate) use adaptive_kernel::{cohort_side_cache_blocks, fixed_count_trials_wanted};
+pub(crate) use adaptive_kernel::{
+    cohort_side_cache_blocks, cohort_skip_store_permille, fixed_count_trials_wanted,
+};
 mod adaptive_telemetry;
 mod auth;
 mod backend_control;
@@ -657,6 +659,7 @@ fn run_with_thread_control_inner(
                         event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
                         page_mode: cfg.cpu_page_mode,
                         side_cache_blocks: cfg.cpu_side_cache_blocks,
+                        skip_store_permille: cfg.cpu_skip_store_permille,
                         kernel: None,
                     };
                     let threads = backend_spec.cpu_threads.unwrap_or(cfg.threads);
@@ -1897,6 +1900,7 @@ fn bench_cpu_autotune_candidate(
             event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
             page_mode: cfg.cpu_page_mode,
             side_cache_blocks: cfg.cpu_side_cache_blocks,
+            skip_store_permille: cfg.cpu_skip_store_permille,
             // Size workers for the kernel that will mine, not the plain fallback.
             kernel: cfg.bench_cpu_kernel.or_else(adaptive_kernel::cohort_kernel),
         },
@@ -2381,6 +2385,7 @@ fn build_backend_instances(cfg: &Config) -> Vec<(BackendSpec, Arc<dyn PowBackend
                         event_dispatch_capacity: cfg.cpu_event_dispatch_capacity,
                         page_mode: cfg.cpu_page_mode,
                         side_cache_blocks: cfg.cpu_side_cache_blocks,
+                        skip_store_permille: cfg.cpu_skip_store_permille,
                         kernel: cfg.bench_cpu_kernel.or_else(|| {
                             adaptive_kernel::static_kernel_for(
                                 backend_spec.cpu_threads.unwrap_or(cfg.threads),
@@ -3940,6 +3945,7 @@ pub(crate) mod tests {
             cpu_threads_explicit: None,
             auto_update: false,
             cpu_side_cache_blocks: 0,
+            cpu_skip_store_permille: 0,
             cpu_auto_threads_cap: 1,
             cpu_manual_memory_check: false,
             cpu_autotune_worker_slots: None,

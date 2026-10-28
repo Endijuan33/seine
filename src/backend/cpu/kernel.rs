@@ -174,6 +174,7 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             let mut initialized = fixed_argon::FixedArgon2id::with_kernel(MEMORY_KB, shared.kernel)
                 .expect("kernel support checked before CPU backend starts");
             initialized.set_side_cache_blocks(shared.side_cache_blocks);
+            initialized.set_skip_store_permille(shared.skip_store_permille);
             let block_count = initialized.block_count();
             #[cfg(target_os = "windows")]
             let block_bytes = block_count * std::mem::size_of::<fixed_argon::PowBlock>();

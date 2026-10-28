@@ -155,6 +155,9 @@ pub struct FixedArgon2id {
     data_independent_ref_indexes: Box<[usize]>,
     isa: u8,
     side_cache: Option<SideCacheSchedule>,
+    /// First block whose odd-indexed successors skip the arena store
+    /// (`usize::MAX` = store everything). See `set_skip_store_permille`.
+    skip_from: usize,
 }
 
 const NO_SLOT: u16 = u16::MAX;
@@ -292,6 +295,7 @@ impl FixedArgon2id {
             data_independent_ref_indexes,
             isa,
             side_cache: None,
+            skip_from: usize::MAX,
         }
     }
 
@@ -311,6 +315,27 @@ impl FixedArgon2id {
 
     pub fn side_cache_blocks(&self) -> usize {
         self.side_cache.as_ref().map_or(0, |s| s.slots)
+    }
+
+    /// Research knob (AVX-512 streaming ring kernels): from `permille` of the
+    /// way through the arena, odd blocks are not written to memory and are
+    /// rebuilt from their stored predecessor whenever referenced. Late blocks
+    /// are referenced rarely, so this trades a little compute for less DRAM
+    /// traffic (model: ~4% at 600). 0 disables; values below 500 are raised to
+    /// 500 so skipped blocks always use data-dependent addressing.
+    pub fn set_skip_store_permille(&mut self, permille: u16) {
+        self.skip_from = match permille {
+            0 => usize::MAX,
+            p => self.block_count * usize::from(p.clamp(500, 1000)) / 1000,
+        };
+    }
+
+    pub fn skip_store_permille(&self) -> u16 {
+        if self.skip_from == usize::MAX {
+            0
+        } else {
+            (self.skip_from * 1000).div_ceil(self.block_count.max(1)) as u16
+        }
     }
 
     pub const fn block_count(&self) -> usize {
@@ -430,6 +455,9 @@ impl FixedArgon2id {
             None => Box::default(),
         };
         let side_ptr = side_buffer.as_mut_ptr();
+        let skip_from = self.skip_from;
+        let last = memory.len() - 1;
+        let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
         for slice in 0..SYNC_POINTS {
             let first = if slice == 0 { 2 } else { 0 };
             let di = slice < 2;
@@ -461,7 +489,17 @@ impl FixedArgon2id {
                         _mm_mfence();
                         committed_end = cur;
                     }
-                    arena.add(reference)
+                    if store_skipped(reference, skip_from) {
+                        rebuild_skipped::<FULL_WIDTH>(
+                            arena,
+                            skip_from,
+                            reference,
+                            &mut *rebuilt.as_mut_ptr(),
+                        );
+                        rebuilt.as_mut_ptr()
+                    } else {
+                        arena.add(reference)
+                    }
                 };
                 let dst = cache.add(cur & mask);
                 debug_assert_ne!(dst, reference_ptr);
@@ -515,6 +553,7 @@ impl FixedArgon2id {
                             arena,
                             cache,
                             cur + 1,
+                            skip_from,
                         );
                     } else {
                         avx512_256::compress_into_mid_prefetch_ring::<RING>(
@@ -525,6 +564,7 @@ impl FixedArgon2id {
                             arena,
                             cache,
                             cur + 1,
+                            skip_from,
                         );
                     }
                 } else {
@@ -536,11 +576,13 @@ impl FixedArgon2id {
                 }
                 // Contiguous stores fill each complete 64-byte cache line. The
                 // arena is never used as a pre-round backup in this candidate.
-                let src = (*dst).0.as_ptr();
-                let output = (*arena.add(cur)).0.as_mut_ptr();
-                for vector in 0..32 {
-                    let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
-                    _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
+                if !store_skipped(cur, skip_from) || cur == last {
+                    let src = (*dst).0.as_ptr();
+                    let output = (*arena.add(cur)).0.as_mut_ptr();
+                    for vector in 0..32 {
+                        let value = _mm256_load_si256(src.add(vector * 4).cast::<__m256i>());
+                        _mm256_stream_si256(output.add(vector * 4).cast::<__m256i>(), value);
+                    }
                 }
                 if !DEMAND_FENCE && cur & 31 == 31 {
                     std::arch::x86_64::_mm_sfence();
@@ -809,6 +851,39 @@ fn precompute_data_independent_ref_indexes(
     }
 
     refs.into_boxed_slice()
+}
+
+/// Whether block `index` skips its arena store under `skip_from` (the last
+/// block is always stored: finalization reads it from the arena).
+#[inline(always)]
+fn store_skipped(index: usize, skip_from: usize) -> bool {
+    index >= skip_from && index & 1 == 1
+}
+
+/// Rebuild a block whose arena store was skipped: B[b] = G(B[b-1], B[ref(b)]),
+/// where B[b-1] is stored (even) and B[ref(b)] is rebuilt again if skipped.
+#[cfg(target_arch = "x86_64")]
+#[inline(never)]
+unsafe fn rebuild_skipped<const FULL_WIDTH: bool>(
+    arena: *const PowBlock,
+    skip_from: usize,
+    index: usize,
+    out: &mut PowBlock,
+) {
+    let prev = &*arena.add(index - 1);
+    let reference = reference_index(index - 1, prev.0[0]);
+    let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
+    let reference_block = if store_skipped(reference, skip_from) {
+        rebuild_skipped::<FULL_WIDTH>(arena, skip_from, reference, &mut *rebuilt.as_mut_ptr());
+        &*rebuilt.as_ptr()
+    } else {
+        &*arena.add(reference)
+    };
+    if FULL_WIDTH {
+        avx512_reg::compress_into(prev, reference_block, out);
+    } else {
+        avx512_256::compress_into(prev, reference_block, out);
+    }
 }
 
 #[inline(always)]
@@ -3406,6 +3481,57 @@ mod tests {
                     super::NO_SLOT,
                     "ring distance is never scheduled"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn skipped_stores_match_reference_on_streaming_kernels() {
+        if !super::CpuKernel::Avx512Stream.is_supported() {
+            return;
+        }
+        for isa in [
+            super::ISA_AVX512_STREAM,
+            super::ISA_AVX512_256_STREAM,
+            super::ISA_AVX512_256_STREAM_L2,
+            super::ISA_AVX512_STREAM_L2,
+        ] {
+            for permille in [500u16, 600, 900] {
+                let memory_kib = 4096u32;
+                let params = Params::new(memory_kib, 1, 1, Some(32)).unwrap();
+                let reference = Argon2::new(Algorithm::Argon2id, Version::V0x13, params.clone());
+                let mut reference_memory = vec![argon2::Block::default(); params.block_count()];
+                let mut fixed = FixedArgon2id::new(memory_kib);
+                fixed.isa = isa;
+                fixed.set_skip_store_permille(permille);
+                assert_eq!(fixed.skip_store_permille(), permille);
+                // Stale contents must never be read: skipped slots keep garbage.
+                let mut fixed_memory =
+                    vec![PowBlock([0xa5a5_a5a5_a5a5_a5a5; 128]); fixed.block_count()];
+                for nonce in [0u64, 7, 1_000_003] {
+                    let nonce_bytes = nonce.to_le_bytes();
+                    let (mut expected, mut actual) = ([0u8; 32], [0u8; 32]);
+                    reference
+                        .hash_password_into_with_memory(
+                            &nonce_bytes,
+                            b"skip-store-salt",
+                            &mut expected,
+                            &mut reference_memory,
+                        )
+                        .unwrap();
+                    fixed
+                        .hash_password_into_with_memory(
+                            &nonce_bytes,
+                            b"skip-store-salt",
+                            &mut actual,
+                            &mut fixed_memory,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        actual, expected,
+                        "isa {isa} permille {permille} nonce {nonce}"
+                    );
+                }
             }
         }
     }

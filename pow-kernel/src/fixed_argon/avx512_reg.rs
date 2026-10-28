@@ -182,10 +182,15 @@ pub(super) unsafe fn compress_into_mid_prefetch_ring<const RING: usize>(
     memory_blocks_base: *const PowBlock,
     ring_base: *const PowBlock,
     next_index: usize,
+    skip_from: usize,
 ) {
     let saved0 = prev.0[0] ^ refb.0[0];
     compress_body!(prev, refb, dst, |permuted0: u64| {
-        let next_ref = reference_index(next_ref_area_size, permuted0 ^ saved0);
+        let mut next_ref = reference_index(next_ref_area_size, permuted0 ^ saved0);
+        if super::store_skipped(next_ref, skip_from) {
+            // Rebuilt from its stored predecessor, so fetch that instead.
+            next_ref -= 1;
+        }
         if next_index - next_ref < RING {
             prefetch_pow_block::<{ super::ISA_AVX512_STREAM }>(
                 &*ring_base.add(next_ref & (RING - 1)),

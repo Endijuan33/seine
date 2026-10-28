@@ -721,6 +721,13 @@ struct Cli {
     #[arg(long, hide = true)]
     cpu_side_cache_blocks: Option<usize>,
 
+    /// Experimental: from this permille of the arena on (500-1000), odd blocks
+    /// skip their memory store and are rebuilt when referenced (AVX-512
+    /// streaming kernels); 0 disables, unset uses the measured default for this
+    /// CPU (600 on Linux Zen 4 desktops at 16 or more workers, otherwise off).
+    #[arg(long, hide = true)]
+    cpu_skip_store_permille: Option<u16>,
+
     /// Benchmark mode.
     /// `kernel-effective` measures kernel throughput with wall-time accounting and the backend's
     /// target/eval path enabled so results are directly comparable to backend-mode overhead.
@@ -846,6 +853,8 @@ pub struct Config {
     pub auto_update: bool,
     /// Experimental side-cache slots for the AVX-512 streaming kernels (0 = off).
     pub cpu_side_cache_blocks: usize,
+    /// Experimental skipped-store start for the AVX-512 streaming kernels (0 = off).
+    pub cpu_skip_store_permille: u16,
     pub refresh_on_same_height: bool,
     pub ui_mode: UiMode,
     pub data_dir: PathBuf,
@@ -1422,6 +1431,9 @@ impl Config {
                     sysinfo::System::new().physical_core_count(),
                     cpu_parallelism_cap(cli.cpu_affinity),
                 )
+            }),
+            cpu_skip_store_permille: cli.cpu_skip_store_permille.unwrap_or_else(|| {
+                crate::miner::cohort_skip_store_permille(cli.threads.unwrap_or(auto_threads_cap))
             }),
             refresh_on_same_height: cli.refresh_on_same_height,
             ui_mode: cli.ui,
@@ -3663,6 +3675,7 @@ mod tests {
             auto_update: false,
             no_auto_update: false,
             cpu_side_cache_blocks: None,
+            cpu_skip_store_permille: None,
             bench_kind: BenchKind::Backend,
             bench_cpu_kernel: None,
             bench_secs: 20,
