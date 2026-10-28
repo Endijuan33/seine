@@ -39,7 +39,7 @@ stage=$(mktemp -d)
 mkdir -p "$stage/baseline" "$stage/candidate"
 cp "$BASE"/seine "$BASE"/verify_cpu_kernels "$stage/baseline/"
 cp "$CAND"/seine "$CAND"/verify_cpu_kernels "$stage/candidate/"
-cp "$HERE"/remote_*.sh "$HERE"/pool_fixture.py "$stage/"
+cp "$HERE"/remote_*.sh "$HERE"/pool_fixture.py "$HERE"/live_summary.py "$stage/"
 if [ -n "${EXTRA_DIR:-}" ]; then cp -r "$EXTRA_DIR" "$stage/extra"; fi
 retry bash -c "tar -C '$stage' -czf - . | $(printf '%q ' "${SSH[@]}") 'mkdir -p /opt/cohort && tar -C /opt/cohort -xzf -'"
 id bench >/dev/null 2>&1 || true

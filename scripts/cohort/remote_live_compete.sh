@@ -48,14 +48,6 @@ for m in $MINERS; do
     "$R/hosts" "/home/bench/live-$m" python3 "$W/pool_fixture.py" --output "$R/$m" --seconds "$SECS" --warmup 0 \
     --window-origin launch --startup-timeout "$SECS" --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
     > "$R/$m.out" 2>&1
-  python3 - "$R/$m/work.json" "$m" "$SECS" <<'PY' | tee -a "$R/summary.txt"
-import json, sys
-d = json.load(open(sys.argv[1])); m, secs = sys.argv[2], float(sys.argv[3])
-user = [s["elapsed"] for s in d["shares"] if s["eligible"] and s["user_work"] and s["elapsed"] < secs]
-fee = sum(1 for s in d["shares"] if s["eligible"] and not s["user_work"] and s["elapsed"] < secs)
-last = sum(1 for t in user if t >= secs - 300) / 300
-print(f"{m} lifetime_user={len(user)/secs:.3f} last300_user={last:.3f} fee_shares={fee} "
-      f"first_share={d['launch_to_first_share_seconds']} end={d['termination_reason']}")
-PY
+  python3 "$W/live_summary.py" "$R/$m/work.json" "$m" "$SECS" | tee -a "$R/summary.txt"
 done
 touch "$R/COMPLETE"
