@@ -294,3 +294,11 @@ Sending/receiving owns payment construction and approval. Explorer owns public l
 | how Faraday privacy works; Faraday spend proofs; Faraday ML-KEM; Faraday proof aggregation | `/blog/blocknet-faraday-privacy/` | Understand proposed full-set membership, separate spending/receiving mechanisms, proof lifecycle and consequences for wallet use |
 
 Privacy overview remains the mechanism hub for today's released format. Payment-proof and view-only guides own their actual procedures; the new visibility article compares their disclosure scope. Existing Faraday upgrade guide owns activation, recovery material and migration. The new mechanism article explains the eligible Faraday coin set and the proposal's distinct cryptographic jobs. No measured search volume is claimed.
+
+## Transaction anatomy and change (October 27, 2026)
+
+| Primary search intent | Owner | Distinct reader job |
+|---|---|---|
+| Blocknet transaction inputs and outputs; why two outputs; where transaction change goes | `/blog/blocknet-transaction-explained/` | Follow one payment's selected value into recipient outputs, change and fee; distinguish outputs from recipients and ring decoys from funding |
+
+The fee guide retains fee estimation and preview steps. Send/receive owns wallet procedure; transfer-time owns confirmation/maturity timing; payment-visibility owns observer/disclosure scope. This walkthrough owns the structure and change accounting of one payment. Closest existing fee coverage includes a short version of the same arithmetic; the new page expands output ownership and lifecycle without repeating rate calculations or CLI steps. Search demand is inferred from the user’s requested practical coverage, not measured analytics.

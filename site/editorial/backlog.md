@@ -64,3 +64,5 @@ Published October 27, 2026: `update-blocknet-wallet` covers routine desktop appl
 Published October 27, 2026: `blocknet-transfer-time` answers the ordinary payment timing question in all 20 languages: broadcast, block inclusion, ten later blocks, spendable balance, and checks for sender/recipient. Three released-wallet screenshots use labeled local demo data, not measured real transfers.
 
 Published October 27, 2026: `blocknet-payment-visibility` and `blocknet-faraday-privacy`, each in all 20 languages, with four original explanatory graphics. The existing privacy overview's Faraday section now distinguishes eligible Faraday coins from all historical outputs. User requested privacy/Faraday coverage and approved publication.
+
+Published October 28, 2026: `blocknet-transaction-explained`, all 20 languages, with an original numbered transaction-accounting diagram. User approved the proposed walkthrough with “proceed”; Android remains deferred.
