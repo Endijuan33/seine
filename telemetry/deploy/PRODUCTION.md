@@ -1,14 +1,14 @@
 # Production collector
 
-The running collector supports schema 9, deployed October 28 at 15:17 EDT
-from `36d26b5c8274b13800e6bede493ae4c1b3c98801`. See the
-[deployment receipt](../../docs/validation/collector-schema9-deployment-20261028.md)
-(schema 8 was deployed October 27 from `c92833dd13047a5ea5760edb3563bf99d145b27a`,
-see [its receipt](../../docs/validation/collector-schema8-deployment-20261027.md)).
-Its immutable build source is `/opt/seine-collector-releases/36d26b5`; the
+The running collector supports schema 10, deployed October 28 at 16:23 EDT
+from `c12ff005e8b3a17e1d3a5a407f8c9e7846d69c5c`. See the
+[deployment receipt](../../docs/validation/collector-schema10-deployment-20261028.md)
+(schema 9 earlier the same day: [receipt](../../docs/validation/collector-schema9-deployment-20261028.md);
+schema 8 on October 27: [receipt](../../docs/validation/collector-schema8-deployment-20261027.md)).
+Its immutable build source is `/opt/seine-collector-releases/c12ff00`; the
 operational `/opt/seine` checkout and its existing alert-script modification were
-preserved. Use the candidate override in `/var/lib/seine-telemetry-schema9.um8YAZnA`
-for subsequent `up --no-build` operations. Schemas 1–8 remain accepted; no miner
+preserved. Use the candidate override in `/var/lib/seine-telemetry-schema10.MvfZkwA6`
+for subsequent `up --no-build` operations. Schemas 1–9 remain accepted; no miner
 release was made. Collector-only deployments have the owner's standing approval
 (October 28, 2026); miner releases, pool deploys and daemon restarts still need
 explicit requests.
