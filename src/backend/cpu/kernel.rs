@@ -115,6 +115,10 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
     let arena_bytes = u64::from(MEMORY_KB) * 1024;
     let mut arena: Option<PowArena> = None;
     let mut backing = None;
+    // Lazily faulted THP arenas are only backed once written, so Linux observes
+    // page backing again after each new arena's first hash.
+    #[cfg(target_os = "linux")]
+    let mut backing_settled = true;
     let mut warmed = false;
     let mut output = [0u8; POW_OUTPUT_LEN];
     let mut ready = false;
@@ -170,7 +174,7 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             let initialized = fixed_argon::FixedArgon2id::with_kernel(MEMORY_KB, shared.kernel)
                 .expect("kernel support checked before CPU backend starts");
             let block_count = initialized.block_count();
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(target_os = "windows")]
             let block_bytes = block_count * std::mem::size_of::<fixed_argon::PowBlock>();
             match allocate(block_count, shared.page_mode) {
                 Ok(allocated) => {
@@ -179,7 +183,9 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
                     ));
                     apply_arena_backing(&shared, backing.expect("just observed arena"));
                     #[cfg(target_os = "linux")]
-                    emit_linux_hugepage_diagnostics(&shared, thread_idx, &allocated, block_bytes);
+                    {
+                        backing_settled = false;
+                    }
                     #[cfg(target_os = "windows")]
                     emit_windows_large_page_diagnostics(
                         &shared,
@@ -360,6 +366,22 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
         }
 
         lane_iters += 1;
+        #[cfg(target_os = "linux")]
+        if !backing_settled {
+            backing_settled = true;
+            if let (Some(previous), Some(written)) = (backing, arena.as_ref()) {
+                let bytes = hasher
+                    .as_ref()
+                    .expect("enabled worker has a hasher")
+                    .block_count()
+                    * std::mem::size_of::<fixed_argon::PowBlock>();
+                let settled = written.backing_observation(bytes as u64);
+                release_arena_backing(&shared, previous);
+                apply_arena_backing(&shared, settled);
+                backing = Some(settled);
+                emit_linux_hugepage_diagnostics(&shared, thread_idx, written, bytes);
+            }
+        }
         if !warmed {
             shared.warmed_workers.fetch_add(1, Ordering::AcqRel);
             warmed = true;
