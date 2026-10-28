@@ -34,24 +34,34 @@ for e in $CAND; do  # keep only events this kernel can count system-wide
   out=$(perf stat -a -x, -e "$e" -- sleep 0.1 2>&1)
   if [ $? = 0 ] && ! grep -q 'not supported\|not counted' <<<"$out"; then EV="${EV:+$EV,}$e"; fi
 done
+# Memory-controller CAS counts are exact and few; prefer them over dozens of
+# multiplexed data-fabric events when the kernel has the amd_umc PMU.
+if grep -q 'umc_cas_cmd.rd' <<<"$EV" && grep -q 'umc_cas_cmd.wr' <<<"$EV"; then EV=umc_cas_cmd.rd,umc_cas_cmd.wr; fi
 echo "candidates: $CAND" > "$R/events.txt"; echo "events: $EV" >> "$R/events.txt"
 if [ -z "$EV" ] || ! perf stat -a -x, -e "$EV" -- sleep 1 > "$R/probe.log" 2>&1; then
   echo "NO-DRAM-EVENTS" | tee "$R/summary.txt"; cat "$R/probe.log" >> "$R/summary.txt"; touch "$R/COMPLETE"; exit 0
 fi
-perf stat -a -x, -e "$EV" -o "$R/idle.perf" -- sleep "$SECS"
+perf stat -a -x, -I 1000 -e "$EV" -o "$R/idle.perf" -- sleep "$SECS"
 ORIG=$(rdmsr -p 0 $MSR 2>/dev/null) && trap 'wrmsr -a $MSR 0x$ORIG' EXIT
 isolated() {
   local dir=$1; shift
   unshare -n setpriv --reuid=bench --regid=bench --init-groups --reset-env -- \
     env HOME=/home/bench PATH=/usr/bin:/bin bash -c 'cd "$0" && exec "$@"' "$dir" "$@"
 }
+counted() { # counted <tag> <workload...>: system-wide counts while the workload runs
+  local tag=$1; shift
+  sync; echo 3 > /proc/sys/vm/drop_caches
+  perf stat -a -x, -I 1000 -e "$EV" -o "$R/$tag.perf" & local pid=$!
+  sleep 1
+  "$@" > "$R/$tag.log" 2>&1
+  kill -INT $pid; wait $pid
+}
 seine_run() { # seine_run <tag> [msr value]
   [ -n "${2:-}" ] && [ -n "${ORIG:-}" ] && wrmsr -a $MSR "$2"
-  sync; echo 3 > /proc/sys/vm/drop_caches
-  perf stat -a -x, -e "$EV" -o "$R/$1.perf" -- isolated "$W/candidate" ./seine --bench --bench-kind backend \
+  counted "$1" isolated "$W/candidate" ./seine --bench --bench-kind backend \
     --backend cpu --ui plain --data-dir /home/bench/seine-dram --threads "$T" --disable-cpu-autotune-threads \
     --bench-cpu-kernel "$KERNEL" --bench-secs "$SECS" --bench-rounds 1 --bench-warmup-rounds 1 \
-    --bench-output "$R/$1.json" > "$R/$1.log" 2>&1
+    --bench-output "$R/$1.json"
 }
 seine_run seine-default-a "0x${ORIG:-}"
 if [ -n "${ORIG:-}" ]; then
@@ -59,37 +69,44 @@ if [ -n "${ORIG:-}" ]; then
   seine_run seine-default-b "0x$ORIG"
 fi
 if [ -x "$W/extra/NTMminer-BNT" ]; then
-  sync; echo 3 > /proc/sys/vm/drop_caches
-  perf stat -a -x, -e "$EV" -o "$R/ntm.perf" -- isolated "$W/extra" ./NTMminer-BNT --bench $((SECS * 2)) -t "$T" > "$R/ntm.log" 2>&1
+  counted ntm isolated "$W/extra" ./NTMminer-BNT --bench $((SECS * 2)) -t "$T"
 fi
 python3 - "$R" <<'PY' | tee "$R/summary.txt"
-import json, pathlib, re, sys
+# Per-second interval counts; the steady rate is the median second of the middle
+# half of each run, so allocation, warmup and teardown drop out. GB/hash =
+# lines/s * 64 / H/s.
+import collections, json, pathlib, re, statistics, sys
 r = pathlib.Path(sys.argv[1])
-def counts(path):
-    # Lines per source (umc = memory-controller CAS, df = data fabric), read / write / other.
-    out = {}
+def rates(path):
+    per = collections.defaultdict(lambda: collections.defaultdict(float))
     for line in path.read_text().splitlines():
         p = line.split(',')
-        if len(p) < 3 or not p[0].replace('.', '').isdigit():
+        if len(p) < 4 or line.startswith('#'):
             continue
-        v, name = float(p[0]), p[2].lower()
-        src = 'umc' if 'umc' in name else 'df'
-        kind = ('rd' if ('rdwrmask=0x1' in name or name.endswith('.rd') or 'read' in name) else
-                'wr' if ('rdwrmask=0x2' in name or name.endswith('.wr') or 'write' in name) else 'other')
-        out[f'{src}_{kind}'] = out.get(f'{src}_{kind}', 0) + v
-    return out
-idle = counts(r / 'idle.perf')
+        try:
+            t, v = float(p[0]), float(p[1])
+        except ValueError:
+            continue
+        name = p[3].lower()
+        kind = 'rd' if ('.rd' in name or 'rdwrmask=0x1' in name or 'read' in name) else 'wr'
+        per[t][kind] += v
+    secs = sorted(per)
+    mid = secs[len(secs) // 4: max(len(secs) * 3 // 4, len(secs) // 4 + 1)]
+    return {k: statistics.median(per[t][k] for t in mid) for k in ('rd', 'wr')} if mid else {}
+idle = rates(r / 'idle.perf')
+print('idle lines/s', {k: int(v) for k, v in idle.items()})
 for perf in sorted(r.glob('*.perf')):
     tag = perf.stem
-    if tag == 'idle': continue
-    c = counts(perf)
+    if tag == 'idle':
+        continue
+    c = rates(perf)
     if tag == 'ntm':
         hps = [float(x) for x in re.findall(r'([0-9.]+) H/s', (r / 'ntm.log').read_text(errors='replace'))]
         hps = hps[-1] if hps else 0.0
     else:
         hps = json.load(open(r / f'{tag}.json'))['avg_hps']
-    elapsed = [l.split(',')[0] for l in perf.read_text().splitlines() if 'seconds time elapsed' in l]
-    print(tag, 'hps', round(hps, 3), {k: int(v) for k, v in sorted(c.items())}, 'elapsed', elapsed[:1])
-print('idle', {k: int(v) for k, v in sorted(idle.items())})
+    gb = {k: round((c.get(k, 0) - idle.get(k, 0)) * 64 / hps / 1e9, 3) if hps else None for k in ('rd', 'wr')}
+    print(tag, 'hps', round(hps, 3), 'GB/hash rd', gb['rd'], 'wr', gb['wr'],
+          'GB/s rd', round(c.get('rd', 0) * 64 / 1e9, 1), 'wr', round(c.get('wr', 0) * 64 / 1e9, 1))
 PY
 touch "$R/COMPLETE"
