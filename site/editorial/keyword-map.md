@@ -320,3 +320,11 @@ The existing `/blog/blocknet-privacy-features/` remains the owner of privacy by 
 | Who controls Blocknet; who enforces Blocknet rules | `/blog/who-controls-blocknet/` | Distinguish developers, miners, validating nodes and wallet owners; understand software adoption versus block acceptance |
 
 The software-role guide owns choosing applications and what must stay running. This new guide owns authority and rule enforcement, without claiming a measured distribution of control or a formal governance vote. The existing `/blog/bulletproofs-explained/` remains the owner of hidden-amount verification and is expanded with the separate authorization, conservation, repeated-spend and issuance checks. Supply owns the emission schedule; Faraday upgrade owns preparation. Demand is inferred from newcomer questions; no measured search volume is claimed.
+
+## Atomic-swap concepts and the public VEIL announcement (October 28, 2026)
+
+| Primary cluster | Owner | Reader job |
+|---|---|---|
+| Blocknet atomic swaps; what is VEIL; atomic swap claims and refunds | `/blog/blocknet-atomic-swaps/` | Understand generic conditional exchange, claim/refund paths and disclosure, then identify the limited scope of Blocknet’s public VEIL announcement |
+
+The user approved a general explainer with a short public-announcement section after research could not verify a public VEIL implementation. The generic HTLC diagram is explicitly not a VEIL specification or supported trading pair. Faraday upgrade retains migration, ordinary sending retains payment steps, and payment visibility retains ordinary BNT disclosure. No private specification is quoted or used to describe the protocol. Demand is inferred from the approved currency/privacy direction, not measured search volume.
