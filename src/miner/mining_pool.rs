@@ -43,6 +43,10 @@ const POOL_WAIT_POLL: Duration = Duration::from_millis(200);
 const POOL_EVENT_IDLE_SLEEP: Duration = Duration::from_millis(5);
 const POOL_JOB_STOP_AT_HORIZON: Duration = Duration::from_secs(365 * 24 * 60 * 60);
 const POOL_MAX_INFLIGHT_SUBMITS: usize = 16;
+// A job change cannot interrupt a CPU hash, so the hash in flight finishes on the
+// replaced job. bntpool accepts work on a superseded assignment for 8 s
+// (stale_submit_grace); submit it under the replaced job id for 5 s, leaving margin.
+const REPLACED_JOB_SUBMIT_WINDOW: Duration = Duration::from_secs(5);
 const POOL_MAX_DEFERRED_SUBMITS: usize = 4096;
 const POOL_SUBMIT_ACK_TIMEOUT: Duration = Duration::from_secs(30);
 const POOL_SUBMIT_ACK_WARN_THRESHOLD: usize = 4;
@@ -162,6 +166,11 @@ struct ActivePoolJob {
     last_assignment_timing: Option<PoolAssignmentTiming>,
     /// Job received → backends assigned, reported on the next submit.
     pending_job_switch: Option<Duration>,
+    /// When this job stopped being mined (replaced, or parked for a fee round).
+    retired_at: Option<Instant>,
+    /// The job this one replaced, kept so hashes in flight at the switch can
+    /// still be submitted within `REPLACED_JOB_SUBMIT_WINDOW`.
+    replaced: Option<Box<ActivePoolJob>>,
 }
 
 #[derive(Debug, Clone)]
@@ -289,7 +298,16 @@ impl ActivePoolJob {
             job_received_at: now,
             last_assignment_timing: None,
             pending_job_switch: None,
+            retired_at: None,
+            replaced: None,
         }
+    }
+
+    fn accepts_late_solution(&self, epoch: u64) -> bool {
+        self.epoch == epoch
+            && self
+                .retired_at
+                .is_some_and(|at| at.elapsed() <= REPLACED_JOB_SUBMIT_WINDOW)
     }
 
     fn has_share_binding_job_id(&self, job_id: &str) -> bool {
@@ -839,10 +857,14 @@ pub(super) fn run_pool_mining_loop(
                             );
                         }
                     }
+                    let mut parked = active_job.take();
+                    if let Some(job) = parked.as_mut() {
+                        job.retired_at = Some(Instant::now());
+                    }
                     if active_mode == PoolConnectionMode::Dev {
-                        dev_session.resume_job = active_job.take();
+                        dev_session.resume_job = parked;
                     } else {
-                        user_session.resume_job = active_job.take();
+                        user_session.resume_job = parked;
                     }
                     if let Err(err) =
                         super::cancel_backend_slots(backends, RuntimeMode::Mining, backend_executor)
@@ -888,6 +910,7 @@ pub(super) fn run_pool_mining_loop(
                     };
 
                     if let Some(mut resume) = resumed_job.take() {
+                        resume.retired_at = None;
                         if cached_job.as_ref().is_some_and(|cached| {
                             rebind_parked_pool_job(active_mode, &mut resume, cached)
                         }) {
@@ -1269,6 +1292,29 @@ pub(super) fn run_pool_mining_loop(
                             ),
                         };
                         if matches!(submit_outcome, PoolShareSubmitOutcome::StaleEpoch) {
+                            // A hash in flight across a fee-round switch belongs to the
+                            // parked session's job.
+                            for (mode, session) in [
+                                (PoolConnectionMode::User, &mut user_session),
+                                (PoolConnectionMode::Dev, &mut dev_session),
+                            ] {
+                                if session
+                                    .resume_job
+                                    .as_ref()
+                                    .is_some_and(|job| job.accepts_late_solution(solution.epoch))
+                                {
+                                    submit_pool_solution(
+                                        mode,
+                                        &session.client,
+                                        &mut session.resume_job,
+                                        &solution,
+                                        &backend_label,
+                                        &mut session.recent_submit_lookup,
+                                        &stats,
+                                    );
+                                    break;
+                                }
+                            }
                             continue;
                         }
                     }
@@ -2032,13 +2078,14 @@ fn assign_pool_job(
         .difficulty
         .map(|difficulty| difficulty.to_string())
         .unwrap_or_else(|| "unknown".to_string());
-    *active_job = Some(ActivePoolJob::new(
-        job,
-        0,
-        header_base,
-        target,
-        network_target,
-    ));
+    let replaced = active_job.take().map(|mut previous| {
+        previous.retired_at = Some(handled_at);
+        previous.replaced = None;
+        Box::new(previous)
+    });
+    let mut next_job = ActivePoolJob::new(job, 0, header_base, target, network_target);
+    next_job.replaced = replaced;
+    *active_job = Some(next_job);
 
     if mode.is_user() {
         info(
@@ -2441,14 +2488,20 @@ fn submit_pool_solution_with_submitter<F>(
 where
     F: FnMut(&str, u64, Option<[u8; 32]>, &str, SubmitTiming) -> Result<()>,
 {
-    let Some(job) = active_job.as_mut() else {
+    let Some(active) = active_job.as_mut() else {
         return PoolShareSubmitOutcome::StaleEpoch;
     };
     let found_at = solution.found_at;
     block_latency::record(block_latency::POOL_FOUND_TO_LOOP, found_at.elapsed());
-    if solution.epoch != job.epoch {
-        return PoolShareSubmitOutcome::StaleEpoch;
-    }
+    let replaced_job = solution.epoch != active.epoch;
+    let job = if replaced_job {
+        match active.replaced.as_deref_mut() {
+            Some(previous) if previous.accepts_late_solution(solution.epoch) => previous,
+            _ => return PoolShareSubmitOutcome::StaleEpoch,
+        }
+    } else {
+        active
+    };
     let Some(binding) = job.share_binding(solution.share_binding_id).cloned() else {
         return PoolShareSubmitOutcome::StaleEpoch;
     };
@@ -2467,7 +2520,9 @@ where
         return PoolShareSubmitOutcome::Duplicate;
     }
 
-    if job.pending_submit_nonces.len() >= POOL_MAX_INFLIGHT_SUBMITS {
+    // Late hashes from a replaced job are at most one per lane; never defer them,
+    // since only the current job's backlog is serviced.
+    if !replaced_job && job.pending_submit_nonces.len() >= POOL_MAX_INFLIGHT_SUBMITS {
         if !enqueue_deferred_pool_submit(
             mode,
             job,
@@ -3114,6 +3169,78 @@ mod tests {
             }
         }
         assert_eq!(submitted, vec![("job-2".to_string(), 600)]);
+    }
+
+    #[test]
+    fn late_hash_from_replaced_job_is_submitted_under_its_job_id() {
+        let mut previous = test_active_job(7);
+        // Its in-flight submits must not defer the late hash.
+        for nonce in 0..POOL_MAX_INFLIGHT_SUBMITS as u64 {
+            previous.pending_submit_nonces.insert(
+                ("job-1".to_string(), nonce),
+                PendingPoolSubmit {
+                    found_at: Instant::now(),
+                    submitted_at: Instant::now(),
+                    backend_label: "cpu#1".to_string(),
+                },
+            );
+        }
+        previous.retired_at = Some(Instant::now());
+        let mut current = test_active_job(8);
+        current.job.job_id = "job-2".to_string();
+        current.share_bindings.get_mut(&1).unwrap().job_id = "job-2".to_string();
+        current.replaced = Some(Box::new(previous));
+        let mut active = Some(current);
+        let mut lookup = RecentPendingSubmitLookup::default();
+        let stats = Stats::new();
+        let mut submitted = Vec::new();
+        let mut submit = |epoch: u64, nonce: u64, active: &mut Option<ActivePoolJob>| {
+            submit_pool_solution_with_submitter(
+                PoolConnectionMode::User,
+                active,
+                &test_solution(epoch, nonce),
+                "cpu#1",
+                &stats,
+                |job_id, nonce, _, _, _timing| {
+                    submitted.push((job_id.to_string(), nonce));
+                    Ok(())
+                },
+                &mut lookup,
+            )
+        };
+        assert!(matches!(
+            submit(7, 900, &mut active),
+            PoolShareSubmitOutcome::Submitted
+        ));
+        assert!(matches!(
+            submit(7, 900, &mut active),
+            PoolShareSubmitOutcome::Duplicate
+        ));
+        assert!(matches!(
+            submit(8, 5, &mut active),
+            PoolShareSubmitOutcome::Submitted
+        ));
+        // Older epochs, and the replaced job once its window has passed, stay stale.
+        assert!(matches!(
+            submit(6, 1, &mut active),
+            PoolShareSubmitOutcome::StaleEpoch
+        ));
+        active
+            .as_mut()
+            .unwrap()
+            .replaced
+            .as_mut()
+            .unwrap()
+            .retired_at =
+            Some(Instant::now() - super::REPLACED_JOB_SUBMIT_WINDOW - Duration::from_millis(1));
+        assert!(matches!(
+            submit(7, 901, &mut active),
+            PoolShareSubmitOutcome::StaleEpoch
+        ));
+        assert_eq!(
+            submitted,
+            vec![("job-1".to_string(), 900), ("job-2".to_string(), 5)]
+        );
     }
 
     #[test]

@@ -4,6 +4,8 @@
 # bntpool.com resolves to the fixture, so Seine's fee work is captured as non-user
 # shares; competitor fee connections fail offline, so apply their nominal fee.
 # Usage (root, /opt/cohort): remote_live_compete.sh <seconds> [seine|ntmminer|longhorn ...]
+# JOB_SECS rotates the job at that interval (default static); STALE_GRACE accepts superseded
+# work like bntpool's 8 s stale_submit_grace (default 8).
 # Seine is candidate/seine with no flags (seine-base: baseline/seine); NTM extra/NTMminer-BNT; Longhorn extra/longhorn-*.
 set -u
 SECS=$1; shift
@@ -50,7 +52,7 @@ for m in $MINERS; do
   sync; echo 3 > /proc/sys/vm/drop_caches
   unshare -n -m bash -c 'ip link set lo up && mount --bind "$0" /etc/hosts && cd "$1" && exec setpriv --reuid=bench --regid=bench --init-groups --reset-env -- env HOME=/home/bench PATH=/usr/bin:/bin "${@:2}"' \
     "$R/hosts" "/home/bench/live-$m" python3 "$W/pool_fixture.py" --output "$R/$m" --seconds "$SECS" --warmup 0 \
-    --window-origin launch --startup-timeout "$SECS" --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
+    --job-secs "${JOB_SECS:-0}" --stale-grace "${STALE_GRACE:-8}" --window-origin launch --startup-timeout "$SECS" --listen-port 3333 --miner "$m" --executable "$exe" "${tls[@]}" -- "${extra[@]}" \
     > "$R/$m.out" 2>&1
   python3 "$W/live_summary.py" "$R/$m/work.json" "$m" "$SECS" | tee -a "$R/summary.txt"
 done

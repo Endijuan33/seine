@@ -63,20 +63,21 @@ fn handle_found_solution(
         return Ok(SolutionDisposition::Continue);
     }
 
-    if shared.solution_state.load(Ordering::Acquire) == template.work_id {
-        emit_event(
-            shared,
-            BackendEvent::Solution(MiningSolution {
-                epoch: template.epoch,
-                nonce,
-                hash: Some(output),
-                share_binding_id,
-                backend_id: shared.instance_id.load(Ordering::Acquire),
-                backend: "cpu",
-                found_at: std::time::Instant::now(),
-            }),
-        );
-    }
+    // A job change cannot interrupt a hash, so the hash in flight finishes on the
+    // replaced work. Report it under that work's epoch: the pool loop submits it
+    // under the replaced job id while the pool still accepts it, or drops it.
+    emit_event(
+        shared,
+        BackendEvent::Solution(MiningSolution {
+            epoch: template.epoch,
+            nonce,
+            hash: Some(output),
+            share_binding_id,
+            backend_id: shared.instance_id.load(Ordering::Acquire),
+            backend: "cpu",
+            found_at: std::time::Instant::now(),
+        }),
+    );
     Ok(SolutionDisposition::Continue)
 }
 
@@ -1451,6 +1452,22 @@ mod tests {
                 assert_eq!(solution.nonce, 42);
                 assert_eq!(solution.share_binding_id, 0);
                 assert_eq!(solution.backend_id, 11);
+            }
+            other => panic!("expected solution event, got {other:?}"),
+        }
+
+        // Work replaced mid-hash still reports the finished hash under its own epoch.
+        backend.shared.solution_state.store(8, Ordering::Release);
+        let disposition =
+            handle_found_solution(&backend.shared, &template, 0, 0, 43, [0xAB; POW_OUTPUT_LEN])
+                .expect("replaced-work solution handling should succeed");
+        assert_eq!(disposition, SolutionDisposition::Continue);
+        match event_rx
+            .recv_timeout(Duration::from_millis(100))
+            .expect("replaced-work solution event should be queued")
+        {
+            BackendEvent::Solution(solution) => {
+                assert_eq!((solution.epoch, solution.nonce), (3, 43));
             }
             other => panic!("expected solution event, got {other:?}"),
         }
