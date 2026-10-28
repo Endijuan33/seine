@@ -241,7 +241,7 @@ pub(crate) fn fixed_count_trials_wanted() -> bool {
 
 /// Side-cache slots for this host (see `SideCacheSchedule` in the kernel crate),
 /// or 0. Zen 4 with SMT (EPYC 9R14, two workers per 1 MiB L2, far-L2 kernel)
-/// lost 0.5-2%, and Zen 5 desktop is unmeasured, so other cohorts stay off.
+/// lost 0.5-2%, so other cohorts stay off.
 /// Intel Sapphire/Emerald Rapids (Xeon 8488C, m7i.4xlarge, 8 cores / 16 threads,
 /// 2 MiB L2): 1024 slots +2.2% at the full 16-thread count, where the cohort's
 /// tuner starts and settles, but -0.9% at 8 workers, so only full counts.
@@ -265,6 +265,12 @@ pub(crate) fn cohort_side_cache_blocks(
             let _ = physical_cores;
             512
         }
+        // Zen 5 desktop (Ryzen 9700X, 8 cores / 16 threads, `avx512-256-stream`):
+        // bench +0.9% / +0.5% / +0.3% at 4 / 8 / 12 workers with every candidate
+        // run above every base run, but live -0.8% at the full 16-thread count
+        // where the tuner settles on bare metal. Memory-capped hosts (WSL2 at 2-4
+        // workers, 32 GiB desktops at 14) run below that count.
+        Some("AuthenticAMD") if identity.family == Some(0x1a) && workers < logical_cpus => 512,
         Some("GenuineIntel")
             if identity.family == Some(6)
                 && matches!(identity.model, Some(0x8f | 0xcf))
