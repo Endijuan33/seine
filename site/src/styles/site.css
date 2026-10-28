@@ -10,7 +10,7 @@
     --accent: #4E9A00;       /* lime on light: wordmark dot, selected */
     --lime: #AAFF00;         /* brand lime: only on dark or as a fill */
     --deep: #063B44;         /* teal, used sparingly (render frame bg) */
-    --sans: "Instrument Sans", "PingFang SC", "PingFang TC", "Microsoft YaHei", "Microsoft JhengHei", "Noto Sans SC", "Noto Sans TC", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --sans: "Instrument Sans Variable", "PingFang SC", "PingFang TC", "Microsoft YaHei", "Microsoft JhengHei", "Noto Sans SC", "Noto Sans TC", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --radius: 6px;
     --wrap: 1180px;
@@ -18,13 +18,13 @@
 }
 /* Prefer the matching script's CJK face for each Chinese locale. */
 /* Per-script fallbacks: Instrument Sans covers Latin; other scripts use good system faces. */
-:lang(zh-Hant) { --sans: "Instrument Sans", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif; }
-:lang(zh-Hans) { --sans: "Instrument Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif; }
-:lang(ja) { --sans: "Instrument Sans", "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif; }
-:lang(ko) { --sans: "Instrument Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
-:lang(ru), :lang(uk), :lang(el) { --sans: "Instrument Sans", "Segoe UI", "Helvetica Neue", "Noto Sans", Arial, system-ui, sans-serif; }
+:lang(zh-Hant) { --sans: "Instrument Sans Variable", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif; }
+:lang(zh-Hans) { --sans: "Instrument Sans Variable", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif; }
+:lang(ja) { --sans: "Instrument Sans Variable", "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif; }
+:lang(ko) { --sans: "Instrument Sans Variable", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+:lang(ru), :lang(uk), :lang(el) { --sans: "Instrument Sans Variable", "Segoe UI", "Helvetica Neue", "Noto Sans", Arial, system-ui, sans-serif; }
 :lang(ar) { --sans: "Geeza Pro", "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, sans-serif; }
-:lang(th) { --sans: "Instrument Sans", "Thonburi", "Leelawadee UI", "Noto Sans Thai", Tahoma, system-ui, sans-serif; }
+:lang(th) { --sans: "Instrument Sans Variable", "Thonburi", "Leelawadee UI", "Noto Sans Thai", Tahoma, system-ui, sans-serif; }
 /* CJK headings: no Latin tracking, and break at spaces and punctuation rather than mid-word. */
 :is(:lang(zh-Hans), :lang(zh-Hant), :lang(ja), :lang(ko)) :is(h1, h2, h3) { letter-spacing: 0; word-break: keep-all; overflow-wrap: anywhere; }
 /* Scripts where negative tracking hurts legibility. */

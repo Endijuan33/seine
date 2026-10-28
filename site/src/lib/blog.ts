@@ -65,7 +65,9 @@ export async function getPosts(locale: Locale): Promise<Post[]> {
             tags: entry.data.tags,
             faq: entry.data.faq,
             related: source.data.related,
-            thumbnail: image ?? `/blog/og/${cardLocale(locale)}/${slug}-card.jpg`,
+            thumbnail: image
+                ? image.replace(/^\/assets\/blog\/([^/]+\.(?:png|jpe?g|webp))$/i, '/assets/blog/thumbnails/$1.webp')
+                : `/blog/og/${cardLocale(locale)}/${slug}-card.jpg`,
             image: image ? new URL(image, SITE_URL).href : `${SITE_URL}/blog/og/${cardLocale(locale)}/${slug}.jpg`,
             path,
             url: SITE_URL + path,
