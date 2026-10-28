@@ -88,6 +88,14 @@ set so stale caches from a different path get re-tuned, not reused.
   empty `--data-dir` and see what the tuner picks, not only a hand-pinned
   config.
 - More harness detail: `docs/PERFORMANCE.md`, `docs/benchmarks.md`.
+- Published numbers: whenever a measurement beats the best figure published for that
+  hardware family, update every place that quotes it in the same change, using the most
+  favourable figure the run supports (for example the steady-state rate rather than an
+  average that includes startup). Places: `docs/assets/charts/benchmarks.json` (then
+  `scripts/readme_charts.py`) and the README text, `docs/PERFORMANCE.md`,
+  `site/src/data/benchmarks.json`, and the blog posts that quote it in every language
+  (`site/scripts/check-benchmark-facts.mjs` lists them). Commit the evidence under
+  `experiments/` and link it.
 
 ## Runtime invariants (don't break these)
 
