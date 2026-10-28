@@ -7,7 +7,7 @@ Each `## vX.Y.Z` section becomes the corresponding GitHub release body.
 Never mention competitors in release notes; describe Seine improvements and
 supported hardware only.
 
-## Unreleased
+## v0.2.44
 
 - **About 2-3% more hashes in the first 15 minutes on AMD EPYC servers** (measured on EPYC 9R45 and 9R14): automatic tuning no longer drops workers on measurement noise.
 
