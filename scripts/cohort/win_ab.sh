@@ -27,7 +27,10 @@ scp "${OPTS[@]}" "$CAND"/seine.exe "$CAND"/verify_cpu_kernels.exe "Administrator
 scp "${OPTS[@]}" "$HERE/$PS1" "$HERE/pool_fixture.py" "$HERE/live_summary.py" "Administrator@$IP:C:/cohort/"
 # Optional EXTRA_DIR (competitor binaries, Python, ...) is uploaded as C:\cohort\extra.
 if [ -n "${EXTRA_DIR:-}" ]; then scp -r "${OPTS[@]}" "$EXTRA_DIR" "Administrator@$IP:C:/cohort/extra"; fi
-ssh "${OPTS[@]}" "Administrator@$IP" "powershell -ExecutionPolicy Bypass -File C:\\cohort\\$PS1 $*" || true
+# Quote arguments that contain spaces (e.g. -BaseArgs "--cpu-affinity auto"); the remote
+# command line is re-split by Windows argument parsing.
+PS_ARGS=; for a in "$@"; do case $a in *" "*) PS_ARGS+=" \"$a\"" ;; *) PS_ARGS+=" $a" ;; esac; done
+ssh "${OPTS[@]}" "Administrator@$IP" "powershell -ExecutionPolicy Bypass -File C:\\cohort\\$PS1$PS_ARGS" || true
 ssh "${OPTS[@]}" "Administrator@$IP" 'Compress-Archive -Force C:\cohort\results C:\cohort\results.zip'
 scp "${OPTS[@]}" "Administrator@$IP:C:/cohort/results.zip" "$OUT/"
 # PowerShell 5.1 archives use backslash separators; normalise while extracting.
