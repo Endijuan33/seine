@@ -38,6 +38,8 @@ foreach ($m in $list) {
   $tls = @(); $extra = @()
   switch ($m) {
     'seine' { $exe = "$W\candidate\seine.exe"; $extra = @('--ui', 'plain', '--data-dir', "$W\live-$m", '--telemetry', 'off') }
+    # A/B on one guest: extra\base\seine.exe is the baseline build.
+    'seine-base' { $exe = "$W\extra\base\seine.exe"; $extra = @('--ui', 'plain', '--data-dir', "$W\live-$m", '--telemetry', 'off') }
     'ntmminer' { $exe = "$W\extra\ntm\NTMminer-BNT.exe"; $tls = @('--tls-cert', "$R\tls\cert.pem", '--tls-key', "$R\tls\key.pem", '--tls-name', $tlsName) }
     'longhorn' { $exe = "$W\extra\longhorn\longhorn.exe" }
   }

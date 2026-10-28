@@ -63,7 +63,7 @@ def main():
                         help="Accept superseded work for this many seconds in job-change tests")
     parser.add_argument("--window-origin", choices=["launch", "first-share"], default="first-share")
     parser.add_argument("--seed", default="seine-longhorn-parity-v1")
-    parser.add_argument("--miner", choices=["seine", "longhorn", "ntmminer"], required=True)
+    parser.add_argument("--miner", choices=["seine", "seine-base", "longhorn", "ntmminer"], required=True)
     parser.add_argument("--tls-cert", type=Path,
                         help="Fixture certificate chain; listener remains loopback-only")
     parser.add_argument("--tls-key", type=Path,
