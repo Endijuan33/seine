@@ -1,5 +1,7 @@
 #[cfg(target_arch = "x86_64")]
 mod avx512_256;
+#[cfg(target_arch = "x86_64")]
+mod avx512_reg;
 
 #[cfg(feature = "cpu-research")]
 pub(crate) mod research;
@@ -343,18 +345,20 @@ impl FixedArgon2id {
                         }
                     }
                     if FULL_WIDTH {
-                        compress_avx512_into(prev, &*reference_ptr, &mut *dst);
+                        avx512_reg::compress_into(prev, &*reference_ptr, &mut *dst);
                     } else {
                         avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
                     }
                 } else if block + 1 < self.segment_length {
                     if FULL_WIDTH {
-                        compress_avx512_into_mid_prefetch(
+                        avx512_reg::compress_into_mid_prefetch_ring::<RING>(
                             prev,
                             &*reference_ptr,
                             &mut *dst,
                             cur,
                             arena,
+                            cache,
+                            cur + 1,
                         );
                     } else {
                         avx512_256::compress_into_mid_prefetch_ring::<RING>(
@@ -369,7 +373,7 @@ impl FixedArgon2id {
                     }
                 } else {
                     if FULL_WIDTH {
-                        compress_avx512_into(prev, &*reference_ptr, &mut *dst);
+                        avx512_reg::compress_into(prev, &*reference_ptr, &mut *dst);
                     } else {
                         avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
                     }

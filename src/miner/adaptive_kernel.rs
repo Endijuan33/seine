@@ -143,12 +143,15 @@ fn cohort_stream_kernel(
 ) -> Option<CpuKernel> {
     // Intel Sapphire Rapids (06h/8Fh) and Emerald Rapids (06h/CFh, same Raptor
     // Cove core): streaming beat plain AVX-512 by 14.5% / 19.3% at 16 / 32 workers
-    // on a Xeon Platinum 8488C (m7i.8xlarge) with full 2 GiB parity.
+    // on a Xeon Platinum 8488C (m7i.8xlarge) with full 2 GiB parity, and the
+    // register-resident full-width compress adds ~2% at 16 workers (6.5% at 8).
     if identity.vendor.as_deref() == Some("GenuineIntel") {
-        return (identity.family == Some(6)
-            && matches!(identity.model, Some(0x8f | 0xcf))
-            && supported.contains(&CpuKernel::Avx512256Stream))
-        .then_some(CpuKernel::Avx512256Stream);
+        if identity.family != Some(6) || !matches!(identity.model, Some(0x8f | 0xcf)) {
+            return None;
+        }
+        return [CpuKernel::Avx512Stream, CpuKernel::Avx512256Stream]
+            .into_iter()
+            .find(|k| supported.contains(k));
     }
     if identity.vendor.as_deref() != Some("AuthenticAMD") {
         return None;
@@ -2589,7 +2592,8 @@ mod tests {
             static_kernel_for_identity(&masked, &avx2_paths, 14),
             Some(CpuKernel::Avx2Stream)
         );
-        // Sapphire and Emerald Rapids start on streaming; other Intel models do not.
+        // Sapphire and Emerald Rapids start on streaming (full width when
+        // available); other Intel models do not.
         for (model, stream) in [(0x8f, true), (0xcf, true), (0xad, false), (0x55, false)] {
             let xeon = CpuIdentity {
                 vendor: Some("GenuineIntel".into()),
@@ -2601,6 +2605,11 @@ mod tests {
             assert_eq!(
                 startup_kernel_for(&xeon, &supported),
                 stream.then_some(CpuKernel::Avx512256Stream)
+            );
+            let with_full = [supported.as_slice(), &[CpuKernel::Avx512Stream]].concat();
+            assert_eq!(
+                startup_kernel_for(&xeon, &with_full),
+                stream.then_some(CpuKernel::Avx512Stream)
             );
         }
         assert_eq!(
