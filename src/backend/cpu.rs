@@ -933,7 +933,7 @@ impl CpuBackend {
         }
         self.shared
             .kernel_request
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |old| {
                 (kernel_from_request(old) != kernel)
                     .then(|| (old.wrapping_add(256) & !255) | kernel_id(kernel))
             })
