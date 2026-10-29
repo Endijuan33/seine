@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,6 +71,8 @@ pub enum FailureReason {
     CpuStartupTimedOut,
     NvidiaDriverUnavailable,
     NvrtcUnavailable,
+    /// The pool refused the session at its connection limit (schema 12).
+    PoolConnectionLimit,
 }
 
 /// An observed session or OS shutdown request, not proof that cleanup finished or the cause
@@ -266,6 +268,11 @@ pub struct DiagnosticEvent {
 }
 
 impl DiagnosticEvent {
+    fn schema11_compatible(&self) -> bool {
+        self.detail
+            .as_ref()
+            .is_none_or(|d| d.reason != FailureReason::PoolConnectionLimit)
+    }
     fn schema6_compatible(&self) -> bool {
         self.detail.as_ref().is_none_or(|d| {
             !matches!(
@@ -583,6 +590,13 @@ impl Report {
                             && d.previous_run.as_ref().is_none_or(|r| {
                                 r.shutdown_request
                                     .is_none_or(ShutdownRequest::schema8_compatible)
+                            })))
+                    && (self.schema_version >= 12
+                        || (d.events.iter().all(DiagnosticEvent::schema11_compatible)
+                            && d.previous_run.as_ref().is_none_or(|r| {
+                                r.recent_events
+                                    .iter()
+                                    .all(DiagnosticEvent::schema11_compatible)
                             })))
                     && (self.schema_version >= 7
                         || (d.events.iter().all(DiagnosticEvent::schema6_compatible)
@@ -1096,6 +1110,23 @@ mod tests {
             .unwrap()
             .configured_mts = Some(0);
         assert!(!report.validate(), "speeds are positive when present");
+    }
+
+    #[test]
+    fn pool_connection_limit_requires_schema_12() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../diagnostics-fixture.json")).unwrap();
+        value["schema_version"] = 12.into();
+        value["diagnostics"]["events"][0]["detail"] = serde_json::json!({
+            "reason": "pool_connection_limit",
+            "operation": "pool_connect",
+        });
+        value["diagnostics"]["events"][0]["kind"] = "connection".into();
+        value["diagnostics"]["events"][0]["backend"] = serde_json::Value::Null;
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate());
+        report.schema_version = 11;
+        assert!(!report.validate(), "the reason must advertise schema 12");
     }
 
     #[test]

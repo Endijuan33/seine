@@ -24,6 +24,10 @@ use submit_retry::{
 
 const LOGIN_REQUEST_ID: u64 = 1;
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+/// Longest reconnect delay a pool's `connection_limit` notice can ask for.
+const MAX_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(120);
+/// Delay used when a `connection_limit` notice gives none.
+const DEFAULT_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const CHANNEL_CAPACITY: usize = 4096;
 const MAX_SUBMITS_PER_IO_CYCLE: usize = 32;
@@ -51,6 +55,8 @@ const SUBMIT_REJECT_REASON_RESYNC: &str = "submit interrupted during pool resync
 
 pub const POOL_NOTIFICATION_POOL_BLOCK_SOLVED: &str = "pool_block_solved";
 pub const POOL_NOTIFICATION_MINER_BLOCK_FOUND: &str = "miner_block_found";
+/// The pool refused this session at its connection limit and is closing it.
+pub const POOL_NOTIFICATION_CONNECTION_LIMIT: &str = "connection_limit";
 
 const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_LOGIN_NEGOTIATION,
@@ -163,6 +169,8 @@ impl PoolLoginAck {
 pub struct PoolNotification {
     pub kind: String,
     pub message: String,
+    /// How long the pool asks the miner to wait before reconnecting.
+    pub retry_after: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
@@ -557,6 +565,7 @@ async fn run_pool_client_loop(
                 let mut pending_submits = HashMap::<u64, PoolSubmit>::new();
                 let mut retry_queue = SubmitRetryQueue::new();
                 let mut login_confirmed = false;
+                let mut limit_delay = None::<Duration>;
                 let mut current_job_id = None::<String>;
                 let mut submit_claimed_hash_enabled = true;
                 let mut submit_timing_enabled = false;
@@ -729,6 +738,11 @@ async fn run_pool_client_loop(
                                         friendly_pool_disconnect_message(&endpoint),
                                     ));
                                     connection.abort();
+                                    sleep_with_shutdown(
+                                        process_shutdown.as_ref(),
+                                        shutdown.as_ref(),
+                                        reconnect_delay_after_close(limit_delay, login_confirmed),
+                                    );
                                     break;
                                 }
                             };
@@ -758,6 +772,11 @@ async fn run_pool_client_loop(
                                     };
                                     let _ = event_tx.try_send(PoolEvent::Disconnected(message));
                                     connection.abort();
+                                    sleep_with_shutdown(
+                                        process_shutdown.as_ref(),
+                                        shutdown.as_ref(),
+                                        reconnect_delay_after_close(limit_delay, login_confirmed),
+                                    );
                                     break;
                                 }
                             };
@@ -822,6 +841,25 @@ async fn run_pool_client_loop(
                                         if let Some(difficulty) = ack.difficulty {
                                             login_difficulty_hint = Some(difficulty.max(1));
                                         }
+                                    }
+                                    PoolEvent::Notification(notification)
+                                        if notification.kind
+                                            == POOL_NOTIFICATION_CONNECTION_LIMIT =>
+                                    {
+                                        limit_delay = Some(
+                                            notification
+                                                .retry_after
+                                                .unwrap_or(DEFAULT_CONNECTION_LIMIT_DELAY),
+                                        );
+                                        crate::diagnostics::record_failure(
+                                            seine_telemetry::DiagnosticCode::Warning,
+                                            seine_telemetry::DiagnosticKind::Connection,
+                                            None,
+                                            seine_telemetry::FailureDetail::new(
+                                                seine_telemetry::FailureReason::PoolConnectionLimit,
+                                                seine_telemetry::DiagnosticOperation::PoolConnect,
+                                            ),
+                                        );
                                     }
                                     PoolEvent::Notification(_) => {}
                                     PoolEvent::LoginRejected(_) => {
@@ -1290,6 +1328,7 @@ fn parse_pool_notification(params: Option<Value>) -> Option<PoolNotification> {
         return Some(PoolNotification {
             kind: "pool_notice".to_string(),
             message: message.to_string(),
+            retry_after: None,
         });
     }
     let object = params.as_object()?;
@@ -1303,10 +1342,26 @@ fn parse_pool_notification(params: Option<Value>) -> Option<PoolNotification> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("pool_notice");
+    let retry_after = object
+        .get("retry_after_ms")
+        .and_then(Value::as_u64)
+        .map(Duration::from_millis);
     Some(PoolNotification {
         kind: kind.to_string(),
         message: message.to_string(),
+        retry_after,
     })
+}
+
+/// How long to wait before reconnecting after the pool closed the session:
+/// the delay a `connection_limit` notice asked for, a short pause when the
+/// session never logged in, and none after an established session.
+fn reconnect_delay_after_close(limit_delay: Option<Duration>, login_confirmed: bool) -> Duration {
+    match limit_delay {
+        Some(delay) => delay.clamp(RECONNECT_DELAY, MAX_CONNECTION_LIMIT_DELAY),
+        None if login_confirmed => Duration::ZERO,
+        None => RECONNECT_DELAY,
+    }
 }
 
 fn parse_login_result(result: Option<Value>) -> PoolLoginAck {
@@ -1917,6 +1972,27 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[test]
+    fn connection_limit_notice_sets_a_bounded_reconnect_delay() {
+        let mut login_confirmed = false;
+        let mut pending_submits = HashMap::<u64, PoolSubmit>::new();
+        let raw = r#"{"method":"notification","params":{"kind":"connection_limit","message":"pool connection limit reached; reconnecting shortly","retry_after_ms":30000}}"#;
+        let Some(PoolEvent::Notification(notification)) =
+            decode_pool_message(raw, &mut login_confirmed, &mut pending_submits)
+        else {
+            panic!("notification should decode");
+        };
+        assert_eq!(notification.kind, POOL_NOTIFICATION_CONNECTION_LIMIT);
+        assert_eq!(notification.retry_after, Some(Duration::from_secs(30)));
+
+        let limit = |delay| reconnect_delay_after_close(Some(delay), false);
+        assert_eq!(limit(Duration::from_secs(30)), Duration::from_secs(30));
+        assert_eq!(limit(Duration::ZERO), RECONNECT_DELAY);
+        assert_eq!(limit(Duration::from_secs(3600)), MAX_CONNECTION_LIMIT_DELAY);
+        assert_eq!(reconnect_delay_after_close(None, false), RECONNECT_DELAY);
+        assert_eq!(reconnect_delay_after_close(None, true), Duration::ZERO);
     }
 
     #[test]
