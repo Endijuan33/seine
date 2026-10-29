@@ -89,6 +89,7 @@ Seine is fast out of the box. These guides cover the last few percent:
 - [Setup and configuration](docs/guides/configuration.md): first run, flags, dashboard controls, shortnames, dev fee
 - [How automatic tuning works](docs/guides/autotuning.md): thread counts, CPU kernels, memory recovery
 - [Solo mining](docs/guides/solo-mining.md): mine against your own Blocknet node
+- [Farm proxy](docs/guides/farm-proxy.md): many rigs, one pool connection
 - [Control API](docs/API.md): REST, live events and metrics for dashboards ([OpenAPI](docs/openapi/seine-api-v1.yaml))
 - [Flag reference](docs/MINER_FLAGS.md): every command-line option
 - [Building from source](docs/BUILDING.md)

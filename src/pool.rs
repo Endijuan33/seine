@@ -53,6 +53,11 @@ const STRATUM_CAPABILITY_VALIDATION_STATUS: &str = "share_validation_status";
 const STRATUM_CAPABILITY_SUBMIT_CLAIMED_HASH: &str = "submit_claimed_hash";
 const STRATUM_CAPABILITY_DIFFICULTY_HINT: &str = "difficulty_hint";
 const STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1: &str = "same_template_rebind_v1";
+/// The pool hands out an extra nonce range for the current job on `refill`.
+pub(crate) const STRATUM_CAPABILITY_NONCE_REFILL_V1: &str = "nonce_refill_v1";
+const STRATUM_METHOD_REFILL: &str = "refill";
+/// A refill unanswered this long falls back to a fresh session.
+const REFILL_REPLY_TIMEOUT: Duration = Duration::from_secs(10);
 /// The pool accepts miner-side timing fields on submits.
 const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
 /// This miner hashes Faraday BLAKE2b work. The pool refuses fork-height work to
@@ -79,6 +84,7 @@ const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_DIFFICULTY_HINT,
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
+    STRATUM_CAPABILITY_NONCE_REFILL_V1,
 ];
 
 const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
@@ -88,6 +94,7 @@ const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
     STRATUM_CAPABILITY_DIFFICULTY_HINT,
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
+    STRATUM_CAPABILITY_NONCE_REFILL_V1,
     STRATUM_CAPABILITY_POW_BLAKE2B_V1,
 ];
 
@@ -608,6 +615,8 @@ async fn run_pool_client_loop(
                 let mut current_job_id = None::<String>;
                 let mut submit_claimed_hash_enabled = true;
                 let mut submit_timing_enabled = false;
+                let mut nonce_refill_enabled = false;
+                let mut pending_refill = None::<(u64, Instant)>;
                 let mut last_outbound = Instant::now();
                 let mut submit_tick = tokio::time::interval(SUBMIT_POLL_INTERVAL);
                 submit_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -620,11 +629,42 @@ async fn run_pool_client_loop(
                         connection.abort();
                         return;
                     }
-                    let refill_ready = take_ready_nonce_refill(
+                    // A refill keeps the current range valid, so it need not
+                    // wait for in-flight submits the way a resync does.
+                    let mut refill_ready = take_ready_nonce_refill(
                         &refill_requested,
                         current_job_id.as_deref(),
-                        login_confirmed && pending_submits.is_empty() && submit_rx.is_empty(),
+                        login_confirmed
+                            && (nonce_refill_enabled
+                                || (pending_submits.is_empty() && submit_rx.is_empty())),
                     );
+                    if pending_refill
+                        .is_some_and(|(_, sent)| sent.elapsed() >= REFILL_REPLY_TIMEOUT)
+                    {
+                        pending_refill = None;
+                        nonce_refill_enabled = false;
+                        *refill_requested.lock().expect("refill lock") = current_job_id.clone();
+                    }
+                    if refill_ready && nonce_refill_enabled {
+                        // A refill already in flight answers this request too;
+                        // a failed send surfaces as a disconnect.
+                        refill_ready = false;
+                        if let (None, Some(job_id)) = (pending_refill, current_job_id.as_deref()) {
+                            let request_id = next_request_id;
+                            next_request_id =
+                                next_request_id.wrapping_add(1).max(LOGIN_REQUEST_ID + 1);
+                            if let Ok(payload) = refill_payload(request_id, job_id) {
+                                if connection
+                                    .outbound_tx
+                                    .send(ClientOutbound::Text(payload))
+                                    .is_ok()
+                                {
+                                    last_outbound = Instant::now();
+                                    pending_refill = Some((request_id, Instant::now()));
+                                }
+                            }
+                        }
+                    }
                     let idle = pending_submits.is_empty() && submit_rx.is_empty();
                     if primary_back && idle {
                         let _ = event_tx.try_send(PoolEvent::Notification(PoolNotification {
@@ -873,13 +913,31 @@ async fn run_pool_client_loop(
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            if let Some((mut event, acked_submit)) =
-                                decode_pool_message_with_submit(
+                            let decoded = match pending_refill
+                                .and_then(|(id, _)| decode_refill_response(trimmed, id))
+                            {
+                                Some(outcome) => {
+                                    pending_refill = None;
+                                    match outcome {
+                                        RefillOutcome::Job(job) => Some((PoolEvent::Job(job), None)),
+                                        RefillOutcome::Stale => None,
+                                        RefillOutcome::Refused => {
+                                            // Fall back to a fresh session once
+                                            // in-flight submits settle.
+                                            nonce_refill_enabled = false;
+                                            *refill_requested.lock().expect("refill lock") =
+                                                current_job_id.clone();
+                                            None
+                                        }
+                                    }
+                                }
+                                None => decode_pool_message_with_submit(
                                     trimmed,
                                     &mut login_confirmed,
                                     &mut pending_submits,
-                                )
-                            {
+                                ),
+                            };
+                            if let Some((mut event, acked_submit)) = decoded {
                                 let decoded_at = Instant::now();
                                 if let (PoolEvent::SubmitAck(ack), Some(submit)) =
                                     (&event, acked_submit)
@@ -902,6 +960,8 @@ async fn run_pool_client_loop(
                                             submit_claimed_hash_enabled = include_claimed_hash;
                                             submit_timing_enabled = ack
                                                 .supports(STRATUM_CAPABILITY_SUBMIT_TIMING_V1);
+                                            nonce_refill_enabled = ack
+                                                .supports(STRATUM_CAPABILITY_NONCE_REFILL_V1);
                                             allow_login_difficulty_hint = ack
                                                 .supports(STRATUM_CAPABILITY_DIFFICULTY_HINT)
                                                 || ack.required_capabilities.iter().any(
@@ -1397,7 +1457,7 @@ where
     }
 }
 
-async fn read_line_limited_async<R: tokio::io::AsyncRead + Unpin>(
+pub(crate) async fn read_line_limited_async<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut TokioBufReader<R>,
     max_bytes: usize,
 ) -> Result<Option<String>> {
@@ -1488,6 +1548,49 @@ fn submit_payload(
         },
     };
     serde_json::to_string(&request).context("failed to serialize stratum submit payload")
+}
+
+fn refill_payload(request_id: u64, job_id: &str) -> Result<String> {
+    serde_json::to_string(&serde_json::json!({
+        "id": request_id,
+        "method": STRATUM_METHOD_REFILL,
+        "params": { "job_id": job_id },
+    }))
+    .context("failed to serialize stratum refill payload")
+}
+
+#[derive(Debug)]
+enum RefillOutcome {
+    Job(PoolJob),
+    /// The job moved on before the refill was handled; a new job is coming.
+    Stale,
+    /// Rate limited, at the pool's cap, or malformed.
+    Refused,
+}
+
+/// Decodes the reply to the in-flight refill request `request_id`, or `None`
+/// when the line is some other message.
+fn decode_refill_response(raw: &str, request_id: u64) -> Option<RefillOutcome> {
+    let msg: StratumMessage = serde_json::from_str(raw).ok()?;
+    if msg.method.is_some() || msg.id != Some(request_id) {
+        return None;
+    }
+    if let Some(error) = msg.error {
+        return Some(if error.trim().eq_ignore_ascii_case("stale job") {
+            RefillOutcome::Stale
+        } else {
+            RefillOutcome::Refused
+        });
+    }
+    Some(
+        msg.result
+            .and_then(|result| serde_json::from_value::<PoolJob>(result).ok())
+            .map(|mut job| {
+                job.received_at = Some(Instant::now());
+                RefillOutcome::Job(job)
+            })
+            .unwrap_or(RefillOutcome::Refused),
+    )
 }
 
 fn friendly_pool_connect_error(endpoint: &PoolEndpoint, detail: &str) -> String {
@@ -3214,6 +3317,135 @@ mod tests {
         assert_eq!(request.lock().unwrap().as_deref(), Some("old"));
         assert!(!take_ready_nonce_refill(&request, Some("new"), true));
         assert!(request.lock().unwrap().is_none());
+    }
+
+    /// A pool advertising `nonce_refill_v1` answers `refill` on the same
+    /// session; `refuse` makes it reply with an error instead.
+    fn run_refill_pool(refuse: bool) -> (Vec<PoolEvent>, usize) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut logins = 0;
+            listener.set_nonblocking(true).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(6);
+            while Instant::now() < deadline {
+                let socket = match listener.accept() {
+                    Ok((socket, _)) => socket,
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(err) => panic!("accept: {err}"),
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_millis(300)))
+                    .unwrap();
+                let mut socket = socket;
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                let mut line = String::new();
+                while Instant::now() < deadline {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break,
+                        Ok(_) => {}
+                        Err(_) => continue,
+                    }
+                    let Ok(msg) = serde_json::from_str::<Value>(line.trim()) else {
+                        continue;
+                    };
+                    match msg["method"].as_str() {
+                        Some("login") => {
+                            logins += 1;
+                            writeln!(
+                                socket,
+                                "{}",
+                                serde_json::json!({"id": 1, "status": "ok", "result": {
+                                "protocol_version": 2,
+                                "capabilities": ["submit_claimed_hash", "nonce_refill_v1"]}})
+                            )
+                            .unwrap();
+                            writeln!(socket, "{}", serde_json::json!({"method": "job", "params": {
+                                "job_id": "job", "template_id": "t", "header_base": "11".repeat(92),
+                                "target": "ff".repeat(32), "height": 1, "nonce_start": 0, "nonce_end": 1000}})).unwrap();
+                        }
+                        Some("refill") => {
+                            assert_eq!(msg["params"]["job_id"], "job");
+                            let reply = if refuse {
+                                serde_json::json!({"id": msg["id"], "error": "refill rate limited"})
+                            } else {
+                                serde_json::json!({"id": msg["id"], "status": "ok", "result": {
+                                    "job_id": "job-2", "template_id": "t", "header_base": "11".repeat(92),
+                                    "target": "ff".repeat(32), "height": 1,
+                                    "nonce_start": 5000, "nonce_end": 6000}})
+                            };
+                            writeln!(socket, "{reply}").unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+                if logins >= 2 {
+                    break;
+                }
+            }
+            logins
+        });
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let client = PoolClient::connect(
+            &address.to_string(),
+            "test".into(),
+            "rig".into(),
+            Arc::clone(&shutdown),
+        )
+        .unwrap();
+        let mut events = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut requested = false;
+        while Instant::now() < deadline {
+            let Some(event) = client.recv_event_timeout(Duration::from_millis(100)) else {
+                continue;
+            };
+            if !requested && matches!(&event, PoolEvent::Job(job) if job.job_id == "job") {
+                client.request_nonce_refill("job");
+                requested = true;
+            }
+            let done = matches!(&event, PoolEvent::Job(job) if job.job_id == "job-2")
+                || matches!(&event, PoolEvent::LoginAccepted(_))
+                    && events
+                        .iter()
+                        .any(|e| matches!(e, PoolEvent::LoginAccepted(_)));
+            events.push(event);
+            if done {
+                break;
+            }
+        }
+        shutdown.store(true, Ordering::Release);
+        drop(client);
+        (events, server.join().unwrap())
+    }
+
+    #[test]
+    fn nonce_refill_uses_pool_refill_without_reconnecting() {
+        let (events, logins) = run_refill_pool(false);
+        let refill = events.iter().find_map(|event| match event {
+            PoolEvent::Job(job) if job.job_id == "job-2" => Some(job),
+            _ => None,
+        });
+        let refill = refill.expect("refill job delivered");
+        assert_eq!((refill.nonce_start, refill.nonce_end), (5000, 6000));
+        assert_eq!(logins, 1, "refill must not reconnect");
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, PoolEvent::Disconnected(_))));
+    }
+
+    #[test]
+    fn refused_nonce_refill_falls_back_to_a_fresh_session() {
+        let (events, logins) = run_refill_pool(true);
+        assert_eq!(logins, 2, "a refused refill reconnects for new work");
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, PoolEvent::Disconnected(_))));
     }
 
     #[test]

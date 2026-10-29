@@ -367,6 +367,12 @@ struct Cli {
     #[arg(long = "pool-proxy", visible_alias = "socks5")]
     pool_proxy: Option<String>,
 
+    /// Run as a farm proxy instead of mining: rigs connect to this address
+    /// (for example 0.0.0.0:3333) and share one session with --pool-url,
+    /// paying --address.
+    #[arg(long = "proxy-listen")]
+    proxy_listen: Option<String>,
+
     /// Accepted for compatibility with other miners' launch templates.
     /// Blocknet pools do not use passwords.
     #[arg(long = "pass", short = 'p', alias = "password")]
@@ -818,6 +824,8 @@ pub struct Config {
     pub pool_worker: Option<String>,
     /// SOCKS5 proxy for pool connections.
     pub pool_proxy: Option<crate::pool::SocksProxy>,
+    /// Run as a farm proxy listening for rigs on this address.
+    pub proxy_listen: Option<String>,
     pub dev_fee_pool_worker: String,
     pub api_url: String,
     pub token: Option<String>,
@@ -1015,6 +1023,9 @@ impl Config {
             if pool_worker.trim().is_empty() {
                 bail!("--pool-worker is empty");
             }
+        }
+        if cli.proxy_listen.is_some() && cli.mode == Some(MiningMode::Daemon) {
+            bail!("--proxy-listen relays to a pool; it cannot be used with --mode daemon");
         }
         if cli.nonce_iters_per_lane == 0 {
             bail!("nonce-iters-per-lane must be >= 1");
@@ -1399,6 +1410,7 @@ impl Config {
                 .pool_worker
                 .as_ref()
                 .map(|value| value.trim().to_string()),
+            proxy_listen: cli.proxy_listen.clone(),
             pool_proxy: cli
                 .pool_proxy
                 .as_deref()
@@ -3702,6 +3714,7 @@ mod tests {
             pool_worker: None,
             pool_proxy: None,
             pool_password: None,
+            proxy_listen: None,
             api_url: None,
             token: None,
             wallet_password: None,
