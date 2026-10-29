@@ -1173,7 +1173,7 @@ fn enqueue_backend_command_until_deadline(
 }
 
 fn release_pending_control_counter(counter: &AtomicUsize) {
-    let _ = counter.fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+    let _ = counter.try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
         current.checked_sub(1)
     });
 }
