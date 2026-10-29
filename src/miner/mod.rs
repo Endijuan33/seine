@@ -4430,7 +4430,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn blake2b_work_quarantines_backends_without_support() {
+    fn blake2b_work_skips_backends_without_support() {
         let backend_executor = backend_executor::BackendExecutor::new();
         let supported = Arc::new(MockState::default());
         let unsupported = Arc::new(MockState::default());
@@ -4469,14 +4469,21 @@ pub(crate) mod tests {
             &backend_executor,
         )
         .expect("the BLAKE2b backend keeps mining");
-        assert_eq!(backends.len(), 1);
-        assert_eq!(backends[0].id, 1);
+        // The other backend waits for work it can hash instead of being quarantined.
+        assert_eq!(backends.len(), 2);
         assert_eq!(supported.assign_calls.load(Ordering::Relaxed), 1);
         assert_eq!(unsupported.assign_calls.load(Ordering::Relaxed), 0);
         assert!(
-            wait_for_stop_call(&unsupported, Duration::from_millis(250)),
-            "the backend without BLAKE2b must stop"
+            !wait_for_stop_call(&unsupported, Duration::from_millis(100)),
+            "the idle backend must keep running"
         );
+        distribute_work(
+            &mut backends,
+            options(crate::backend::PowAlgorithm::Argon2id),
+            &backend_executor,
+        )
+        .expect("both backends hash Argon2");
+        assert_eq!(unsupported.assign_calls.load(Ordering::Relaxed), 1);
 
         let only_unsupported = Arc::new(MockState::default());
         let mut backends = vec![slot(

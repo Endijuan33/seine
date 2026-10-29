@@ -26,7 +26,8 @@ display driver plus the NVRTC runtime libraries.
 - **Windows:** the release archive bundles the CUDA 12.8.61 NVRTC DLLs beside
   `seine.exe`. No CUDA Toolkit installation or `PATH` change is needed.
 - **Linux:** install the CUDA driver and NVRTC libraries from your distribution or
-  NVIDIA.
+  NVIDIA. Without NVRTC the GPU still mines BLAKE2b blocks (from block 103,680)
+  with a kernel built into Seine, but cannot mine Argon2 blocks before then.
 - **Source builds on Windows:** the build uses cudarc's CUDA 12.x loader, so a
   machine with only CUDA 13.x DLL names (for example `nvrtc64_130_0.dll`) is not
   discovered. Install the CUDA 12.8 NVRTC redistributable or add its `bin`
