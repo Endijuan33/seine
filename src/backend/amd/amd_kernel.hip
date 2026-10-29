@@ -93,6 +93,10 @@ __device__ __forceinline__ unsigned int coop_shfl_u32(
 #endif
 // SEINE_AMD_DI_PREFETCH (off): in the data-independent half, load the next
 //   block's reference block into registers one block early.
+// Read the feed-forward words with the column loads (direct layout only).
+#ifndef SEINE_AMD_FF_EARLY
+#define SEINE_AMD_FF_EARLY 1
+#endif
 #ifndef SEINE_AMD_DI_PREFETCH
 #define SEINE_AMD_DI_PREFETCH 0
 #endif
@@ -219,11 +223,26 @@ __device__ __forceinline__ unsigned long long load_u64_le(const unsigned char *s
     return value;
 }
 
+// Rotate right by a constant 0 < n < 64, one 32-bit funnel shift per half.
 __device__ __forceinline__ unsigned long long rotr64(
     unsigned long long x,
     unsigned int n
 ) {
-    return (x >> n) | (x << (64U - n));
+    const unsigned int lo = static_cast<unsigned int>(x);
+    const unsigned int hi = static_cast<unsigned int>(x >> 32);
+    unsigned int rlo;
+    unsigned int rhi;
+    if (n == 32U) {
+        rlo = hi;
+        rhi = lo;
+    } else if (n < 32U) {
+        rlo = __builtin_amdgcn_alignbit(hi, lo, n);
+        rhi = __builtin_amdgcn_alignbit(lo, hi, n);
+    } else {
+        rlo = __builtin_amdgcn_alignbit(lo, hi, n - 32U);
+        rhi = __builtin_amdgcn_alignbit(hi, lo, n - 32U);
+    }
+    return (static_cast<unsigned long long>(rhi) << 32) | static_cast<unsigned long long>(rlo);
 }
 
 __device__ __forceinline__ void blake2b_g(
@@ -526,14 +545,14 @@ __device__ __forceinline__ void permute_step(
     unsigned long long &d
 ) {
     a = blamka(a, b);
-    d = ((d ^ a) >> 32) | ((d ^ a) << (64 - 32));
+    d = rotr64(d ^ a, 32U);
     c = blamka(c, d);
-    b = ((b ^ c) >> 24) | ((b ^ c) << (64 - 24));
+    b = rotr64(b ^ c, 24U);
 
     a = blamka(a, b);
-    d = ((d ^ a) >> 16) | ((d ^ a) << (64 - 16));
+    d = rotr64(d ^ a, 16U);
     c = blamka(c, d);
-    b = ((b ^ c) >> 63) | ((b ^ c) << 1);
+    b = rotr64(b ^ c, 63U);
 }
 
 // Returns word 0 of the block just written (valid when SEINE_AMD_CARRY_WORD0).
@@ -651,13 +670,6 @@ __device__ __forceinline__ unsigned long long compress_block_coop_impl(
         unsigned long long cc = scratch_q[cb + 32U + col_sub];
         unsigned long long cd = scratch_q[cb + 64U + col_sub];
         unsigned long long ce = scratch_q[cb + 96U + col_sub];
-        permute_step(ca, cc, cd, ce);
-        // Column diagonals: quad rotation instead of shared-memory round-trip.
-        unsigned long long ca2 = ca;
-        unsigned long long cc2 = quad_rot_1(cc, shfl_base, lane);
-        unsigned long long cd2 = quad_rot_2(cd, shfl_base, lane);
-        unsigned long long ce2 = quad_rot_3(ce, shfl_base, lane);
-        permute_step(ca2, cc2, cd2, ce2);
         const unsigned int p0 = lane;
         const unsigned int p1 = (lane + 1U) & 3U;
         const unsigned int p2 = (lane + 2U) & 3U;
@@ -666,13 +678,34 @@ __device__ __forceinline__ unsigned long long compress_block_coop_impl(
         const unsigned int q1 = cb + 32U + (p1 >> 1) * 16U + (p1 & 1U);
         const unsigned int q2 = cb + 64U + (p2 >> 1) * 16U + (p2 & 1U);
         const unsigned int q3 = cb + 96U + (p3 >> 1) * 16U + (p3 & 1U);
+#if SEINE_AMD_DIRECT_LAYOUT && SEINE_AMD_FF_EARLY
+        const unsigned long long ff0 = scratch_r[q0];
+        const unsigned long long ff1 = scratch_r[q1];
+        const unsigned long long ff2 = scratch_r[q2];
+        const unsigned long long ff3 = scratch_r[q3];
+        __builtin_amdgcn_sched_barrier(0);
+#endif
+        permute_step(ca, cc, cd, ce);
+        // Column diagonals: quad rotation instead of shared-memory round-trip.
+        unsigned long long ca2 = ca;
+        unsigned long long cc2 = quad_rot_1(cc, shfl_base, lane);
+        unsigned long long cd2 = quad_rot_2(cd, shfl_base, lane);
+        unsigned long long ce2 = quad_rot_3(ce, shfl_base, lane);
+        permute_step(ca2, cc2, cd2, ce2);
 #if SEINE_AMD_DIRECT_LAYOUT
         // Feed-forward and store from registers; thread 0 holds word 0 (q0 == 0)
         // for the broadcast below.
+#if SEINE_AMD_FF_EARLY
+        const unsigned long long m0 = ca2 ^ ff0;
+        const unsigned long long m1 = cc2 ^ ff1;
+        const unsigned long long m2 = cd2 ^ ff2;
+        const unsigned long long m3 = ce2 ^ ff3;
+#else
         const unsigned long long m0 = ca2 ^ scratch_r[q0];
         const unsigned long long m1 = cc2 ^ scratch_r[q1];
         const unsigned long long m2 = cd2 ^ scratch_r[q2];
         const unsigned long long m3 = ce2 ^ scratch_r[q3];
+#endif
         if (xor_out) {
             const unsigned long long o0 = out[q0] ^ m0;
             const unsigned long long o1 = out[q1] ^ m1;

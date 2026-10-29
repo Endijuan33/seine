@@ -9,7 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
-- **AMD Radeon GPUs mine on Linux, about a third faster than the first HIP kernel and more than twice as fast on cards with few lanes** (measured on a Radeon PRO V710, RDNA3, run as root: +34% at 12 lanes, +33% at 8, +126% at 4), and the Linux release now includes the AMD backend. Pass `--backend amd` with the ROCm HIP runtime installed; each hash lane uses 2 GiB of VRAM. Run Seine as root, or apply the one-line command it prints at startup, to get the full gain. See [docs/guides/amd.md](docs/guides/amd.md).
+- **AMD Radeon GPUs mine on Linux, about 40% faster than the first HIP kernel and more than twice as fast on cards with few lanes** (measured on a Radeon PRO V710, RDNA3, run as root: +38% at 12 lanes, +46% at 8, +135% at 4), and the Linux release now includes the AMD backend. Pass `--backend amd` with the ROCm HIP runtime installed; each hash lane uses 2 GiB of VRAM. Run Seine as root, or apply the one-line command it prints at startup, to get the full gain. See [docs/guides/amd.md](docs/guides/amd.md).
 - **CPU threads start on a new block about 0.3 s sooner.** When the pool moves to a new block, Seine now drops hashes that can no longer win instead of finishing them first (job switch measured at 240 ms → 7 ms on a Zen 4 EPYC). Job refreshes within the same block still finish their hashes, so those shares still count.
 - **Ryzen 9000 and 7000 desktops mine faster:** about 16% on Zen 5 (Ryzen 7 9700X) on Linux and 14% on Windows, and 7% on Zen 4 (Ryzen 7 7700X) on Linux, with every thread in use.
 - **About 7% faster on AMD Zen 4c EPYC on Linux** (measured on an EPYC 9754).
