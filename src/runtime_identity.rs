@@ -169,11 +169,13 @@ fn l3_cores() -> Option<u32> {
 }
 
 #[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
 fn l3_cores() -> Option<u32> {
     None
 }
 
 /// Number of CPUs in a Linux cpu list such as `0-15,128-143`.
+#[allow(dead_code)]
 fn count_cpu_list(raw: &str) -> Option<usize> {
     raw.trim()
         .split(',')
