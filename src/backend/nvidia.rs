@@ -1177,7 +1177,7 @@ pub struct NvidiaBackend {
     kernel_tuning: RwLock<Option<NvidiaKernelTuning>>,
     shared: Arc<NvidiaShared>,
     nonblocking_control: Mutex<NonblockingControlState>,
-    interrupt_controller: RwLock<Option<CudaInterruptController>>,
+    interrupt_controller: Arc<RwLock<Option<CudaInterruptController>>>,
     worker: Mutex<Option<NvidiaWorker>>,
     max_lanes: AtomicUsize,
     pinned_lanes: AtomicUsize,
@@ -1216,7 +1216,7 @@ impl NvidiaBackend {
             kernel_tuning: RwLock::new(None),
             shared: Arc::new(NvidiaShared::new()),
             nonblocking_control: Mutex::new(NonblockingControlState::default()),
-            interrupt_controller: RwLock::new(None),
+            interrupt_controller: Arc::new(RwLock::new(None)),
             worker: Mutex::new(None),
             max_lanes: AtomicUsize::new(1),
             pinned_lanes: AtomicUsize::new(0),
@@ -1580,7 +1580,7 @@ impl PowBackend for NvidiaBackend {
         require_cuda_libraries()?;
         let selected = self.validate_or_select_device()?;
         let tuning = self.resolve_kernel_tuning(&selected);
-        let mut engine = CudaArgon2Engine::new(
+        let engine = CudaArgon2Engine::new(
             selected.index,
             selected.memory_total_mib,
             selected.memory_free_mib,
@@ -1633,6 +1633,32 @@ impl PowBackend for NvidiaBackend {
         let enforce_template_stop = self.tuning_options.enforce_template_stop;
         let mut blake2b_state =
             blake2b::Blake2bWorkerState::new(selected.index, self.cubin_cache_dir.clone());
+        let rebuild = {
+            let selected = selected.clone();
+            let fused_target_check = self.tuning_options.fused_target_check;
+            let cubin_cache_dir = self.cubin_cache_dir.clone();
+            let interrupt_slot = Arc::clone(&self.interrupt_controller);
+            Box::new(move || {
+                let engine = CudaArgon2Engine::new(
+                    selected.index,
+                    selected.memory_total_mib,
+                    selected.memory_free_mib,
+                    tuning,
+                    tuning.max_lanes_hint,
+                    tuning.hashes_per_launch_per_lane,
+                    fused_target_check,
+                    &cubin_cache_dir,
+                )?;
+                if let Ok(mut slot) = interrupt_slot.write() {
+                    *slot = Some(engine.interrupt_controller());
+                }
+                Ok(engine)
+            })
+        };
+        let mut argon2 = Argon2EngineSlot {
+            engine: Some(engine),
+            rebuild,
+        };
         let handle = thread::Builder::new()
             .name(format!(
                 "seine-nvidia-worker-{}",
@@ -1640,7 +1666,7 @@ impl PowBackend for NvidiaBackend {
             ))
             .spawn(move || {
                 worker_loop(
-                    &mut engine,
+                    &mut argon2,
                     &mut blake2b_state,
                     assignment_rx,
                     control_rx,
@@ -2040,8 +2066,49 @@ impl BenchBackend for NvidiaBackend {
     }
 }
 
+/// The worker's Argon2 engine. BLAKE2b work drops it to free its lane memory;
+/// Argon2 work after that rebuilds it with the start-time parameters.
+struct Argon2EngineSlot {
+    engine: Option<CudaArgon2Engine>,
+    rebuild: Box<dyn FnMut() -> Result<CudaArgon2Engine> + Send>,
+}
+
+impl Argon2EngineSlot {
+    /// Drops the engine and returns its lane memory to the device. Freed
+    /// stream-ordered allocations otherwise stay reserved in the device's
+    /// default memory pool.
+    fn release(&mut self) {
+        let Some(engine) = self.engine.take() else {
+            return;
+        };
+        let stream = Arc::clone(&engine.stream);
+        drop(engine);
+        let _ = stream.synchronize();
+        let ctx = stream.context();
+        // Without async allocation the frees above were synchronous and
+        // there is no pool to trim.
+        if ctx.has_async_alloc() {
+            unsafe {
+                let mut pool: cudarc::driver::sys::CUmemoryPool = std::ptr::null_mut();
+                if cudarc::driver::sys::cuDeviceGetDefaultMemPool(&mut pool, ctx.cu_device())
+                    == cudarc::driver::sys::CUresult::CUDA_SUCCESS
+                {
+                    let _ = cudarc::driver::sys::cuMemPoolTrimTo(pool, 0);
+                }
+            }
+        }
+    }
+
+    fn ensure(&mut self) -> Result<&mut CudaArgon2Engine> {
+        if self.engine.is_none() {
+            self.engine = Some((self.rebuild)()?);
+        }
+        Ok(self.engine.as_mut().expect("engine present"))
+    }
+}
+
 fn worker_loop(
-    engine: &mut CudaArgon2Engine,
+    argon2: &mut Argon2EngineSlot,
     blake2b: &mut blake2b::Blake2bWorkerState,
     assignment_rx: Receiver<WorkerCommand>,
     control_rx: Receiver<WorkerCommand>,
@@ -2058,8 +2125,17 @@ fn worker_loop(
     let mut running = true;
     let mut adaptive_pressure = 0u32;
     let mut transient_retries: u32 = 0;
-    let mut nonce_buf = vec![0u64; engine.max_hashes_per_launch()];
-    let max_launch_depth = engine.max_hashes_per_launch_per_lane().max(1);
+    let (mut nonce_buf, max_launch_depth, argon2_lanes) = {
+        let engine = argon2
+            .engine
+            .as_ref()
+            .expect("worker starts with an engine");
+        (
+            vec![0u64; engine.max_hashes_per_launch()],
+            engine.max_hashes_per_launch_per_lane().max(1),
+            engine.max_lanes().max(1),
+        )
+    };
 
     shared
         .active_hashes_per_launch_per_lane
@@ -2270,9 +2346,11 @@ fn worker_loop(
         if current.work.template.pow == crate::backend::PowAlgorithm::Blake2b512 {
             let target_snapshot = current.work.template.target_snapshot();
             let stop_at = enforce_template_stop.then_some(current.work.template.stop_at);
+            // Free the Argon2 lane memory; BLAKE2b needs none.
+            argon2.release();
             shared
                 .active_lanes
-                .store(engine.max_lanes().max(1) as u64, Ordering::Release);
+                .store(argon2_lanes as u64, Ordering::Release);
             let batch = match blake2b.run_batch(
                 &current.work.template.header_base,
                 current.next_nonce,
@@ -2324,6 +2402,18 @@ fn worker_loop(
             }
             continue;
         }
+
+        let engine = match argon2.ensure() {
+            Ok(engine) => engine,
+            Err(err) => {
+                emit_worker_error(
+                    &shared,
+                    &instance_id,
+                    format!("failed to rebuild the CUDA Argon2 engine: {err:#}"),
+                );
+                break;
+            }
+        };
 
         let mut hashes_per_launch_per_lane = max_launch_depth;
         if adaptive_launch_depth {

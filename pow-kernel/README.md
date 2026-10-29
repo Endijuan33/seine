@@ -50,8 +50,8 @@ the 156-byte v2 header costs one compression per nonce. The reference lives in
 `hashlib.blake2b` until upstream publishes official ones; the kernel is
 checked against the reference for every header length from 0 to 300 bytes.
 
-The miner does not use it yet. Portable scalar rate on one 9950X3D core:
-about 8 MH/s (14 MH/s with `-C target-cpu=native`).
+CPU workers use it for BLAKE2b templates. To print the single-thread scan
+rate on a host:
 
 ```bash
 cargo +1.93.0 run --release --locked -p blocknet-pow-kernel --example blake2b_pow_rate -- 3

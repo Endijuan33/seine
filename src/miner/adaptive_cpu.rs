@@ -1305,6 +1305,27 @@ impl Controller {
                             let slots = backends.iter().zip(&all_snapshots)
                                 .filter(|(_, snapshot)| snapshot.running)
                                 .map(|(backend, _)| backend.worker_capacity()).min().unwrap_or(0);
+                            if backends.iter().any(|backend| backend.blake2b_seen()) {
+                                // BLAKE2b work runs every provisioned worker without
+                                // arenas. Argon2 tuning stops for the rest of the run
+                                // so thread, kernel and telemetry results stay Argon2-only.
+                                if let Some(monitor) = &mut kernels.monitor {
+                                    let now = started.elapsed().as_secs();
+                                    monitor.observe(now, &all_snapshots, crate::config::CpuAutotuneResources { parallelism: 0, total_bytes: None, available_bytes: None });
+                                    monitor.abort(now, seine_telemetry::tuning::TrialReason::ContextChanged);
+                                }
+                                if let Some(tui) = &tui {
+                                    if let Ok(mut state) = tui.lock() {
+                                        state.threads = slots * snapshots.len();
+                                        if let Some(control) = &mut state.thread_control {
+                                            control.current_threads = slots;
+                                            control.max_threads = slots;
+                                        }
+                                    }
+                                }
+                                info("MINER", "cpu-autotune | stopped: BLAKE2b work runs every CPU worker");
+                                break;
+                            }
                             let actual = snapshots.iter().map(|s| s.threads).min().unwrap_or(0);
                             let owned = snapshots.iter().map(|s| s.committed_bytes).sum();
                             let count_failures =

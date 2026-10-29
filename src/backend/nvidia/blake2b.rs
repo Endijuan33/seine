@@ -497,4 +497,92 @@ mod tests {
         assert_eq!(hashes, count);
         assert_eq!(found, expected);
     }
+
+    #[test]
+    #[ignore = "requires NVIDIA GPU + CUDA runtime; run manually under gpuq"]
+    fn nvidia_backend_frees_argon2_memory_for_blake2b_and_rebuilds_it() {
+        use crate::backend::nvidia::{NvidiaBackend, NvidiaBackendTuningOptions};
+        use crate::backend::{
+            BackendEvent, NonceChunk, PowAlgorithm, PowBackend, WorkAssignment, WorkTemplate,
+        };
+        use std::collections::BTreeMap;
+        use std::time::Duration;
+
+        let dir = std::env::temp_dir().join(format!("seine-blake2b-memory-{}", std::process::id()));
+        let backend = NvidiaBackend::new(
+            Some(0),
+            dir.join("seine.nvidia-autotune.json"),
+            1,
+            NvidiaBackendTuningOptions {
+                max_rregcount_override: Some(super::super::DEFAULT_NVIDIA_MAX_RREGCOUNT),
+                max_lanes_override: Some(1),
+                ..NvidiaBackendTuningOptions::default()
+            },
+        );
+        let (tx, rx) = crossbeam_channel::unbounded();
+        backend.set_instance_id(1);
+        backend.set_event_sink(tx);
+        backend.start().expect("NVIDIA backend starts");
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let free_bytes = || ctx.mem_get_info().expect("memory info").0 as u64;
+
+        let work = |epoch: u64, pow, header_len, start, count| WorkAssignment {
+            template: Arc::new(WorkTemplate {
+                work_id: epoch,
+                epoch,
+                header_base: Arc::from(vec![7u8; header_len]),
+                pow,
+                target: [0xff; 32],
+                dynamic_share_target: None,
+                pause_on_solution: false,
+                stop_at: Instant::now() + Duration::from_secs(60),
+            }),
+            nonce_chunk: NonceChunk {
+                start_nonce: start,
+                nonce_count: count,
+            },
+        };
+        let collect = |epoch: u64, count: usize| {
+            let until = Instant::now() + Duration::from_secs(60);
+            let mut found = BTreeMap::new();
+            while found.len() < count && Instant::now() < until {
+                if let Ok(BackendEvent::Solution(solution)) =
+                    rx.recv_timeout(Duration::from_millis(50))
+                {
+                    if solution.epoch == epoch {
+                        found.insert(solution.nonce, solution.hash.expect("hash"));
+                    }
+                }
+            }
+            found
+        };
+
+        backend
+            // One nonce: the Argon2 path reports one solution per launch.
+            .assign_work(work(1, PowAlgorithm::Argon2id, 92, 5, 1))
+            .expect("Argon2 work");
+        let before = collect(1, 1);
+        assert_eq!(before.len(), 1);
+        let free_with_argon2 = free_bytes();
+
+        backend
+            .assign_work(work(2, PowAlgorithm::Blake2b512, 156, 0, 1 << 20))
+            .expect("BLAKE2b work");
+        assert_eq!(collect(2, 1 << 20).len(), 1 << 20);
+        let free_with_blake2b = free_bytes();
+        // The BLAKE2b engine is created after the first reading and holds a
+        // few MiB of its own, so most of the 2 GiB lane must come back.
+        let lane = blocknet_pow_spec::CPU_LANE_MEMORY_BYTES;
+        assert!(
+            free_with_blake2b >= free_with_argon2 + lane - lane / 8,
+            "BLAKE2b work frees the Argon2 lane: {free_with_argon2} -> {free_with_blake2b}"
+        );
+
+        backend
+            .assign_work(work(3, PowAlgorithm::Argon2id, 92, 5, 1))
+            .expect("Argon2 work after BLAKE2b");
+        let after = collect(3, 1);
+        backend.stop();
+        assert_eq!(after, before, "the rebuilt engine hashes the same");
+    }
 }

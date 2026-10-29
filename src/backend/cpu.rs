@@ -143,6 +143,13 @@ struct Shared {
     started: AtomicBool,
     adaptive: bool,
     desired_workers: AtomicUsize,
+    /// Set while the current assignment is BLAKE2b: every provisioned worker
+    /// runs (the active count is otherwise sized by Argon2 arena RAM) and
+    /// workers release their arenas. `argon2_desired_workers` keeps the
+    /// count to restore when Argon2 work returns.
+    blake2b_workers: AtomicBool,
+    argon2_desired_workers: AtomicUsize,
+    blake2b_seen: AtomicBool,
     lifetime_hashes: AtomicU64,
     warmed_workers: AtomicUsize,
     worker_allocation_failures: AtomicU64,
@@ -233,6 +240,9 @@ impl CpuBackend {
                 started: AtomicBool::new(false),
                 adaptive: false,
                 desired_workers: AtomicUsize::new(lanes),
+                blake2b_workers: AtomicBool::new(false),
+                argon2_desired_workers: AtomicUsize::new(lanes),
+                blake2b_seen: AtomicBool::new(false),
                 lifetime_hashes: AtomicU64::new(0),
                 warmed_workers: AtomicUsize::new(0),
                 worker_allocation_failures: AtomicU64::new(0),
@@ -307,6 +317,8 @@ impl CpuBackend {
             self.initial_workers.min(self.worker_capacity()),
             Ordering::Release,
         );
+        self.shared.blake2b_workers.store(false, Ordering::Release);
+        self.shared.blake2b_seen.store(false, Ordering::Release);
         self.shared.lifetime_hashes.store(0, Ordering::Release);
         for ack in &self.shared.kernel_acknowledgements {
             ack.store(0, Ordering::Release);
@@ -651,6 +663,7 @@ impl PowBackend for CpuBackend {
                 .work_control
                 .lock()
                 .map_err(|_| anyhow!("CPU control lock poisoned"))?;
+            set_pow_workers(&self.shared, work.template.pow, self.worker_capacity());
             control.generation = control.generation.wrapping_add(1).max(1);
             control.work = Some(work);
             let generation = control.generation;
@@ -886,11 +899,22 @@ impl CpuBackend {
 
     pub(crate) fn set_active_threads(&self, count: usize) {
         if let Ok(_control) = self.shared.work_control.lock() {
-            self.shared
-                .desired_workers
-                .store(count.min(self.worker_capacity()), Ordering::Release);
+            let count = count.min(self.worker_capacity());
+            if self.shared.blake2b_workers.load(Ordering::Acquire) {
+                // Applied when Argon2 work returns.
+                self.shared
+                    .argon2_desired_workers
+                    .store(count, Ordering::Release);
+                return;
+            }
+            self.shared.desired_workers.store(count, Ordering::Release);
             self.shared.work_cv.notify_all();
         }
+    }
+
+    /// True once this backend has been given BLAKE2b work in the current run.
+    pub(crate) fn blake2b_seen(&self) -> bool {
+        self.shared.blake2b_seen.load(Ordering::Acquire)
     }
 
     /// Request a switch at each worker's next hash boundary. Sampling must wait
@@ -1629,6 +1653,34 @@ fn wait_for_workers_ready(
             .map_err(|_| anyhow!("CPU ready lock poisoned"))?;
         ready_guard = next_guard;
     }
+}
+
+/// Switches the active worker count for the assignment's PoW. Callers hold
+/// `work_control` so workers see the count with the new generation.
+fn set_pow_workers(shared: &Shared, pow: crate::backend::PowAlgorithm, capacity: usize) {
+    let blake2b = pow == crate::backend::PowAlgorithm::Blake2b512;
+    if blake2b == shared.blake2b_workers.load(Ordering::Acquire) {
+        return;
+    }
+    if blake2b {
+        shared.blake2b_seen.store(true, Ordering::Release);
+        shared.argon2_desired_workers.store(
+            shared.desired_workers.load(Ordering::Acquire),
+            Ordering::Release,
+        );
+        shared.blake2b_workers.store(true, Ordering::Release);
+        shared.desired_workers.store(capacity, Ordering::Release);
+    } else {
+        shared.blake2b_workers.store(false, Ordering::Release);
+        shared.desired_workers.store(
+            shared
+                .argon2_desired_workers
+                .load(Ordering::Acquire)
+                .min(capacity),
+            Ordering::Release,
+        );
+    }
+    shared.work_cv.notify_all();
 }
 
 fn has_pending_work(shared: &Shared) -> bool {

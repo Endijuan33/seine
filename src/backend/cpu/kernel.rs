@@ -195,7 +195,8 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             }
             continue;
         }
-        if arena.is_none() {
+        // BLAKE2b work needs no arena; one is allocated again when Argon2 work returns.
+        if arena.is_none() && !shared.blake2b_workers.load(Ordering::Acquire) {
             // Account for first-touch memory before allocation completes. A
             // concurrent budget refresh must not treat our own new arena as
             // competing RAM and immediately cancel the worker being added.
@@ -228,6 +229,9 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
                     );
                     arena = Some(allocated);
                     hasher = Some(initialized);
+                    // A rebuilt hasher starts on the default kernel; reapply the
+                    // requested one (already zero at startup).
+                    active_kernel_request = 0;
                     if !ready {
                         mark_worker_ready(&shared);
                         ready = true;
@@ -279,6 +283,20 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             }
             match wait_for_work_update(&shared, local_generation, thread_idx) {
                 Ok(CpuWorkUpdate::Work(generation, work)) => {
+                    if work.template.pow == PowAlgorithm::Blake2b512 && arena.is_some() {
+                        drop(arena.take());
+                        drop(hasher.take());
+                        if warmed {
+                            shared.warmed_workers.fetch_sub(1, Ordering::AcqRel);
+                            warmed = false;
+                        }
+                        if let Some(observation) = backing.take() {
+                            release_arena_backing(&shared, observation);
+                            shared
+                                .arena_committed_bytes
+                                .fetch_sub(arena_bytes, Ordering::AcqRel);
+                        }
+                    }
                     nonce = work.nonce_chunk.start_nonce.wrapping_add(thread_idx as u64);
                     lane_iters = 0;
                     lane_quota = lane_quota_for_chunk(
@@ -367,11 +385,13 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
         let request = shared.kernel_request.load(Ordering::Acquire);
         if active_kernel_request != request {
             flush_hashes(&shared, thread_idx, &mut pending_hashes);
-            hasher
-                .as_mut()
-                .expect("enabled worker has a hasher")
-                .set_kernel(super::kernel_from_request(request))
-                .expect("requested kernel was checked before publication");
+            // A worker on BLAKE2b work has no Argon2 hasher; the allocation
+            // that rebuilds it resets this request so the kernel is reapplied.
+            if let Some(hasher) = hasher.as_mut() {
+                hasher
+                    .set_kernel(super::kernel_from_request(request))
+                    .expect("requested kernel was checked before publication");
+            }
             active_kernel_request = request;
         }
         let target_snapshot = template.target_snapshot();
@@ -1597,6 +1617,118 @@ mod tests {
             }
             other => panic!("expected solution event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn blake2b_work_runs_every_worker_and_releases_arenas() {
+        use crate::backend::cpu::{request_shutdown, CpuBackendTuning};
+        use crate::backend::{NonceChunk, PowAlgorithm, PowBackend, WorkAssignment};
+
+        const ARENA_BYTES: u64 = 32 * 1024;
+        let backend = CpuBackend::adaptive(
+            2,
+            4,
+            CpuAffinityMode::Off,
+            CpuBackendTuning {
+                page_mode: crate::config::CpuPageMode::Regular,
+                ..CpuBackendTuning::default()
+            },
+        );
+        backend.shared.started.store(true, Ordering::Release);
+        let (tx, rx) = unbounded();
+        *backend.shared.event_dispatch_tx.write().unwrap() = Some(tx);
+        let handles: Vec<_> = (0..4)
+            .map(|index| {
+                let shared = Arc::clone(&backend.shared);
+                std::thread::spawn(move || super::worker_loop::<32>(shared, index, None))
+            })
+            .collect();
+        let wait = |what: &str, predicate: &dyn Fn() -> bool| {
+            let until = Instant::now() + Duration::from_secs(5);
+            while !predicate() {
+                assert!(Instant::now() < until, "timed out waiting for {what}");
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        };
+        let work = |epoch: u64, pow, start, count| WorkAssignment {
+            template: Arc::new(WorkTemplate {
+                work_id: epoch,
+                epoch,
+                header_base: Arc::from(vec![3u8; 156]),
+                pow,
+                target: [0xff; 32],
+                dynamic_share_target: None,
+                pause_on_solution: false,
+                stop_at: Instant::now() + Duration::from_secs(60),
+            }),
+            nonce_chunk: NonceChunk {
+                start_nonce: start,
+                nonce_count: count,
+            },
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            wait("startup", &|| {
+                backend.shared.ready_workers.load(Ordering::Acquire) == 4
+            });
+            backend
+                .assign_work(work(1, PowAlgorithm::Argon2id, 0, 8))
+                .unwrap();
+            wait("Argon2 work", &|| {
+                !super::super::has_pending_work(&backend.shared)
+            });
+            assert_eq!(backend.enabled_lanes(), 2);
+            assert_eq!(backend.adaptive_snapshot().resident_bytes, 2 * ARENA_BYTES);
+            assert!(!backend.blake2b_seen());
+
+            backend
+                .assign_work(work(2, PowAlgorithm::Blake2b512, 100, 4_000))
+                .unwrap();
+            assert_eq!(backend.enabled_lanes(), 4, "BLAKE2b runs every slot");
+            wait("BLAKE2b work", &|| {
+                !super::super::has_pending_work(&backend.shared)
+            });
+            wait("arena release", &|| {
+                backend.adaptive_snapshot().resident_bytes == 0
+            });
+            assert!(backend.blake2b_seen());
+            let blake2b_solutions: Vec<u64> = rx
+                .try_iter()
+                .filter_map(|event| match event {
+                    BackendEvent::Solution(solution) if solution.epoch == 2 => Some(solution.nonce),
+                    _ => None,
+                })
+                .collect();
+            let mut sorted = blake2b_solutions.clone();
+            sorted.sort_unstable();
+            assert_eq!(sorted, (100..4_100).collect::<Vec<_>>());
+
+            // A controller resize during BLAKE2b applies when Argon2 returns.
+            backend.set_active_threads(1);
+            assert_eq!(backend.enabled_lanes(), 4);
+            backend
+                .assign_work(work(3, PowAlgorithm::Argon2id, 10_000, 4))
+                .unwrap();
+            assert_eq!(backend.enabled_lanes(), 1);
+            wait("Argon2 after BLAKE2b", &|| {
+                !super::super::has_pending_work(&backend.shared)
+            });
+            assert_eq!(backend.adaptive_snapshot().resident_bytes, ARENA_BYTES);
+            // The nonce stride stays at the four slots, so the one active lane
+            // hashes its quarter of the chunk on its rebuilt arena.
+            let argon2_solutions: Vec<u64> = rx
+                .try_iter()
+                .filter_map(|event| match event {
+                    BackendEvent::Solution(solution) if solution.epoch == 3 => Some(solution.nonce),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(argon2_solutions, vec![10_000]);
+        }));
+        request_shutdown(&backend.shared);
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        result.unwrap();
     }
 
     #[test]
