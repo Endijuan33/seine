@@ -113,6 +113,19 @@ a wave64-native kernel (one lane per 64-thread wavefront, or four lanes per wave
 with 16-wide shuffles) and launch depth > 1 for CDNA. Do not quote these numbers as AMD GPU
 performance for the README until an RDNA card has been measured.
 
+Hourly RDNA sources (verified 2026-10-28): Hostkey Netherlands bare metal
+`gpu.v2-R9700` (1x Radeon AI PRO R9700 32 GB, RDNA4 gfx1201, $0.705/h, Ubuntu
+24.04 from the catalogue, billed per started hour until the service is
+cancelled); Azure `Standard_NV24ads_V710_v5` (1x Radeon PRO V710 24 GB, RDNA3
+gfx1101, ~$2.00/h in eastus; `scripts/cohort/az.py`); Azure
+`Standard_NG32ads_V620_v1` (1x Radeon PRO V620 32 GB, RDNA2 gfx1030, ~$2.54/h in
+eastus2). At 2 GiB per lane that is ~15, ~11 and ~15 lanes. AWS g4ad (V520,
+gfx1011) is retired and was never ROCm-supported; vast.ai, Clore, RunPod and Cudo
+listed no RDNA cards. Driver install on a fresh Ubuntu 24.04 host:
+`scripts/cohort/remote_rocm_install.sh` (ROCm 10.1 per-target packages; the V620
+needs the Microsoft-published 6.4.2.2 build via `MODE=azure-v620`), then
+`remote_amd_setup.sh` and `remote_amd_bench.sh` as on the MI325X.
+
 ## Qualify the rental and software stack
 
 The first native HIP result exists as of 2026-10-28 (see "First hardware
