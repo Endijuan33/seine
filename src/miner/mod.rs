@@ -458,6 +458,9 @@ fn run_with_thread_control_inner(
         .count() as BackendInstanceId;
     let mut nvidia_index: BackendInstanceId = 0;
     let (deferred_tx, deferred_rx) = bounded::<BackendSlot>(cfg.backend_specs.len());
+    // With another backend to start on, the network loop runs while NVIDIA
+    // backends initialize, so they can learn the network's PoW first.
+    crate::backend::set_network_pow_expected(non_nvidia_index > 0);
     let mut nvidia_event_sources: Vec<Receiver<BackendEvent>> = Vec::new();
     {
         let has_nvidia = cfg

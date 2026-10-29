@@ -31,6 +31,9 @@ use crate::backend::{
     WorkAssignment, WorkTemplate,
 };
 use crate::types::hash_meets_target;
+/// How long a starting backend waits for the first template before an
+/// Argon2 autotune.
+const NETWORK_POW_WAIT: Duration = Duration::from_secs(30);
 const BACKEND_NAME: &str = "nvidia";
 
 // Check the dependency's own library search before its infallible accessor can
@@ -1406,7 +1409,52 @@ impl NvidiaBackend {
         }
     }
 
-    fn resolve_kernel_tuning(&self, selected: &NvidiaDeviceInfo) -> NvidiaKernelTuning {
+    /// Whether resolving tuning would run the Argon2 autotune: no explicit
+    /// register cap, no tuning resolved earlier and no cached result.
+    fn needs_autotune(&self, selected: &NvidiaDeviceInfo) -> bool {
+        if self.tuning_options.max_rregcount_override.is_some() {
+            return false;
+        }
+        if matches!(self.kernel_tuning.read().as_deref(), Ok(Some(_))) {
+            return false;
+        }
+        let key = build_nvidia_autotune_key(
+            selected,
+            self.tuning_options.hashes_per_launch_per_lane.max(1),
+        );
+        load_nvidia_cached_tuning(&self.autotune_config_path, &key).is_err()
+    }
+
+    /// The network's PoW when this backend starts. Before an autotune, and
+    /// while the network loop is already running, waits up to
+    /// `NETWORK_POW_WAIT` for the first template.
+    fn network_pow_at_start(
+        &self,
+        selected: &NvidiaDeviceInfo,
+    ) -> Option<crate::backend::PowAlgorithm> {
+        if let Some(pow) = crate::backend::network_pow() {
+            return Some(pow);
+        }
+        if !crate::backend::network_pow_expected() || !self.needs_autotune(selected) {
+            return None;
+        }
+        let deadline = Instant::now() + NETWORK_POW_WAIT;
+        while Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(100));
+            if let Some(pow) = crate::backend::network_pow() {
+                return Some(pow);
+            }
+        }
+        None
+    }
+
+    /// `skip_autotune` uses the default tuning when nothing is cached, for a
+    /// backend that only expects BLAKE2b work.
+    fn resolve_kernel_tuning(
+        &self,
+        selected: &NvidiaDeviceInfo,
+        skip_autotune: bool,
+    ) -> NvidiaKernelTuning {
         if let Ok(slot) = self.kernel_tuning.read() {
             if let Some(tuning) = *slot {
                 return tuning;
@@ -1458,6 +1506,22 @@ impl NvidiaBackend {
                     *slot = Some(cached);
                 }
                 return cached;
+            }
+            Err(_) if skip_autotune => {
+                crate::miner::ui::info(
+                    "NVIDIA",
+                    format!(
+                        "nvidia-autotune | GPU {}: network is on BLAKE2b; skipping Argon2 autotune",
+                        selected.index
+                    ),
+                );
+                return self.apply_runtime_tuning_overrides(
+                    NvidiaKernelTuning {
+                        hashes_per_launch_per_lane: requested_hashes_per_launch_per_lane,
+                        ..NvidiaKernelTuning::default()
+                    },
+                    requested_hashes_per_launch_per_lane,
+                );
             }
             Err(reason) => crate::miner::ui::info(
                 "NVIDIA",
@@ -1606,27 +1670,42 @@ impl PowBackend for NvidiaBackend {
 
         require_cuda_libraries()?;
         let selected = self.validate_or_select_device()?;
-        let tuning = self.resolve_kernel_tuning(&selected);
-        let engine = CudaArgon2Engine::new(
-            selected.index,
-            selected.memory_total_mib,
-            selected.memory_free_mib,
-            tuning,
-            tuning.max_lanes_hint,
-            tuning.hashes_per_launch_per_lane,
-            self.tuning_options.fused_target_check,
-            &self.cubin_cache_dir,
-        )
-        .with_context(|| {
-            format!(
-                "failed to initialize CUDA engine on NVIDIA device {} ({})",
-                selected.index, selected.name
+        // A GPU joining a BLAKE2b network skips the Argon2 autotune and engine;
+        // the worker builds the engine if Argon2 work arrives.
+        let blake2b_only =
+            self.network_pow_at_start(&selected) == Some(crate::backend::PowAlgorithm::Blake2b512);
+        let tuning = self.resolve_kernel_tuning(&selected, blake2b_only);
+        let engine = if blake2b_only {
+            None
+        } else {
+            Some(
+                CudaArgon2Engine::new(
+                    selected.index,
+                    selected.memory_total_mib,
+                    selected.memory_free_mib,
+                    tuning,
+                    tuning.max_lanes_hint,
+                    tuning.hashes_per_launch_per_lane,
+                    self.tuning_options.fused_target_check,
+                    &self.cubin_cache_dir,
+                )
+                .with_context(|| {
+                    format!(
+                        "failed to initialize CUDA engine on NVIDIA device {} ({})",
+                        selected.index, selected.name
+                    )
+                })?,
             )
-        })?;
+        };
 
-        let discovered_lanes = engine.max_lanes().max(1);
-        let discovered_hashes_per_launch = engine.max_hashes_per_launch_per_lane() as u32;
-        let interrupt_controller = engine.interrupt_controller();
+        let (discovered_lanes, discovered_hashes_per_launch) =
+            engine.as_ref().map_or((1, 1), |engine| {
+                (
+                    engine.max_lanes().max(1),
+                    engine.max_hashes_per_launch_per_lane() as u32,
+                )
+            });
+        let interrupt_controller = engine.as_ref().map(|engine| engine.interrupt_controller());
         self.max_lanes.store(discovered_lanes, Ordering::Release);
         self.pinned_lanes
             .fetch_max(discovered_lanes, Ordering::AcqRel);
@@ -1648,7 +1727,7 @@ impl PowBackend for NvidiaBackend {
             *slot = None;
         }
         if let Ok(mut slot) = self.interrupt_controller.write() {
-            *slot = Some(interrupt_controller);
+            *slot = interrupt_controller;
         }
         self.clear_nonblocking_control_state();
 
@@ -1682,10 +1761,7 @@ impl PowBackend for NvidiaBackend {
                 Ok(engine)
             })
         };
-        let mut argon2 = Argon2EngineSlot {
-            engine: Some(engine),
-            rebuild,
-        };
+        let mut argon2 = Argon2EngineSlot { engine, rebuild };
         let handle = thread::Builder::new()
             .name(format!(
                 "seine-nvidia-worker-{}",
@@ -1977,7 +2053,7 @@ impl PowBackend for NvidiaBackend {
 impl BenchBackend for NvidiaBackend {
     fn kernel_bench(&self, seconds: u64, shutdown: &AtomicBool) -> Result<u64> {
         let selected = self.validate_or_select_device()?;
-        let tuning = self.resolve_kernel_tuning(&selected);
+        let tuning = self.resolve_kernel_tuning(&selected, false);
         let mut engine = CudaArgon2Engine::new(
             selected.index,
             selected.memory_total_mib,
@@ -2034,7 +2110,7 @@ impl BenchBackend for NvidiaBackend {
         shutdown: &AtomicBool,
     ) -> Result<Vec<KernelBenchSample>> {
         let selected = self.validate_or_select_device()?;
-        let tuning = self.resolve_kernel_tuning(&selected);
+        let tuning = self.resolve_kernel_tuning(&selected, false);
         let mut engine = CudaArgon2Engine::new(
             selected.index,
             selected.memory_total_mib,
@@ -2157,16 +2233,16 @@ fn worker_loop(
     let mut running = true;
     let mut adaptive_pressure = 0u32;
     let mut transient_retries: u32 = 0;
-    let (mut nonce_buf, max_launch_depth, argon2_lanes) = {
-        let engine = argon2
-            .engine
-            .as_ref()
-            .expect("worker starts with an engine");
-        (
+    // A worker started for BLAKE2b has no Argon2 engine yet; its sizes are
+    // read when the engine is first built.
+    let mut argon2_sized = argon2.engine.is_some();
+    let (mut nonce_buf, mut max_launch_depth, mut argon2_lanes) = match argon2.engine.as_ref() {
+        Some(engine) => (
             vec![0u64; engine.max_hashes_per_launch()],
             engine.max_hashes_per_launch_per_lane().max(1),
             engine.max_lanes().max(1),
-        )
+        ),
+        None => (Vec::new(), 1, 1),
     };
 
     shared
@@ -2448,6 +2524,15 @@ fn worker_loop(
                 break;
             }
         };
+        if !argon2_sized {
+            argon2_sized = true;
+            nonce_buf = vec![0u64; engine.max_hashes_per_launch()];
+            max_launch_depth = engine.max_hashes_per_launch_per_lane().max(1);
+            argon2_lanes = engine.max_lanes().max(1);
+            shared
+                .active_hashes_per_launch_per_lane
+                .store(max_launch_depth as u32, Ordering::Release);
+        }
 
         let mut hashes_per_launch_per_lane = max_launch_depth;
         if adaptive_launch_depth {
@@ -4112,7 +4197,12 @@ mod tests {
 
     #[test]
     fn nonblocking_cancel_completes_on_the_acknowledgement_it_waited_for() {
-        let backend = NvidiaBackend::new(None, unique_temp_file("control-ack"), 1, NvidiaBackendTuningOptions::default());
+        let backend = NvidiaBackend::new(
+            None,
+            unique_temp_file("control-ack"),
+            1,
+            NvidiaBackendTuningOptions::default(),
+        );
         let received = install_acking_worker(&backend);
         let mut status = backend.cancel_work_nonblocking().unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);

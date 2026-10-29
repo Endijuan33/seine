@@ -1,9 +1,41 @@
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 pub use blocknet_pow_spec::PowAlgorithm;
+
+/// PoW of the latest template the miner received (0 = none yet).
+static NETWORK_POW: AtomicU8 = AtomicU8::new(0);
+/// Set when the network loop starts without waiting for GPU backends, so a
+/// GPU backend that starts late can wait briefly for the first template.
+static NETWORK_POW_EXPECTED: AtomicBool = AtomicBool::new(false);
+
+/// Records the PoW of a template the miner received (or the benchmark's).
+pub(crate) fn note_network_pow(pow: PowAlgorithm) {
+    let code = match pow {
+        PowAlgorithm::Argon2id => 1,
+        PowAlgorithm::Blake2b512 => 2,
+    };
+    NETWORK_POW.store(code, Ordering::Release);
+}
+
+/// PoW of the latest template the miner received, if any.
+pub(crate) fn network_pow() -> Option<PowAlgorithm> {
+    match NETWORK_POW.load(Ordering::Acquire) {
+        1 => Some(PowAlgorithm::Argon2id),
+        2 => Some(PowAlgorithm::Blake2b512),
+        _ => None,
+    }
+}
+
+pub(crate) fn set_network_pow_expected(expected: bool) {
+    NETWORK_POW_EXPECTED.store(expected, Ordering::Release);
+}
+
+pub(crate) fn network_pow_expected() -> bool {
+    NETWORK_POW_EXPECTED.load(Ordering::Acquire)
+}
 
 /// Network whose BLAKE2b personalization the miner uses. No Faraday testnet
 /// exists yet; make this configurable alongside testnet activation rules.

@@ -1757,7 +1757,10 @@ mod tests {
         );
         backend.shared.started.store(true, Ordering::Release);
         // BLAKE2b-only workers skip the Argon2 arenas they would allocate at start.
-        backend.shared.blake2b_workers.store(true, Ordering::Release);
+        backend
+            .shared
+            .blake2b_workers
+            .store(true, Ordering::Release);
         let (tx, rx) = unbounded();
         *backend.shared.event_dispatch_tx.write().unwrap() = Some(tx);
         let handles: Vec<_> = (0..LANES)
