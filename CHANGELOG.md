@@ -9,6 +9,7 @@ supported hardware only.
 
 ## Unreleased
 
+- **NVIDIA and AMD GPUs switch to a new job without a pause.** Stopping the previous job at each new block or job used to take 0.3-1.9 s and now takes a few milliseconds (measured on an NVIDIA A10G).
 - **Encrypted pool connections and backup pools.** Point Seine at a pool's TLS port with `stratum+ssl://host:port`, and list backup pools with repeated `--pool-url` flags or commas: Seine switches to the next pool when one is down and returns to your first pool once it is back. See [pool connections](docs/guides/configuration.md#pool-connections).
 - Seine accepts the `-o URL -u ADDRESS.WORKER -p x` launch flags that mining OS templates use, so it drops into existing rig setups without custom scripts.
 - **AMD Radeon GPUs mine on Linux, about 40% faster than the first HIP kernel and more than twice as fast on cards with few lanes** (measured on a Radeon PRO V710, RDNA3, run as root: +38% at 12 lanes, +46% at 8, +135% at 4), and the Linux release now includes the AMD backend. Pass `--backend amd` with the ROCm HIP runtime installed; each hash lane uses 2 GiB of VRAM. Run Seine as root, or apply the one-line command it prints at startup, to get the full gain. See [docs/guides/amd.md](docs/guides/amd.md).
