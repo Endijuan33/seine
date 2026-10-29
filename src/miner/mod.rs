@@ -110,10 +110,19 @@ struct ActivatedBackend {
     event_rx: Receiver<BackendEvent>,
 }
 
+/// Mining BLAKE2b work needs this opt-in until its parameters are final
+/// (`blocknet_pow_spec::BLAKE2B_POW_PARAMS_FINAL`), e.g. on a Faraday testnet.
+pub(super) const PROVISIONAL_FARADAY_POW_ENV: &str = "SEINE_FARADAY_PROVISIONAL_POW";
+
+pub(super) fn provisional_faraday_pow_allowed() -> bool {
+    std::env::var_os(PROVISIONAL_FARADAY_POW_ENV).is_some_and(|value| value == "1")
+}
+
 struct DistributeWorkOptions<'a> {
     epoch: u64,
     work_id: u64,
     header_base: Arc<[u8]>,
+    pow: crate::backend::PowAlgorithm,
     target: [u8; 32],
     dynamic_share_target: Option<Arc<DynamicShareTarget>>,
     pause_on_solution: bool,
@@ -2753,7 +2762,12 @@ fn compute_backend_nonce_counts(
     max_iters_per_lane: u64,
     backend_weights: Option<&BTreeMap<BackendInstanceId, f64>>,
 ) -> Vec<u64> {
-    work_allocator::compute_backend_nonce_counts(backends, max_iters_per_lane, backend_weights)
+    work_allocator::compute_backend_nonce_counts(
+        backends,
+        max_iters_per_lane,
+        backend_weights,
+        crate::backend::PowAlgorithm::Argon2id,
+    )
 }
 
 fn backend_iters_per_lane(slot: &BackendSlot, default_iters_per_lane: u64) -> u64 {
@@ -3591,6 +3605,7 @@ pub(crate) mod tests {
         assignment_semantics: crate::backend::AssignmentSemantics,
         execution_model: crate::backend::BackendExecutionModel,
         supports_true_nonblocking: bool,
+        supports_blake2b: bool,
     }
 
     impl MockBackend {
@@ -3613,7 +3628,13 @@ pub(crate) mod tests {
                 assignment_semantics: crate::backend::AssignmentSemantics::Replace,
                 execution_model: crate::backend::BackendExecutionModel::Blocking,
                 supports_true_nonblocking: false,
+                supports_blake2b: false,
             }
+        }
+
+        fn with_blake2b(mut self) -> Self {
+            self.supports_blake2b = true;
+            self
         }
 
         fn with_preferred_iters_per_lane(mut self, preferred_iters_per_lane: u64) -> Self {
@@ -3690,6 +3711,10 @@ pub(crate) mod tests {
     impl PowBackend for MockBackend {
         fn name(&self) -> &'static str {
             self.name
+        }
+
+        fn supports_pow(&self, pow: crate::backend::PowAlgorithm) -> bool {
+            pow == crate::backend::PowAlgorithm::Argon2id || self.supports_blake2b
         }
 
         fn lanes(&self) -> usize {
@@ -4368,6 +4393,97 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn blake2b_nonce_counts_ignore_argon2_sized_allocation_hints() {
+        let state = Arc::new(MockState::default());
+        let backends = vec![slot(
+            1,
+            2,
+            Arc::new(
+                MockBackend::new("nvidia", 2, Arc::clone(&state))
+                    .with_preferred_allocation_iters_per_lane(4),
+            ),
+        )];
+        let argon2 = work_allocator::compute_backend_nonce_counts(
+            &backends,
+            10,
+            None,
+            crate::backend::PowAlgorithm::Argon2id,
+        );
+        let blake2b = work_allocator::compute_backend_nonce_counts(
+            &backends,
+            10,
+            None,
+            crate::backend::PowAlgorithm::Blake2b512,
+        );
+        assert_eq!(argon2, vec![8]);
+        assert_eq!(blake2b, vec![20]);
+    }
+
+    #[test]
+    fn blake2b_work_quarantines_backends_without_support() {
+        let backend_executor = backend_executor::BackendExecutor::new();
+        let supported = Arc::new(MockState::default());
+        let unsupported = Arc::new(MockState::default());
+        let options = |pow| DistributeWorkOptions {
+            epoch: 1,
+            work_id: 1,
+            header_base: Arc::from(vec![7u8; 156]),
+            pow,
+            target: [0xFF; 32],
+            dynamic_share_target: None,
+            pause_on_solution: false,
+            reservation: NonceReservation {
+                start_nonce: 0,
+                max_iters_per_lane: 10,
+                reserved_span: 20,
+            },
+            stop_at: Instant::now() + Duration::from_secs(1),
+            backend_weights: None,
+            strict_reservation: false,
+        };
+        let mut backends = vec![
+            slot(
+                1,
+                1,
+                Arc::new(MockBackend::new("nvidia", 1, Arc::clone(&supported)).with_blake2b()),
+            ),
+            slot(
+                2,
+                1,
+                Arc::new(MockBackend::new("amd", 1, Arc::clone(&unsupported))),
+            ),
+        ];
+        distribute_work(
+            &mut backends,
+            options(crate::backend::PowAlgorithm::Blake2b512),
+            &backend_executor,
+        )
+        .expect("the BLAKE2b backend keeps mining");
+        assert_eq!(backends.len(), 1);
+        assert_eq!(backends[0].id, 1);
+        assert_eq!(supported.assign_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(unsupported.assign_calls.load(Ordering::Relaxed), 0);
+        assert!(
+            wait_for_stop_call(&unsupported, Duration::from_millis(250)),
+            "the backend without BLAKE2b must stop"
+        );
+
+        let only_unsupported = Arc::new(MockState::default());
+        let mut backends = vec![slot(
+            3,
+            1,
+            Arc::new(MockBackend::new("metal", 1, Arc::clone(&only_unsupported))),
+        )];
+        let err = distribute_work(
+            &mut backends,
+            options(crate::backend::PowAlgorithm::Blake2b512),
+            &backend_executor,
+        )
+        .expect_err("no backend can mine BLAKE2b");
+        assert!(format!("{err:#}").contains("Blake2b512"));
+    }
+
+    #[test]
     fn distribute_work_quarantines_assignment_failures_and_reassigns_lanes() {
         let backend_executor = backend_executor::BackendExecutor::new();
         let first_state = Arc::new(MockState::default());
@@ -4398,6 +4514,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4462,6 +4579,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4517,6 +4635,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4560,6 +4679,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4605,6 +4725,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: false,
@@ -4670,6 +4791,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4695,6 +4817,7 @@ pub(crate) mod tests {
                 epoch: 2,
                 work_id: 2,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4738,6 +4861,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4784,6 +4908,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -4839,6 +4964,7 @@ pub(crate) mod tests {
                 epoch: 1,
                 work_id: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,
@@ -5215,6 +5341,7 @@ pub(crate) mod tests {
                 work_id: 1,
                 epoch: 1,
                 header_base: Arc::from(vec![7u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xFF; 32],
                 dynamic_share_target: None,
                 pause_on_solution: true,

@@ -172,26 +172,38 @@ impl Blake2bPowMidstate {
         start_nonce: u64,
         count: u64,
         target: &[u8; 32],
+        on_hit: impl FnMut(u64),
+    ) -> u64 {
+        self.scan_stride(start_nonce, 1, count, target, on_hit)
+    }
+
+    /// Like `scan`, visiting `start_nonce + i * stride` for `i < count`
+    /// (wrapping), so interleaved CPU lanes share one nonce range.
+    pub fn scan_stride(
+        &self,
+        start_nonce: u64,
+        stride: u64,
+        count: u64,
+        target: &[u8; 32],
         mut on_hit: impl FnMut(u64),
     ) -> u64 {
         let target_words = TargetWords::new(target);
+        let mut nonce = start_nonce;
         if self.tail_blocks == 1 {
-            let mut nonce = start_nonce;
             for _ in 0..count {
                 let h = self.single_block_prefix(nonce);
                 if target_words.accepts(&h) {
                     on_hit(nonce);
                 }
-                nonce = nonce.wrapping_add(1);
+                nonce = nonce.wrapping_add(stride);
             }
         } else {
-            let mut nonce = start_nonce;
             for _ in 0..count {
                 let h = self.chain(nonce);
                 if target_words.accepts(&[h[0], h[1], h[2], h[3]]) {
                     on_hit(nonce);
                 }
-                nonce = nonce.wrapping_add(1);
+                nonce = nonce.wrapping_add(stride);
             }
         }
         count

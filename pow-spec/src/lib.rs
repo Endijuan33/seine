@@ -28,11 +28,22 @@ pub fn validate_header_length(length: usize) -> Result<u32, &'static str> {
     Ok(length as u32)
 }
 
-pub fn ensure_supported_pow(height: u64) -> Result<(), &'static str> {
-    if height >= FARADAY_ACTIVATION_HEIGHT {
-        Err("Faraday PoW is not supported by this build; upgrade before height 103680")
-    } else {
-        Ok(())
+/// False until upstream publishes final BLAKE2b parameters and vectors and
+/// they pass here. Until then fork-height work is refused unless the operator
+/// opts into the provisional parameters (Faraday testnet testing).
+pub const BLAKE2B_POW_PARAMS_FINAL: bool = false;
+
+/// Picks the hash for a template height, refusing provisional BLAKE2b work
+/// unless `allow_provisional` is set.
+pub fn ensure_supported_pow(
+    height: u64,
+    allow_provisional: bool,
+) -> Result<PowAlgorithm, &'static str> {
+    match PowAlgorithm::for_height(height) {
+        PowAlgorithm::Blake2b512 if !BLAKE2B_POW_PARAMS_FINAL && !allow_provisional => {
+            Err("Faraday PoW is not supported by this build; upgrade before height 103680")
+        }
+        pow => Ok(pow),
     }
 }
 
@@ -193,11 +204,21 @@ mod tests {
     fn faraday_selection_uses_template_height() {
         assert_eq!(target_block_seconds(FARADAY_ACTIVATION_HEIGHT - 1), 300);
         assert_eq!(target_block_seconds(FARADAY_ACTIVATION_HEIGHT), 600);
-        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1).is_ok());
-        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT).is_err());
-        assert!(ensure_supported_pow(u64::MAX).is_err());
+        assert_eq!(
+            ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1, false),
+            Ok(PowAlgorithm::Argon2id)
+        );
+        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT, false).is_err());
+        assert!(ensure_supported_pow(u64::MAX, false).is_err());
+        assert_eq!(
+            ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT, true),
+            Ok(PowAlgorithm::Blake2b512)
+        );
         // A reorg can return to legacy work; no wall-clock or latched era.
-        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1).is_ok());
+        assert_eq!(
+            ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1, true),
+            Ok(PowAlgorithm::Argon2id)
+        );
     }
 
     #[test]

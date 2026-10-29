@@ -2072,7 +2072,7 @@ fn assign_pool_job(
     let handled_at = Instant::now();
     // Returning an error exits the mining loop through normal backend teardown.
     // Merely ignoring this job would leave workers hashing the previous template.
-    blocknet_pow_spec::ensure_supported_pow(job.height)
+    blocknet_pow_spec::ensure_supported_pow(job.height, super::provisional_faraday_pow_allowed())
         .map_err(|reason| anyhow::anyhow!(reason))?;
     let nonce_count = job.nonce_count();
     if nonce_count == 0 {
@@ -2246,6 +2246,7 @@ fn assign_pool_continuation(
             epoch,
             work_id,
             header_base: Arc::clone(&active_job.header_base),
+            pow: crate::backend::PowAlgorithm::for_height(active_job.job.height),
             target: active_job.target,
             dynamic_share_target: Some(Arc::clone(&active_job.dynamic_share_target)),
             pause_on_solution: false,

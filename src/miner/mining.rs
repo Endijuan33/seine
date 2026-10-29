@@ -158,6 +158,7 @@ struct RoundLoopState {
 
 struct PreparedTemplate {
     header_base: Arc<[u8]>,
+    pow: crate::backend::PowAlgorithm,
     target: [u8; 32],
     height: String,
     network_hashrate: String,
@@ -844,10 +845,16 @@ fn prepare_round_template(
             );
             return None;
         };
-        if let Err(reason) = blocknet_pow_spec::ensure_supported_pow(height) {
-            warn("TEMPLATE", reason);
-            return None;
-        }
+        let pow = match blocknet_pow_spec::ensure_supported_pow(
+            height,
+            super::provisional_faraday_pow_allowed(),
+        ) {
+            Ok(pow) => pow,
+            Err(reason) => {
+                warn("TEMPLATE", reason);
+                return None;
+            }
+        };
 
         let header_base = match decode_hex(&template.header_base, "header_base") {
             Ok(v) => v,
@@ -902,6 +909,7 @@ fn prepare_round_template(
 
         return Some(PreparedTemplate {
             header_base,
+            pow,
             target,
             height,
             network_hashrate,
@@ -914,6 +922,7 @@ struct DispatchRoundInputs<'a> {
     epoch: u64,
     work_id: u64,
     header_base: &'a Arc<[u8]>,
+    pow: crate::backend::PowAlgorithm,
     target: [u8; 32],
     reservation: super::scheduler::NonceReservation,
     stop_at: Instant,
@@ -932,6 +941,7 @@ fn dispatch_round_assignments(
             epoch: inputs.epoch,
             work_id: inputs.work_id,
             header_base: Arc::clone(inputs.header_base),
+            pow: inputs.pow,
             target: inputs.target,
             dynamic_share_target: None,
             pause_on_solution: true,
@@ -961,6 +971,7 @@ struct ExecuteRoundPhase<'a, 'cp> {
     height: &'a str,
     network_hashrate: &'a str,
     header_base: &'a Arc<[u8]>,
+    pow: crate::backend::PowAlgorithm,
     target: [u8; 32],
     current_template: &'a BlockTemplateResponse,
     control_plane: &'a mut MiningControlPlane<'cp>,
@@ -993,6 +1004,7 @@ fn execute_round_phase(phase: ExecuteRoundPhase<'_, '_>) -> Result<()> {
         height,
         network_hashrate,
         header_base,
+        pow,
         target,
         current_template,
         control_plane,
@@ -1035,6 +1047,7 @@ fn execute_round_phase(phase: ExecuteRoundPhase<'_, '_>) -> Result<()> {
         height,
         network_hashrate,
         header_base,
+        pow,
         target,
     })?;
 
@@ -1429,6 +1442,7 @@ pub(super) fn run_mining_loop(
         let is_dev_round = control_plane.dev_fee_round_active();
         let PreparedTemplate {
             header_base,
+            pow,
             target,
             height,
             network_hashrate,
@@ -1448,6 +1462,7 @@ pub(super) fn run_mining_loop(
                 epoch,
                 work_id,
                 header_base: &header_base,
+                pow,
                 target,
                 reservation,
                 stop_at,
@@ -1471,6 +1486,7 @@ pub(super) fn run_mining_loop(
             height: &height,
             network_hashrate: &network_hashrate,
             header_base: &header_base,
+            pow,
             target,
             current_template: &template,
             control_plane: &mut control_plane,
@@ -1785,6 +1801,7 @@ struct RoundInput<'a> {
     height: &'a str,
     network_hashrate: &'a str,
     header_base: &'a Arc<[u8]>,
+    pow: crate::backend::PowAlgorithm,
     target: [u8; 32],
 }
 
@@ -2060,6 +2077,7 @@ impl<'a> RoundRuntime<'a> {
                 epoch: input.epoch,
                 work_id: input.work_id,
                 header_base: Arc::clone(input.header_base),
+                pow: input.pow,
                 target: input.target,
                 stop_at: input.stop_at,
                 mode: RuntimeMode::Mining,
@@ -2128,6 +2146,7 @@ impl<'a> RoundRuntime<'a> {
                 epoch: input.epoch,
                 work_id: input.work_id,
                 header_base: Arc::clone(input.header_base),
+                pow: input.pow,
                 target: input.target,
                 stop_at: input.stop_at,
                 mode: RuntimeMode::Mining,

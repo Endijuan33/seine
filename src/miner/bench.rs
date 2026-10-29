@@ -878,6 +878,7 @@ fn run_worker_benchmark_inner(
                 epoch,
                 work_id,
                 header_base: std::sync::Arc::clone(&header_base),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: impossible_target,
                 dynamic_share_target: None,
                 pause_on_solution: true,

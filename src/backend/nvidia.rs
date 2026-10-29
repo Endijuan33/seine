@@ -1631,6 +1631,8 @@ impl PowBackend for NvidiaBackend {
         let instance_id = Arc::clone(&self.instance_id);
         let adaptive_launch_depth = self.tuning_options.adaptive_launch_depth;
         let enforce_template_stop = self.tuning_options.enforce_template_stop;
+        let mut blake2b_state =
+            blake2b::Blake2bWorkerState::new(selected.index, self.cubin_cache_dir.clone());
         let handle = thread::Builder::new()
             .name(format!(
                 "seine-nvidia-worker-{}",
@@ -1639,6 +1641,7 @@ impl PowBackend for NvidiaBackend {
             .spawn(move || {
                 worker_loop(
                     &mut engine,
+                    &mut blake2b_state,
                     assignment_rx,
                     control_rx,
                     shared,
@@ -1876,6 +1879,10 @@ impl PowBackend for NvidiaBackend {
         PreemptionGranularity::Hashes((self.lanes() as u64).saturating_mul(per_launch).max(1))
     }
 
+    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
             preferred_iters_per_lane: Some(
@@ -2035,6 +2042,7 @@ impl BenchBackend for NvidiaBackend {
 
 fn worker_loop(
     engine: &mut CudaArgon2Engine,
+    blake2b: &mut blake2b::Blake2bWorkerState,
     assignment_rx: Receiver<WorkerCommand>,
     control_rx: Receiver<WorkerCommand>,
     shared: Arc<NvidiaShared>,
@@ -2256,6 +2264,64 @@ fn worker_loop(
             finalize_active_assignment(&shared, current, 0);
             active = None;
             drain_fence_waiters(&mut fence_waiters, Ok(()));
+            continue;
+        }
+
+        if current.work.template.pow == crate::backend::PowAlgorithm::Blake2b512 {
+            let target_snapshot = current.work.template.target_snapshot();
+            let stop_at = enforce_template_stop.then_some(current.work.template.stop_at);
+            shared
+                .active_lanes
+                .store(engine.max_lanes().max(1) as u64, Ordering::Release);
+            let batch = match blake2b.run_batch(
+                &current.work.template.header_base,
+                current.next_nonce,
+                current.remaining,
+                &target_snapshot.target,
+                stop_at,
+            ) {
+                Ok(batch) => batch,
+                Err(err) => {
+                    emit_worker_error(
+                        &shared,
+                        &instance_id,
+                        format!("CUDA BLAKE2b batch failed: {err:#}"),
+                    );
+                    break;
+                }
+            };
+            current.hashes_done = current.hashes_done.saturating_add(batch.hashes);
+            current.next_nonce = current.next_nonce.wrapping_add(batch.hashes);
+            current.remaining = current.remaining.saturating_sub(batch.hashes);
+            shared.hashes.fetch_add(batch.hashes, Ordering::Relaxed);
+            shared
+                .inflight_assignment_hashes
+                .store(current.hashes_done, Ordering::Release);
+            let mut paused = false;
+            for (nonce, hash) in batch.solutions {
+                send_backend_event(
+                    &shared,
+                    BackendEvent::Solution(MiningSolution {
+                        epoch: current.work.template.epoch,
+                        nonce,
+                        hash: Some(hash),
+                        share_binding_id: target_snapshot.share_binding_id,
+                        backend_id: instance_id.load(Ordering::Acquire),
+                        backend: BACKEND_NAME,
+                        found_at: std::time::Instant::now(),
+                    }),
+                );
+                if current.work.template.pause_on_solution {
+                    paused = true;
+                    break;
+                }
+            }
+            if paused {
+                queued.clear();
+                finalize_active_assignment(&shared, current, 0);
+                active = None;
+                drain_fence_waiters(&mut fence_waiters, Ok(()));
+            }
             continue;
         }
 
@@ -3941,6 +4007,7 @@ mod tests {
             work_id,
             epoch: 7,
             header_base: Arc::<[u8]>::from(vec![1u8; 92]),
+            pow: crate::backend::PowAlgorithm::Argon2id,
             target: [0xff; 32],
             dynamic_share_target: None,
             pause_on_solution: true,

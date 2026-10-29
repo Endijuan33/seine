@@ -1666,6 +1666,7 @@ mod tests {
                         work_id: 1,
                         epoch: 1,
                         header_base: Arc::from(vec![0; blocknet_pow_spec::POW_HEADER_BASE_LEN]),
+                        pow: crate::backend::PowAlgorithm::Argon2id,
                         target: [0; 32],
                         dynamic_share_target: None,
                         pause_on_solution: false,

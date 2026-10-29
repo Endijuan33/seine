@@ -812,6 +812,10 @@ impl PowBackend for CpuBackend {
         PreemptionGranularity::Hashes(self.shared.control_check_interval_hashes.max(1))
     }
 
+    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
             preferred_iters_per_lane: None,
@@ -2445,6 +2449,7 @@ mod tests {
                     work_id: 7,
                     epoch: 1,
                     header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                    pow: crate::backend::PowAlgorithm::Argon2id,
                     target: [0xFF; 32],
                     dynamic_share_target: None,
                     pause_on_solution: false,

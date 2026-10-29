@@ -2,9 +2,10 @@
 
 Source: the maintainer packet archived in the sibling pool's `docs/faraday/`
 (2026-10-16) and the fork's core spec §6 (BLAKE2b decided 2026-10-26).
-Activation: height 103,680. **This build is not a Faraday miner.** The BLAKE2b
-kernels exist but mining still refuses fork-height work. Official PoW vectors,
-the final header and PQ address rules are pending. See the pool's
+Activation: height 103,680. **By default this build is not a Faraday miner:**
+it mines BLAKE2b at the fork height only with `SEINE_FARADAY_PROVISIONAL_POW=1`
+(for Faraday testnet testing), because official PoW vectors are not published.
+The final header and PQ address rules are also pending. See the pool's
 `docs/FARADAY_UPSTREAM_QUESTIONS.md` for the questions prepared for upstream.
 
 ## Implemented
@@ -15,11 +16,21 @@ the final header and PQ address rules are pending. See the pool's
   caches the template prefix so the 156-byte header costs one compression per
   nonce (about 8 MH/s per desktop core, portable build). The NVIDIA engine
   (`src/backend/nvidia/blake2b.rs`) matches the CPU kernel's hits and measured
-  15 GH/s on an RTX 5090. Neither is wired into mining yet. Vectors come from
-  Python's `hashlib.blake2b` until upstream publishes official ones.
-- `pow-spec` owns an interim height guard. Pool and direct modes refuse work
-  from 103,680 onward through backend teardown. Direct mode also refuses missing
-  height. The guard follows template height, not time; it is not a BLAKE2b switch.
+  15 GH/s on an RTX 5090. Vectors come from Python's `hashlib.blake2b` until
+  upstream publishes official ones.
+- Height-based dispatch (2026-10-29): every `WorkTemplate` carries `pow`, chosen
+  from the solo template or pool job height. CPU workers hash BLAKE2b in
+  4,096-nonce strided batches from a cached midstate; NVIDIA workers run the
+  BLAKE2b engine in launches sized to about 25 ms (it has no cancel flag).
+  Backends without a BLAKE2b path (AMD, Metal) are quarantined when handed
+  BLAKE2b work; mining stops with an error if none remain. BLAKE2b work takes
+  the whole per-lane nonce reservation, since Argon2-sized allocation hints
+  would last a GPU about 2 ms. GPU tests cover the engine and an assignment
+  through the NVIDIA backend; a CPU worker test covers exact solutions.
+- `pow-spec` owns the height guard. Unless `BLAKE2B_POW_PARAMS_FINAL` is set
+  or the operator opts into provisional parameters, pool and direct modes
+  refuse work from 103,680 onward through backend teardown. Direct mode also
+  refuses missing height. The guard follows template height, not time.
 - Runtime decoding and NVIDIA/AMD/Metal buffers use the actual checked header
   length (8..4,096 bytes), replacing fixed 92-byte enforcement and Metal's
   truncating copy. The cap is a resource bound, not a final consensus layout.
@@ -50,7 +61,7 @@ rules before using Faraday testnet. Legacy benchmark fixtures remain 92 bytes.
 
 | Area | Work |
 | --- | --- |
-| CPU/GPU | Replace the interim stop with height-based dispatch to the BLAKE2b CPU and NVIDIA paths. Add algorithm capabilities to assignments, separate tuning/state by algorithm, release old Argon2 arenas, and implement or explicitly reject Faraday on AMD/Metal. Swap in official vectors. |
+| CPU/GPU | Swap in official vectors and set `BLAKE2B_POW_PARAMS_FINAL`. Release Argon2 arenas and size CPU threads/GPU memory for BLAKE2b (workers still hold their 2 GiB Argon2 arenas). Separate tuning/state and benchmarks by algorithm. Implement BLAKE2b on AMD/Metal or keep them quarantined. Make the personalization network configurable for testnet. |
 | Nonces | Pool windows are now reserved durably by header; miner refill drains solutions/submits before reconnecting. Default remains 1e6. Benchmark larger windows, refill overhead, cancellation, hot backend changes and mixed devices at actual GPU rates. |
 | PQ identity | Implement final codec/network/key rules, real end-to-end login fixtures and developer-fee PQ identity. Validate CLI/TUI/control API handling and full address copying. A new login alone does not migrate old pool balances. |
 | Submission | Verify compact submit, renewal, full-block fallback, SSE, same-height refresh and expiry against final tree-root/proof contracts. Preserve explicit daemon/pool targets. |

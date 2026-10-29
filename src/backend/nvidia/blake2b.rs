@@ -2,11 +2,12 @@
 //! midstate with `blocknet_pow_kernel`; the device hashes the final block per
 //! nonce and reports nonces whose first output limb passes the target. The
 //! host re-checks every candidate with the CPU kernel, so only exact hits leave
-//! `scan`. Not wired into the mining runtime yet.
-#![cfg_attr(not(test), allow(dead_code))]
+//! `scan`. The NVIDIA worker drives it through `Blake2bWorkerState` for
+//! templates whose height selects BLAKE2b.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 use blocknet_pow_kernel::{Blake2bPowMidstate, Blake2bPowSingleBlock};
@@ -28,6 +29,11 @@ const PROGRAM_NAME: &str = "seine_blake2b_pow.cu";
 const THREADS_PER_BLOCK: u32 = 256;
 const BLOCKS_PER_SM: u32 = 16;
 const CANDIDATE_CAPACITY: usize = 4096;
+/// Wall time one launch aims for: short enough for prompt cancel/job switches
+/// (the kernel has no cancel flag), long enough to amortize launch overhead.
+const LAUNCH_TARGET: Duration = Duration::from_millis(25);
+const INITIAL_LAUNCH_WAVES: u64 = 16;
+const MAX_LAUNCH_WAVES: u64 = 4096;
 
 /// Mirrors `Blake2bPowParams` in the kernel; passed by value.
 #[repr(C)]
@@ -233,6 +239,91 @@ impl CudaBlake2bEngine {
     }
 }
 
+/// One worker's BLAKE2b engine (created on first use), template midstate and
+/// adaptive launch size.
+pub(super) struct Blake2bWorkerState {
+    device_index: u32,
+    cubin_cache_dir: PathBuf,
+    engine: Option<CudaBlake2bEngine>,
+    midstate: Option<(Arc<[u8]>, Blake2bPowMidstate)>,
+    launch_nonces: u64,
+}
+
+pub(super) struct Blake2bBatch {
+    pub(super) hashes: u64,
+    /// Exact hits in scan order with their target bytes.
+    pub(super) solutions: Vec<(u64, [u8; 32])>,
+}
+
+impl Blake2bWorkerState {
+    pub(super) fn new(device_index: u32, cubin_cache_dir: PathBuf) -> Self {
+        Self {
+            device_index,
+            cubin_cache_dir,
+            engine: None,
+            midstate: None,
+            launch_nonces: 0,
+        }
+    }
+
+    /// Runs one launch over at most `remaining` nonces from `start_nonce`,
+    /// trimmed so it should finish before `stop_at`.
+    pub(super) fn run_batch(
+        &mut self,
+        header_base: &Arc<[u8]>,
+        start_nonce: u64,
+        remaining: u64,
+        target: &[u8; 32],
+        stop_at: Option<Instant>,
+    ) -> Result<Blake2bBatch> {
+        if self.engine.is_none() {
+            self.engine = Some(CudaBlake2bEngine::new(
+                self.device_index,
+                &self.cubin_cache_dir,
+            )?);
+        }
+        let engine = self.engine.as_mut().expect("engine created above");
+        let wave = engine.wave_nonces().max(1);
+        if self.launch_nonces == 0 {
+            self.launch_nonces = wave * INITIAL_LAUNCH_WAVES;
+        }
+        let stale =
+            !matches!(&self.midstate, Some((header, _)) if Arc::ptr_eq(header, header_base));
+        if stale {
+            let midstate = Blake2bPowMidstate::new(
+                crate::backend::MINING_POW_NETWORK.blake2b_personal(),
+                header_base,
+            )
+            .map_err(|err| anyhow!("BLAKE2b midstate failed: {err}"))?;
+            self.midstate = Some((Arc::clone(header_base), midstate));
+        }
+        let midstate = &self.midstate.as_ref().expect("midstate cached above").1;
+
+        let mut count = self.launch_nonces.min(remaining).max(1);
+        if let Some(stop_at) = stop_at {
+            let left = stop_at.saturating_duration_since(Instant::now());
+            let budget = (count as f64 * left.as_secs_f64() / LAUNCH_TARGET.as_secs_f64()) as u64;
+            count = count.min(budget.max(wave.min(count)));
+        }
+
+        let started = Instant::now();
+        let hits = engine.scan(midstate, start_nonce, count, target)?;
+        let elapsed = started.elapsed();
+        if count == self.launch_nonces && elapsed > Duration::ZERO {
+            let scaled = count as f64 * LAUNCH_TARGET.as_secs_f64() / elapsed.as_secs_f64();
+            let waves = (scaled / wave as f64).round() as u64;
+            self.launch_nonces = waves.clamp(1, MAX_LAUNCH_WAVES) * wave;
+        }
+        Ok(Blake2bBatch {
+            hashes: count,
+            solutions: hits
+                .into_iter()
+                .map(|nonce| (nonce, midstate.target_bytes(nonce)))
+                .collect(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,5 +395,82 @@ mod tests {
             "blake2b-rate | launch={launch} hashes={hashes} secs={secs:.3} ghs={:.3}",
             hashes as f64 / secs / 1e9
         );
+    }
+
+    #[test]
+    #[ignore = "requires NVIDIA GPU + CUDA runtime; run manually under gpuq"]
+    fn nvidia_backend_mines_blake2b_assignments() {
+        use crate::backend::nvidia::{NvidiaBackend, NvidiaBackendTuningOptions};
+        use crate::backend::{
+            BackendEvent, NonceChunk, PowAlgorithm, PowBackend, WorkAssignment, WorkTemplate,
+        };
+        use std::collections::BTreeMap;
+        use std::time::Duration;
+
+        let dir =
+            std::env::temp_dir().join(format!("seine-blake2b-backend-{}", std::process::id()));
+        let backend = NvidiaBackend::new(
+            Some(0),
+            dir.join("seine.nvidia-autotune.json"),
+            1,
+            NvidiaBackendTuningOptions {
+                // A fixed register cap skips Argon2 autotune; one lane keeps VRAM small.
+                max_rregcount_override: Some(super::super::DEFAULT_NVIDIA_MAX_RREGCOUNT),
+                max_lanes_override: Some(1),
+                ..NvidiaBackendTuningOptions::default()
+            },
+        );
+        let (tx, rx) = crossbeam_channel::unbounded();
+        backend.set_instance_id(1);
+        backend.set_event_sink(tx);
+        backend.start().expect("NVIDIA backend starts");
+
+        let midstate = midstate(FARADAY_HEADER_BASE_LEN);
+        let header: Vec<u8> = (0..FARADAY_HEADER_BASE_LEN)
+            .map(|i| (i * 37 + 11) as u8)
+            .collect();
+        let target = target_with_limb0(u64::MAX >> 20);
+        let count = 1u64 << 26;
+        let start = u64::MAX - (count / 3);
+        let mut expected = BTreeMap::new();
+        midstate.scan(start, count, &target, |nonce| {
+            expected.insert(nonce, midstate.target_bytes(nonce));
+        });
+        assert!(!expected.is_empty());
+
+        backend
+            .assign_work(WorkAssignment {
+                template: Arc::new(WorkTemplate {
+                    work_id: 1,
+                    epoch: 1,
+                    header_base: Arc::from(header),
+                    pow: PowAlgorithm::Blake2b512,
+                    target,
+                    dynamic_share_target: None,
+                    pause_on_solution: false,
+                    stop_at: Instant::now() + Duration::from_secs(60),
+                }),
+                nonce_chunk: NonceChunk {
+                    start_nonce: start,
+                    nonce_count: count,
+                },
+            })
+            .expect("BLAKE2b assignment accepted");
+
+        let until = Instant::now() + Duration::from_secs(30);
+        let mut hashes = 0u64;
+        let mut found = BTreeMap::new();
+        while (hashes < count || found.len() < expected.len()) && Instant::now() < until {
+            hashes += backend.take_hashes();
+            if let Ok(BackendEvent::Solution(solution)) = rx.recv_timeout(Duration::from_millis(20))
+            {
+                assert_eq!(solution.epoch, 1);
+                let hash = solution.hash.expect("BLAKE2b solutions carry their hash");
+                assert!(found.insert(solution.nonce, hash).is_none(), "duplicate");
+            }
+        }
+        backend.stop();
+        assert_eq!(hashes, count);
+        assert_eq!(found, expected);
     }
 }

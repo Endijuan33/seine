@@ -120,3 +120,26 @@ fn single_block_layout_describes_the_faraday_header() {
     let straddle = Blake2bPowMidstate::new(&BLAKE2B_POW_PERSONAL_MAINNET, &header(124, 3)).unwrap();
     assert!(straddle.single_block_layout().is_none());
 }
+
+#[test]
+fn strided_scan_visits_interleaved_nonces() {
+    let base = header(FARADAY_HEADER_BASE_LEN, 11);
+    let personal = &BLAKE2B_POW_PERSONAL_MAINNET;
+    let midstate = Blake2bPowMidstate::new(personal, &base).unwrap();
+    let mut target = [0u8; 32];
+    target[0] = 0x10; // about 1 in 16
+    let (start, stride, count) = (u64::MAX - 20, 3u64, 2_000u64);
+    let expected: Vec<u64> = (0..count)
+        .map(|i| start.wrapping_add(i * stride))
+        .filter(|&nonce| {
+            blake2b_pow_target_bytes(&blake2b_pow_hash(personal, &base, nonce)) <= target
+        })
+        .collect();
+    let mut hits = Vec::new();
+    assert_eq!(
+        midstate.scan_stride(start, stride, count, &target, |n| hits.push(n)),
+        count
+    );
+    assert!(!expected.is_empty());
+    assert_eq!(hits, expected);
+}

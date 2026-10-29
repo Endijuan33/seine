@@ -4,9 +4,10 @@ use std::time::Instant;
 
 use blocknet_pow_spec::{POW_MEMORY_KB, POW_OUTPUT_LEN};
 
-use crate::backend::{BackendEvent, MiningSolution};
+use crate::backend::{BackendEvent, MiningSolution, PowAlgorithm, MINING_POW_NETWORK};
 use crate::config::CpuPageMode;
 use crate::types::hash_meets_target;
+use blocknet_pow_kernel::Blake2bPowMidstate;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use super::emit_warning;
@@ -16,6 +17,33 @@ use super::{
     set_thread_high_perf, should_flush_hashes, wait_for_work_update, wait_for_worker_enabled,
     CpuWorkUpdate, Shared, MAX_DEADLINE_CHECK_INTERVAL, SOLVED_MASK,
 };
+
+/// Nonces one CPU lane hashes between control checks on BLAKE2b work: well
+/// under a millisecond, so deadlines and job switches stay responsive.
+const BLAKE2B_LANE_BATCH: u64 = 4096;
+
+/// Per-worker BLAKE2b midstate, rebuilt when the template header changes.
+#[derive(Default)]
+struct Blake2bLane {
+    cached: Option<(Arc<[u8]>, Blake2bPowMidstate)>,
+}
+
+impl Blake2bLane {
+    fn midstate_for(&mut self, header_base: &Arc<[u8]>) -> Result<&Blake2bPowMidstate, String> {
+        let stale = !matches!(&self.cached, Some((header, _)) if Arc::ptr_eq(header, header_base));
+        if stale {
+            let midstate =
+                Blake2bPowMidstate::new(MINING_POW_NETWORK.blake2b_personal(), header_base)
+                    .map_err(|err| format!("BLAKE2b midstate failed ({err})"))?;
+            self.cached = Some((Arc::clone(header_base), midstate));
+        }
+        Ok(&self.cached.as_ref().expect("midstate cached").1)
+    }
+
+    fn cached(&self) -> Option<&Blake2bPowMidstate> {
+        self.cached.as_ref().map(|(_, midstate)| midstate)
+    }
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum SolutionDisposition {
@@ -121,6 +149,9 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
     let mut backing_settled = true;
     let mut warmed = false;
     let mut output = [0u8; POW_OUTPUT_LEN];
+    let mut blake2b = Blake2bLane::default();
+    let mut blake2b_hits: Vec<u64> = Vec::new();
+    let mut found: Vec<(u64, [u8; POW_OUTPUT_LEN])> = Vec::new();
     let mut ready = false;
     let mut local_generation = 0u64;
     let mut local_work = None;
@@ -344,40 +375,66 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             active_kernel_request = request;
         }
         let target_snapshot = template.target_snapshot();
-        let nonce_bytes = nonce.to_le_bytes();
-        // When the tip moves, the miner marks this generation's work stale.
-        // The hash in flight then stops at the next slice boundary instead
-        // of finishing, so the job switch no longer waits on a whole hash.
-        let superseded =
-            || shared.abandon_through_generation.load(Ordering::Relaxed) >= local_generation;
-        match hasher
-            .as_ref()
-            .expect("enabled worker has a hasher")
-            .hash_password_into_with_memory_until(
-                &nonce_bytes,
-                &template.header_base,
-                &mut output,
-                arena
-                    .as_mut()
-                    .expect("enabled worker has an arena")
-                    .as_mut_slice(),
-                &superseded,
-            ) {
-            Ok(true) => {}
-            Ok(false) => continue,
-            Err(_) => {
-                emit_error(
-                    &shared,
-                    format!("cpu thread {thread_idx}: hash_password_into_with_memory failed"),
-                );
-                request_shutdown(&shared);
-                break;
+        let hashed = match template.pow {
+            PowAlgorithm::Argon2id => {
+                let nonce_bytes = nonce.to_le_bytes();
+                // When the tip moves, the miner marks this generation's work stale.
+                // The hash in flight then stops at the next slice boundary instead
+                // of finishing, so the job switch no longer waits on a whole hash.
+                let superseded = || {
+                    shared.abandon_through_generation.load(Ordering::Relaxed) >= local_generation
+                };
+                match hasher
+                    .as_ref()
+                    .expect("enabled worker has a hasher")
+                    .hash_password_into_with_memory_until(
+                        &nonce_bytes,
+                        &template.header_base,
+                        &mut output,
+                        arena
+                            .as_mut()
+                            .expect("enabled worker has an arena")
+                            .as_mut_slice(),
+                        &superseded,
+                    ) {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(_) => {
+                        emit_error(
+                            &shared,
+                            format!(
+                                "cpu thread {thread_idx}: hash_password_into_with_memory failed"
+                            ),
+                        );
+                        request_shutdown(&shared);
+                        break;
+                    }
+                }
+                1
             }
-        }
+            PowAlgorithm::Blake2b512 => {
+                let midstate = match blake2b.midstate_for(&template.header_base) {
+                    Ok(midstate) => midstate,
+                    Err(err) => {
+                        emit_error(&shared, format!("cpu thread {thread_idx}: {err}"));
+                        request_shutdown(&shared);
+                        break;
+                    }
+                };
+                let batch = lane_quota
+                    .saturating_sub(lane_iters)
+                    .min(BLAKE2B_LANE_BATCH);
+                blake2b_hits.clear();
+                midstate.scan_stride(nonce, lane_stride, batch, &target_snapshot.target, |hit| {
+                    blake2b_hits.push(hit)
+                });
+                batch
+            }
+        };
 
-        lane_iters += 1;
+        lane_iters += hashed;
         #[cfg(target_os = "linux")]
-        if !backing_settled {
+        if !backing_settled && template.pow == PowAlgorithm::Argon2id {
             backing_settled = true;
             if let (Some(previous), Some(written)) = (backing, arena.as_ref()) {
                 let bytes = hasher
@@ -396,8 +453,8 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             shared.warmed_workers.fetch_add(1, Ordering::AcqRel);
             warmed = true;
         }
-        control_hashes_remaining -= 1;
-        pending_hashes += 1;
+        control_hashes_remaining = control_hashes_remaining.saturating_sub(hashed);
+        pending_hashes += hashed;
 
         if shared.kernel_acknowledgements[thread_idx].load(Ordering::Acquire)
             != active_kernel_request
@@ -421,33 +478,63 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             next_flush_at = hash_completed_at + shared.hash_flush_interval;
         }
 
-        if hash_meets_target(&output, &target_snapshot.target) {
+        let solutions = match template.pow {
+            PowAlgorithm::Argon2id => {
+                if hash_meets_target(&output, &target_snapshot.target) {
+                    found.clear();
+                    found.push((nonce, output));
+                } else {
+                    found.clear();
+                }
+                &found
+            }
+            PowAlgorithm::Blake2b512 => {
+                found.clear();
+                let midstate = blake2b.cached().expect("midstate built for this batch");
+                found.extend(
+                    blake2b_hits
+                        .iter()
+                        .map(|&hit| (hit, midstate.target_bytes(hit))),
+                );
+                &found
+            }
+        };
+        let mut paused = false;
+        let mut failed = false;
+        for &(solved_nonce, solved_output) in solutions {
             match handle_found_solution(
                 &shared,
                 template,
                 target_snapshot.share_binding_id,
                 thread_idx,
-                nonce,
-                output,
+                solved_nonce,
+                solved_output,
             ) {
                 Ok(SolutionDisposition::PauseAssignment) => {
-                    shared.finished_generations[thread_idx]
-                        .store(local_generation, Ordering::Release);
-                    flush_hashes(&shared, thread_idx, &mut pending_hashes);
-                    mark_worker_inactive(&shared, &mut worker_active);
-                    local_work = None;
-                    continue;
+                    paused = true;
+                    break;
                 }
                 Ok(SolutionDisposition::Continue) => {}
                 Err(message) => {
                     emit_error(&shared, message);
-                    request_shutdown(&shared);
+                    failed = true;
                     break;
                 }
             }
         }
+        if failed {
+            request_shutdown(&shared);
+            break;
+        }
+        if paused {
+            shared.finished_generations[thread_idx].store(local_generation, Ordering::Release);
+            flush_hashes(&shared, thread_idx, &mut pending_hashes);
+            mark_worker_inactive(&shared, &mut worker_active);
+            local_work = None;
+            continue;
+        }
 
-        nonce = nonce.wrapping_add(lane_stride);
+        nonce = nonce.wrapping_add(lane_stride.wrapping_mul(hashed));
     }
 
     flush_hashes(&shared, thread_idx, &mut pending_hashes);
@@ -693,6 +780,7 @@ mod tests {
                         work_id: 1,
                         epoch: 1,
                         header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                        pow: crate::backend::PowAlgorithm::Argon2id,
                         target: [0xff; 32],
                         dynamic_share_target: None,
                         pause_on_solution: false,
@@ -802,6 +890,7 @@ mod tests {
                         work_id: 1,
                         epoch: 1,
                         header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                        pow: crate::backend::PowAlgorithm::Argon2id,
                         target: [0xff; 32],
                         dynamic_share_target: None,
                         pause_on_solution: false,
@@ -964,6 +1053,7 @@ mod tests {
                         work_id: 1,
                         epoch: 1,
                         header_base: Arc::from(vec![0; POW_HEADER_BASE_LEN]),
+                        pow: crate::backend::PowAlgorithm::Argon2id,
                         target: [0; 32],
                         dynamic_share_target: None,
                         pause_on_solution: false,
@@ -1033,6 +1123,7 @@ mod tests {
                 work_id: epoch,
                 epoch,
                 header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xff; 32],
                 dynamic_share_target: None,
                 pause_on_solution: false,
@@ -1194,6 +1285,7 @@ mod tests {
                 work_id: epoch,
                 epoch,
                 header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+                pow: crate::backend::PowAlgorithm::Argon2id,
                 target: [0xff; 32],
                 dynamic_share_target: None,
                 pause_on_solution: false,
@@ -1302,6 +1394,7 @@ mod tests {
                         work_id: 1,
                         epoch: 1,
                         header_base: Arc::from(vec![0; POW_HEADER_BASE_LEN]),
+                        pow: crate::backend::PowAlgorithm::Argon2id,
                         target: [0; 32],
                         dynamic_share_target: None,
                         pause_on_solution: false,
@@ -1463,6 +1556,7 @@ mod tests {
             work_id: 7,
             epoch: 3,
             header_base: Arc::from(vec![0u8; POW_HEADER_BASE_LEN]),
+            pow: crate::backend::PowAlgorithm::Argon2id,
             target: [0xFF; 32],
             dynamic_share_target: None,
             pause_on_solution: false,
@@ -1503,6 +1597,104 @@ mod tests {
             }
             other => panic!("expected solution event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn blake2b_work_reports_exactly_the_reference_solutions() {
+        use crate::backend::cpu::{request_shutdown, CpuBackendTuning};
+        use crate::backend::{
+            NonceChunk, PowAlgorithm, PowBackend, WorkAssignment, MINING_POW_NETWORK,
+        };
+        use blocknet_pow_spec::{
+            blake2b_pow_hash, blake2b_pow_target_bytes, FARADAY_HEADER_BASE_LEN,
+        };
+        use std::collections::BTreeMap;
+
+        const LANES: usize = 3;
+        let backend = CpuBackend::with_tuning(
+            LANES,
+            CpuAffinityMode::Off,
+            CpuBackendTuning {
+                page_mode: crate::config::CpuPageMode::Regular,
+                ..CpuBackendTuning::default()
+            },
+        );
+        backend.shared.started.store(true, Ordering::Release);
+        let (tx, rx) = unbounded();
+        *backend.shared.event_dispatch_tx.write().unwrap() = Some(tx);
+        let handles: Vec<_> = (0..LANES)
+            .map(|index| {
+                let shared = Arc::clone(&backend.shared);
+                std::thread::spawn(move || super::worker_loop::<32>(shared, index, None))
+            })
+            .collect();
+
+        let header: Vec<u8> = (0..FARADAY_HEADER_BASE_LEN)
+            .map(|i| (i * 37 + 11) as u8)
+            .collect();
+        let mut target = [0u8; 32];
+        target[0] = 0x08; // about 1 in 32
+                          // Several 4,096-nonce batches per lane, wrapping past u64::MAX.
+        let (start, count) = (u64::MAX - 5_000, 20_000u64);
+        let personal = MINING_POW_NETWORK.blake2b_personal();
+        let expected: BTreeMap<u64, [u8; 32]> = (0..count)
+            .map(|i| start.wrapping_add(i))
+            .filter_map(|nonce| {
+                let hash = blake2b_pow_target_bytes(&blake2b_pow_hash(personal, &header, nonce));
+                (hash <= target).then_some((nonce, hash))
+            })
+            .collect();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let until = Instant::now() + Duration::from_secs(5);
+            while backend.shared.ready_workers.load(Ordering::Acquire) < LANES {
+                assert!(Instant::now() < until, "workers did not start");
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            backend
+                .assign_work(WorkAssignment {
+                    template: Arc::new(WorkTemplate {
+                        work_id: 1,
+                        epoch: 1,
+                        header_base: Arc::from(header.clone()),
+                        pow: PowAlgorithm::Blake2b512,
+                        target,
+                        dynamic_share_target: None,
+                        pause_on_solution: false,
+                        stop_at: Instant::now() + Duration::from_secs(60),
+                    }),
+                    nonce_chunk: NonceChunk {
+                        start_nonce: start,
+                        nonce_count: count,
+                    },
+                })
+                .unwrap();
+            let until = Instant::now() + Duration::from_secs(10);
+            while super::super::has_pending_work(&backend.shared) {
+                assert!(Instant::now() < until, "BLAKE2b assignment did not finish");
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            let mut found = BTreeMap::new();
+            for event in rx.try_iter() {
+                if let BackendEvent::Solution(solution) = event {
+                    assert_eq!(solution.epoch, 1);
+                    let hash = solution.hash.expect("CPU solutions carry their hash");
+                    assert!(
+                        found.insert(solution.nonce, hash).is_none(),
+                        "duplicate nonce {}",
+                        solution.nonce
+                    );
+                }
+            }
+            assert!(!expected.is_empty());
+            assert_eq!(found, expected);
+            assert_eq!(backend.take_hashes(), count);
+        }));
+        request_shutdown(&backend.shared);
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        result.unwrap();
     }
 }
 

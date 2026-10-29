@@ -1364,6 +1364,7 @@ mod tests {
             work_id,
             epoch: 7,
             header_base: Arc::<[u8]>::from(vec![1u8; POW_HEADER_BASE_LEN]),
+            pow: crate::backend::PowAlgorithm::Argon2id,
             target: [0xff; 32],
             dynamic_share_target: None,
             pause_on_solution: true,
