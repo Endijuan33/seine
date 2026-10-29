@@ -26,6 +26,10 @@ const LOGIN_REQUEST_ID: u64 = 1;
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 /// Longest reconnect delay a pool's `connection_limit` notice can ask for.
 const MAX_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(120);
+/// Longest wait between reconnects after repeated quick failures.
+const MAX_RECONNECT_BACKOFF: Duration = Duration::from_secs(60);
+/// A session that stays logged in this long resets the backoff.
+const HEALTHY_SESSION: Duration = Duration::from_secs(60);
 /// Delay used when a `connection_limit` notice gives none.
 const DEFAULT_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
@@ -524,6 +528,7 @@ async fn run_pool_client_loop(
     let mut allow_login_difficulty_hint = false;
     let mut login_difficulty_hint: Option<u64> = None;
     let mut failover = PoolFailover::new(endpoints.len());
+    let mut backoff = ReconnectBackoff::default();
     while !should_shutdown(process_shutdown.as_ref(), shutdown.as_ref()) {
         let endpoint = endpoints[failover.active].clone();
         let mut session_logged_in = false;
@@ -579,6 +584,7 @@ async fn run_pool_client_loop(
                 let mut retry_queue = SubmitRetryQueue::new();
                 let mut login_confirmed = false;
                 let mut limit_delay = None::<Duration>;
+                let session_started = Instant::now();
                 let mut current_job_id = None::<String>;
                 let mut submit_claimed_hash_enabled = true;
                 let mut submit_timing_enabled = false;
@@ -795,7 +801,11 @@ async fn run_pool_client_loop(
                                     sleep_with_shutdown(
                                         process_shutdown.as_ref(),
                                         shutdown.as_ref(),
-                                        reconnect_delay_after_close(limit_delay, login_confirmed),
+                                        backoff.after_close(
+                                            limit_delay,
+                                            login_confirmed
+                                                && session_started.elapsed() >= HEALTHY_SESSION,
+                                        ),
                                     );
                                     break;
                                 }
@@ -829,7 +839,11 @@ async fn run_pool_client_loop(
                                     sleep_with_shutdown(
                                         process_shutdown.as_ref(),
                                         shutdown.as_ref(),
-                                        reconnect_delay_after_close(limit_delay, login_confirmed),
+                                        backoff.after_close(
+                                            limit_delay,
+                                            login_confirmed
+                                                && session_started.elapsed() >= HEALTHY_SESSION,
+                                        ),
                                     );
                                     break;
                                 }
@@ -946,7 +960,7 @@ async fn run_pool_client_loop(
                                     sleep_with_shutdown(
                                         process_shutdown.as_ref(),
                                         shutdown.as_ref(),
-                                        RECONNECT_DELAY,
+                                        backoff.failed(),
                                     );
                                     break;
                                 }
@@ -968,7 +982,7 @@ async fn run_pool_client_loop(
                 sleep_with_shutdown(
                     process_shutdown.as_ref(),
                     shutdown.as_ref(),
-                    RECONNECT_DELAY,
+                    backoff.failed(),
                 );
             }
         }
@@ -1644,15 +1658,50 @@ fn parse_pool_notification(params: Option<Value>) -> Option<PoolNotification> {
     })
 }
 
-/// How long to wait before reconnecting after the pool closed the session:
-/// the delay a `connection_limit` notice asked for, a short pause when the
-/// session never logged in, and none after an established session.
-fn reconnect_delay_after_close(limit_delay: Option<Duration>, login_confirmed: bool) -> Duration {
-    match limit_delay {
-        Some(delay) => delay.clamp(RECONNECT_DELAY, MAX_CONNECTION_LIMIT_DELAY),
-        None if login_confirmed => Duration::ZERO,
-        None => RECONNECT_DELAY,
+/// Reconnect delays: none after a healthy session, otherwise 2 s doubling to
+/// 60 s across consecutive quick failures, with jitter so many rigs that fail
+/// together do not retry together.
+#[derive(Debug, Default)]
+struct ReconnectBackoff {
+    failures: u32,
+}
+
+impl ReconnectBackoff {
+    /// The wait after a failed connect, a rejected login, or a session that
+    /// ended before it was healthy.
+    fn failed(&mut self) -> Duration {
+        let base = RECONNECT_DELAY
+            .saturating_mul(1u32 << self.failures.min(6))
+            .min(MAX_RECONNECT_BACKOFF);
+        self.failures = self.failures.saturating_add(1);
+        jittered(base)
     }
+
+    /// The wait after the pool closed the session: the delay a
+    /// `connection_limit` notice asked for, if longer.
+    fn after_close(&mut self, limit_delay: Option<Duration>, healthy: bool) -> Duration {
+        let delay = if healthy {
+            self.failures = 0;
+            Duration::ZERO
+        } else {
+            self.failed()
+        };
+        match limit_delay {
+            Some(limit) => delay.max(limit.clamp(RECONNECT_DELAY, MAX_CONNECTION_LIMIT_DELAY)),
+            None => delay,
+        }
+    }
+}
+
+/// `base` scaled by a random factor between 0.75 and 1.25.
+fn jittered(base: Duration) -> Duration {
+    let mut buf = [0u8; 2];
+    let unit = if getrandom::getrandom(&mut buf).is_ok() {
+        f64::from(u16::from_le_bytes(buf)) / f64::from(u16::MAX)
+    } else {
+        0.5
+    };
+    base.mul_f64(0.75 + unit * 0.5)
 }
 
 fn parse_login_result(result: Option<Value>) -> PoolLoginAck {
@@ -2353,12 +2402,32 @@ mod tests {
         assert_eq!(notification.kind, POOL_NOTIFICATION_CONNECTION_LIMIT);
         assert_eq!(notification.retry_after, Some(Duration::from_secs(30)));
 
-        let limit = |delay| reconnect_delay_after_close(Some(delay), false);
+        let limit = |delay| ReconnectBackoff::default().after_close(Some(delay), false);
         assert_eq!(limit(Duration::from_secs(30)), Duration::from_secs(30));
-        assert_eq!(limit(Duration::ZERO), RECONNECT_DELAY);
+        assert!(limit(Duration::ZERO) <= RECONNECT_DELAY.mul_f64(1.25));
         assert_eq!(limit(Duration::from_secs(3600)), MAX_CONNECTION_LIMIT_DELAY);
-        assert_eq!(reconnect_delay_after_close(None, false), RECONNECT_DELAY);
-        assert_eq!(reconnect_delay_after_close(None, true), Duration::ZERO);
+        assert_eq!(
+            ReconnectBackoff::default().after_close(None, true),
+            Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn quick_failures_back_off_to_a_minute_and_a_healthy_session_resets() {
+        let mut backoff = ReconnectBackoff::default();
+        let waits: Vec<Duration> = (0..8).map(|_| backoff.after_close(None, false)).collect();
+        let within = |wait: Duration, base: u64| {
+            let base = Duration::from_secs(base);
+            wait >= base.mul_f64(0.75) && wait <= base.mul_f64(1.25)
+        };
+        for (wait, base) in waits.iter().zip([2, 4, 8, 16, 32, 60, 60, 60]) {
+            assert!(within(*wait, base), "{wait:?} vs {base}s");
+        }
+        assert_eq!(backoff.after_close(None, true), Duration::ZERO);
+        assert!(
+            within(backoff.failed(), 2),
+            "a healthy session resets the backoff"
+        );
     }
 
     #[test]
