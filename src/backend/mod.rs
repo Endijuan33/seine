@@ -21,6 +21,7 @@ pub(crate) fn note_network_pow(pow: PowAlgorithm) {
 }
 
 /// PoW of the latest template the miner received, if any.
+#[cfg_attr(not(feature = "nvidia"), allow(dead_code))]
 pub(crate) fn network_pow() -> Option<PowAlgorithm> {
     match NETWORK_POW.load(Ordering::Acquire) {
         1 => Some(PowAlgorithm::Argon2id),
@@ -33,6 +34,7 @@ pub(crate) fn set_network_pow_expected(expected: bool) {
     NETWORK_POW_EXPECTED.store(expected, Ordering::Release);
 }
 
+#[cfg_attr(not(feature = "nvidia"), allow(dead_code))]
 pub(crate) fn network_pow_expected() -> bool {
     NETWORK_POW_EXPECTED.load(Ordering::Acquire)
 }
