@@ -16,7 +16,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::sync::mpsc;
 
+mod socks;
 mod submit_retry;
+
+pub use socks::SocksProxy;
 
 use submit_retry::{
     is_retryable_submit_reject, AbandonedSubmit, ScheduleOutcome, SubmitRetryQueue,
@@ -227,13 +230,28 @@ pub struct PoolClient {
 }
 
 impl PoolClient {
+    #[cfg(test)]
     pub fn connect(
         pool_url: &str,
         address: String,
         worker: String,
         process_shutdown: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let endpoints = parse_pool_endpoints(pool_url)?;
+        Self::connect_via(pool_url, None, address, worker, process_shutdown)
+    }
+
+    /// Like `connect`, reaching every pool in the list through `proxy`.
+    pub fn connect_via(
+        pool_url: &str,
+        proxy: Option<&SocksProxy>,
+        address: String,
+        worker: String,
+        process_shutdown: Arc<AtomicBool>,
+    ) -> Result<Self> {
+        let mut endpoints = parse_pool_endpoints(pool_url)?;
+        for endpoint in &mut endpoints {
+            endpoint.proxy = proxy.cloned();
+        }
         let (submit_tx, submit_rx) = bounded::<PoolSubmit>(CHANNEL_CAPACITY);
         let (event_tx, event_rx) = bounded::<PoolEvent>(CHANNEL_CAPACITY);
         let reconnect_requested = Arc::new(AtomicBool::new(false));
@@ -407,8 +425,10 @@ struct LoginResult {
 struct PoolEndpoint {
     authority: String,
     host: String,
+    port: u16,
     tls: bool,
     url: String,
+    proxy: Option<SocksProxy>,
 }
 
 impl PoolEndpoint {
@@ -1059,7 +1079,23 @@ impl PoolFailover {
 }
 
 async fn connect_pool_transport(endpoint: &PoolEndpoint) -> Result<PoolConnection> {
-    let stream = connect_pool_tcp_stream(endpoint).await?;
+    let stream = match endpoint.proxy.as_ref() {
+        Some(proxy) => proxy
+            .connect(&endpoint.host, endpoint.port)
+            .await
+            .inspect_err(|_| {
+                crate::diagnostics::record_failure(
+                    seine_telemetry::DiagnosticCode::Warning,
+                    seine_telemetry::DiagnosticKind::Connection,
+                    None,
+                    seine_telemetry::FailureDetail::new(
+                        seine_telemetry::FailureReason::ConnectionFailed,
+                        seine_telemetry::DiagnosticOperation::PoolConnect,
+                    ),
+                );
+            })?,
+        None => connect_pool_tcp_stream(endpoint).await?,
+    };
     if !endpoint.tls {
         let (reader_half, writer_half) = stream.into_split();
         return Ok(spawn_pool_io(reader_half, writer_half));
@@ -1456,6 +1492,9 @@ fn submit_payload(
 
 fn friendly_pool_connect_error(endpoint: &PoolEndpoint, detail: &str) -> String {
     let lower = detail.to_ascii_lowercase();
+    if lower.contains("socks5 proxy") {
+        return format!("pool {} unreachable: {detail}", endpoint.display());
+    }
     if lower.contains("connection refused") {
         if endpoint.is_local() {
             return format!("pool offline at {}", endpoint.display());
@@ -1935,7 +1974,9 @@ fn parse_pool_endpoint(pool_url: &str) -> Result<PoolEndpoint> {
         url: format!("{scheme}{authority}"),
         authority,
         host,
+        port,
         tls,
+        proxy: None,
     })
 }
 
@@ -2913,6 +2954,106 @@ mod tests {
         server.join().unwrap();
         assert!(saw_failover, "expected a failover notice");
         assert!(logged_in, "expected login on the backup pool");
+    }
+
+    /// A fake SOCKS5 proxy that checks the handshake, then answers as the
+    /// pool itself.
+    fn spawn_fake_socks_pool(
+        expect_auth: Option<(&'static str, &'static str)>,
+    ) -> (u16, std::thread::JoinHandle<(String, u16)>) {
+        use std::io::Read;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = [0u8; 2];
+            stream.read_exact(&mut head).unwrap();
+            assert_eq!(head[0], 5);
+            let mut methods = vec![0u8; head[1] as usize];
+            stream.read_exact(&mut methods).unwrap();
+            match expect_auth {
+                Some((user, pass)) => {
+                    assert!(methods.contains(&2));
+                    stream.write_all(&[5, 2]).unwrap();
+                    let mut ver_len = [0u8; 2];
+                    stream.read_exact(&mut ver_len).unwrap();
+                    let mut got_user = vec![0u8; ver_len[1] as usize];
+                    stream.read_exact(&mut got_user).unwrap();
+                    let mut plen = [0u8; 1];
+                    stream.read_exact(&mut plen).unwrap();
+                    let mut got_pass = vec![0u8; plen[0] as usize];
+                    stream.read_exact(&mut got_pass).unwrap();
+                    assert_eq!(got_user, user.as_bytes());
+                    assert_eq!(got_pass, pass.as_bytes());
+                    stream.write_all(&[1, 0]).unwrap();
+                }
+                None => stream.write_all(&[5, 0]).unwrap(),
+            }
+            let mut req = [0u8; 5];
+            stream.read_exact(&mut req).unwrap();
+            assert_eq!(
+                &req[..4],
+                &[5, 1, 0, 3],
+                "pool hostname should go to the proxy unresolved"
+            );
+            let mut host = vec![0u8; req[4] as usize];
+            stream.read_exact(&mut host).unwrap();
+            let mut port = [0u8; 2];
+            stream.read_exact(&mut port).unwrap();
+            stream.write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0]).unwrap();
+
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            std::io::BufRead::read_line(&mut reader, &mut line).unwrap();
+            let login: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(login["method"], "login");
+            stream
+                .write_all(b"{\"id\":1,\"status\":\"ok\",\"result\":{\"protocol_version\":2}}\n")
+                .unwrap();
+            let mut rest = Vec::new();
+            let _ = reader.read_to_end(&mut rest);
+            (String::from_utf8(host).unwrap(), u16::from_be_bytes(port))
+        });
+        (port, handle)
+    }
+
+    fn login_through_proxy(proxy: &str) {
+        let proxy = SocksProxy::parse(proxy).unwrap();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let client = PoolClient::connect_via(
+            "stratum+tcp://pool.invalid:3333",
+            Some(&proxy),
+            "addr".into(),
+            "worker".into(),
+            Arc::clone(&shutdown),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut logged_in = false;
+        while Instant::now() < deadline && !logged_in {
+            if let Some(PoolEvent::LoginAccepted(_)) =
+                client.recv_event_timeout(Duration::from_millis(200))
+            {
+                logged_in = true;
+            }
+        }
+        shutdown.store(true, Ordering::Relaxed);
+        drop(client);
+        assert!(logged_in, "expected login through the proxy");
+    }
+
+    #[test]
+    fn pool_client_logs_in_through_socks5_proxy() {
+        let (port, server) = spawn_fake_socks_pool(None);
+        login_through_proxy(&format!("socks5://127.0.0.1:{port}"));
+        assert_eq!(server.join().unwrap(), ("pool.invalid".to_string(), 3333));
+    }
+
+    #[test]
+    fn pool_client_authenticates_to_socks5_proxy() {
+        let (port, server) = spawn_fake_socks_pool(Some(("rig", "pw")));
+        login_through_proxy(&format!("socks5://rig:pw@127.0.0.1:{port}"));
+        assert_eq!(server.join().unwrap(), ("pool.invalid".to_string(), 3333));
     }
 
     #[test]

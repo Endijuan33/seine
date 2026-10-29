@@ -362,6 +362,11 @@ struct Cli {
     #[arg(long = "pool-worker", visible_alias = "worker", alias = "rig-id")]
     pool_worker: Option<String>,
 
+    /// Reach pools through a SOCKS5 proxy: socks5://[user:pass@]host:port.
+    /// Pool hostnames are resolved by the proxy.
+    #[arg(long = "pool-proxy", visible_alias = "socks5")]
+    pool_proxy: Option<String>,
+
     /// Accepted for compatibility with other miners' launch templates.
     /// Blocknet pools do not use passwords.
     #[arg(long = "pass", short = 'p', alias = "password")]
@@ -811,6 +816,8 @@ pub struct Config {
     pub mode: MiningMode,
     pub pool_url: Option<String>,
     pub pool_worker: Option<String>,
+    /// SOCKS5 proxy for pool connections.
+    pub pool_proxy: Option<crate::pool::SocksProxy>,
     pub dev_fee_pool_worker: String,
     pub api_url: String,
     pub token: Option<String>,
@@ -1392,6 +1399,12 @@ impl Config {
                 .pool_worker
                 .as_ref()
                 .map(|value| value.trim().to_string()),
+            pool_proxy: cli
+                .pool_proxy
+                .as_deref()
+                .map(crate::pool::SocksProxy::parse)
+                .transpose()
+                .context("invalid --pool-proxy")?,
             dev_fee_pool_worker,
             api_url,
             token,
@@ -3687,6 +3700,7 @@ mod tests {
             pool_url_args: Vec::new(),
             pool_url: None,
             pool_worker: None,
+            pool_proxy: None,
             pool_password: None,
             api_url: None,
             token: None,

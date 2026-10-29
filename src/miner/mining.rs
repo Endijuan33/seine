@@ -2768,6 +2768,7 @@ mod tests {
             mode: crate::config::MiningMode::Daemon,
             pool_url: None,
             pool_worker: None,
+            pool_proxy: None,
             dev_fee_pool_worker: "seine-devfee-test".to_string(),
             api_url: server.url("").trim_end_matches('/').to_string(),
             token: Some("test-token".to_string()),

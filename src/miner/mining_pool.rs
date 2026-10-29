@@ -95,6 +95,7 @@ fn should_apply_submit_ack_difficulty_immediately(_mode: PoolConnectionMode) -> 
 struct PoolConnectionConfig {
     mode: PoolConnectionMode,
     pool_url: String,
+    proxy: Option<crate::pool::SocksProxy>,
     address: String,
     worker: String,
 }
@@ -698,12 +699,14 @@ fn build_pool_connection_configs(
     let user = PoolConnectionConfig {
         mode: PoolConnectionMode::User,
         pool_url: user_pool_url,
+        proxy: cfg.pool_proxy.clone(),
         address: user_address,
         worker: user_worker,
     };
     let dev = PoolConnectionConfig {
         mode: PoolConnectionMode::Dev,
         pool_url: DEV_POOL_URL.to_string(),
+        proxy: cfg.pool_proxy.clone(),
         address: DEV_ADDRESS.to_string(),
         worker: cfg.dev_fee_pool_worker.clone(),
     };
@@ -721,8 +724,9 @@ fn connect_pool_session(
         render_tui_now(tui);
     }
 
-    let pool_client = PoolClient::connect(
+    let pool_client = PoolClient::connect_via(
         &connection.pool_url,
+        connection.proxy.as_ref(),
         connection.address.clone(),
         connection.worker.clone(),
         shutdown,
@@ -732,11 +736,16 @@ fn connect_pool_session(
         info(
             "CONN",
             format!(
-                "connecting ({}) to {} as {}.{}",
+                "connecting ({}) to {} as {}.{}{}",
                 connection.mode.as_str(),
                 connection.pool_url,
                 compact_address,
-                connection.worker
+                connection.worker,
+                connection
+                    .proxy
+                    .as_ref()
+                    .map(|proxy| format!(" via {}", proxy.display()))
+                    .unwrap_or_default()
             ),
         );
     }
