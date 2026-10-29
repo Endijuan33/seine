@@ -56,7 +56,9 @@ wallet, the bntpool.com pool and the seine miner profile in one step.
 
 2. **Import it.** Open **Miner profiles**, click **Import from JSON**, paste the
    edited profile and click **Import**.
-3. **Add each part** from the import result, in this order:
+3. **Add each part** from the import result, in this order. The coin, platform
+   and miner fields in these forms look empty because BNT isn't in mmpOS's
+   lists; the imported values are still saved.
    - **Add wallet**: check the address and save.
    - **Add pool**: the BNT wallet fills in by itself. Save.
    - **Add miner profile**: select the `bntpool` pool, then create the profile.
