@@ -19,6 +19,8 @@ use super::hip_ffi::{
 use crate::backend::pow_hash_from_last_block_words;
 use crate::types::hash_meets_target;
 
+pub(crate) mod blake2b;
+
 const HIP_KERNEL_SRC: &str = include_str!("amd_kernel.hip");
 const HIP_KERNEL_PROGRAM_NAME: &str = "seine_argon2id_fill.hip";
 
@@ -1121,9 +1123,18 @@ fn compile_hip_module_with_wavefront_fallback(
 }
 
 fn compile_hip_module(api: &'static HipApi, options: &[String]) -> Result<Vec<u8>> {
-    let source = CString::new(HIP_KERNEL_SRC)
+    compile_hip_source(api, HIP_KERNEL_SRC, HIP_KERNEL_PROGRAM_NAME, options)
+}
+
+fn compile_hip_source(
+    api: &'static HipApi,
+    source: &str,
+    program_name: &str,
+    options: &[String],
+) -> Result<Vec<u8>> {
+    let source = CString::new(source)
         .map_err(|_| anyhow!("HIP kernel source contains interior NUL byte"))?;
-    let name = CString::new(HIP_KERNEL_PROGRAM_NAME)
+    let name = CString::new(program_name)
         .map_err(|_| anyhow!("HIP program name contains interior NUL byte"))?;
 
     let mut program: super::hip_ffi::HiprtcProgram = std::ptr::null_mut();

@@ -82,6 +82,8 @@ struct AmdShared {
     completed_assignment_micros: AtomicU64,
     cancel_requested: AtomicBool,
     error_emitted: AtomicBool,
+    /// The worker's last batch was BLAKE2b (reported in telemetry).
+    blake2b_active: AtomicBool,
 }
 
 impl AmdShared {
@@ -99,6 +101,7 @@ impl AmdShared {
             completed_assignment_micros: AtomicU64::new(0),
             cancel_requested: AtomicBool::new(false),
             error_emitted: AtomicBool::new(false),
+            blake2b_active: AtomicBool::new(false),
         }
     }
 }
@@ -381,7 +384,11 @@ impl PowBackend for AmdBackend {
             ),
             cpu_backing_mib: None,
             cpu_affinity: None,
-            pow: None,
+            pow: self
+                .shared
+                .blake2b_active
+                .load(Ordering::Acquire)
+                .then(|| "blake2b".to_string()),
         }
     }
 
@@ -426,6 +433,7 @@ impl PowBackend for AmdBackend {
         // notice; explicit --amd-devices skips that probe, so do it here too.
         let _ = dpm::raise_performance_level(&selected.pci_address);
         let mut engine = self.build_engine(&selected)?;
+        let mut blake2b_state = engine::blake2b::Blake2bWorkerState::new(selected.clone());
 
         let discovered_lanes = engine.max_lanes().max(1);
         let discovered_depth = engine.max_hashes_per_launch_per_lane().max(1) as u64;
@@ -459,7 +467,16 @@ impl PowBackend for AmdBackend {
                 "seine-amd-worker-{}",
                 self.instance_id.load(Ordering::Acquire)
             ))
-            .spawn(move || worker_loop(&mut engine, assignment_rx, control_rx, shared, instance_id))
+            .spawn(move || {
+                worker_loop(
+                    &mut engine,
+                    &mut blake2b_state,
+                    assignment_rx,
+                    control_rx,
+                    shared,
+                    instance_id,
+                )
+            })
             .map_err(|err| anyhow!("failed to spawn amd worker thread: {err}"))?;
 
         let mut guard = self
@@ -682,6 +699,10 @@ impl PowBackend for AmdBackend {
         PreemptionGranularity::Hashes((self.lanes() as u64).saturating_mul(per_launch).max(1))
     }
 
+    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
             preferred_iters_per_lane: Some(DEFAULT_DISPATCH_ITERS_PER_LANE),
@@ -807,6 +828,7 @@ impl BenchBackend for AmdBackend {
 
 fn worker_loop(
     engine: &mut HipArgon2Engine,
+    blake2b: &mut engine::blake2b::Blake2bWorkerState,
     assignment_rx: Receiver<WorkerCommand>,
     control_rx: Receiver<WorkerCommand>,
     shared: Arc<AmdShared>,
@@ -1015,6 +1037,65 @@ fn worker_loop(
             drain_fence_waiters(&mut fence_waiters, Ok(()));
             continue;
         }
+
+        if current.work.template.pow == crate::backend::PowAlgorithm::Blake2b512 {
+            shared.blake2b_active.store(true, Ordering::Release);
+            shared
+                .active_lanes
+                .store(engine.max_lanes().max(1) as u64, Ordering::Release);
+            let target_snapshot = current.work.template.target_snapshot();
+            let batch = match blake2b.run_batch(
+                &current.work.template.header_base,
+                current.next_nonce,
+                current.remaining,
+                &target_snapshot.target,
+                Some(current.work.template.stop_at),
+            ) {
+                Ok(batch) => batch,
+                Err(err) => {
+                    emit_worker_error(
+                        &shared,
+                        &instance_id,
+                        format!("HIP BLAKE2b batch failed: {err:#}"),
+                    );
+                    break;
+                }
+            };
+            current.hashes_done = current.hashes_done.saturating_add(batch.hashes);
+            current.next_nonce = current.next_nonce.wrapping_add(batch.hashes);
+            current.remaining = current.remaining.saturating_sub(batch.hashes);
+            shared.hashes.fetch_add(batch.hashes, Ordering::Relaxed);
+            shared
+                .inflight_assignment_hashes
+                .store(current.hashes_done, Ordering::Release);
+            let mut paused = false;
+            for (nonce, hash) in batch.solutions {
+                send_backend_event(
+                    &shared,
+                    BackendEvent::Solution(MiningSolution {
+                        epoch: current.work.template.epoch,
+                        nonce,
+                        hash: Some(hash),
+                        share_binding_id: target_snapshot.share_binding_id,
+                        backend_id: instance_id.load(Ordering::Acquire),
+                        backend: BACKEND_NAME,
+                        found_at: std::time::Instant::now(),
+                    }),
+                );
+                if current.work.template.pause_on_solution {
+                    paused = true;
+                    break;
+                }
+            }
+            if paused {
+                queued.clear();
+                finalize_active_assignment(&shared, current, 0);
+                active = None;
+                drain_fence_waiters(&mut fence_waiters, Ok(()));
+            }
+            continue;
+        }
+        shared.blake2b_active.store(false, Ordering::Release);
 
         let max_hashes_for_launch = engine.max_hashes_per_launch().max(1);
         let hashes_per_batch = max_hashes_for_launch.min(current.remaining as usize).max(1);
