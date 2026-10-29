@@ -20,6 +20,9 @@ REPEAT_SECONDS = 4 * 3600
 REMINDER_CATEGORIES = {'infrastructure', 'ingestion', 'monitor'}
 CONFIRM_SECONDS = 240
 MAX_SENDS = 10
+# Installations with pool connection warnings in one hour, versus the prior day.
+POOL_SPIKE_MIN_INSTALLATIONS = 20
+POOL_SPIKE_FACTOR = 3
 
 
 def identity(value):
@@ -74,6 +77,13 @@ def evaluate(results):
                                    else f'Previous run {version}')
                         attribution = ' The restarting version is not assumed to be the interrupted version.'
                     active.append(issue('diagnostics', [field, row['version']], f'{version}: {count} installations with {title} in 24 hours.{attribution} Run telemetry/agent_report.py for issue clusters.'))
+        pool = diagnostics.get('pool_connection_warnings')
+        if pool is not None:
+            known.add('pool')
+            recent = pool['last_hour_installations']
+            baseline = float(pool['baseline_hourly_installations'] or 0)
+            if recent >= max(POOL_SPIKE_MIN_INSTALLATIONS, POOL_SPIKE_FACTOR * baseline):
+                active.append(issue('pool', 'connection_spike', f'{recent} installations reported pool connection failures in the last hour (prior-day average {baseline:.0f}/hour); {pool["last_hour_limit_installations"]} were refused at the pool connection limit. Check bntpool Stratum, the gateway and DNS.'))
     performance = results.get('performance')
     if performance is not None:
         known.add('ingestion')

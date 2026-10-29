@@ -4,6 +4,12 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 12 adds the diagnostic reason `pool_connection_limit`: the pool sent a
+`connection_limit` notification before closing the session, so the miner waits
+the pool's suggested delay before reconnecting. Deploy the schema-12 collector
+before releasing schema-12 miners; schemas 1-11 remain accepted, with no SQL
+storage migration.
+
 Schema 11 adds `backends[].settings.pow`: `blake2b` while a backend mines
 Faraday BLAKE2b work, absent for Argon2id (so Argon2 samples are unchanged).
 BLAKE2b samples may report up to 10^18 hashes per window; Argon2 keeps the
@@ -195,6 +201,9 @@ Hardware labels describe the reporting machine after restart. Previous-run event
 clusters are checkpoint context and may overlap earlier current-run issue clusters.
 Null fields mean unavailable evidence, including reports from older miners. Infrastructure
 health is evaluated separately from sample-quality and miner-reliability assessments.
+`diagnostics.sql` also counts installations with pool connection warnings; the alert
+service flags a fleet-wide spike when at least 20 installations, and three times the
+prior day's hourly average, report them within an hour.
 `diagnostics.sql` flags a version after at least three installations report errors,
 quarantines or unclean runs within 24 hours. Single-installation failures and
 warnings remain visible below that threshold. Unattributed interrupted runs have a

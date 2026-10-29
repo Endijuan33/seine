@@ -161,6 +161,23 @@ class AlertsTests(unittest.TestCase):
         self.assertNotIn('v0.2.36:', active[0]['summary'])
         self.assertIn('Unknown previous version', active[1]['summary'])
 
+    def test_pool_connection_spike_needs_breadth_above_the_prior_day(self):
+        def evaluate(recent, baseline):
+            return alerts.evaluate({'diagnostics': {
+                'recent_error_versions': [], 'recent_unclean_versions': [],
+                'pool_connection_warnings': {
+                    'last_hour_installations': recent, 'last_hour_limit_installations': 4,
+                    'baseline_hourly_installations': baseline}}})
+        # 2026-10-29: the connection cap took warnings from ~45 to 216 per hour.
+        active, known = evaluate(216, 45.0)
+        self.assertEqual([i['category'] for i in active], ['pool'])
+        self.assertIn('pool', known)
+        self.assertIn('216 installations', active[0]['summary'])
+        self.assertIn('4 were refused', active[0]['summary'])
+        self.assertEqual(evaluate(130, 45.0)[0], [])
+        self.assertEqual(evaluate(19, 0.0)[0], [], 'a handful of miners is not a fleet spike')
+        self.assertEqual(len(evaluate(20, 0.0)[0]), 1)
+
     def test_regression_requires_breadth_not_one_bad_rig(self):
         cohort = dict(version='v2', baseline_version='v1', hardware={'cpu_model': 'CPU'},
                       build=[], settings={'backend': 'cpu'}, installations=5,
