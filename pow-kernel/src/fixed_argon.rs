@@ -325,7 +325,7 @@ impl FixedArgon2id {
         self.side_cache.as_ref().map_or(0, |s| s.slots)
     }
 
-    /// AVX-512 streaming ring kernels: from `permille` of the
+    /// AVX2 and AVX-512 streaming ring kernels: from `permille` of the
     /// way through the arena, odd blocks are not written to memory and are
     /// rebuilt from their stored predecessor whenever referenced. 0 disables;
     /// values below 500 are raised to
@@ -667,6 +667,9 @@ impl FixedArgon2id {
         let cache = ring.as_mut_ptr();
         debug_assert_eq!(arena as usize % 64, 0);
         debug_assert_eq!(cache as usize % 64, 0);
+        let skip_from = self.skip_from;
+        let last = memory.len() - 1;
+        let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
         for slice in 0..SYNC_POINTS {
             if slice > 0 && stop() {
                 _mm_mfence(); // Leave no streaming stores in flight.
@@ -693,6 +696,9 @@ impl FixedArgon2id {
                 // address, so arena reads need no fence (full-size parity verified).
                 let reference_ptr = if cur - reference < RING {
                     cache.add(reference & mask)
+                } else if store_skipped(reference, skip_from) {
+                    rebuild_skipped_avx2(arena, skip_from, reference, &mut *rebuilt.as_mut_ptr());
+                    rebuilt.as_mut_ptr()
                 } else {
                     arena.add(reference)
                 };
@@ -707,16 +713,25 @@ impl FixedArgon2id {
                     }
                     compress_avx2_into(prev, &*reference_ptr, &mut *dst);
                 } else if block + 1 < self.segment_length {
-                    compress_avx2_into_mid_prefetch(prev, &*reference_ptr, &mut *dst, cur, arena);
+                    compress_avx2_into_mid_prefetch(
+                        prev,
+                        &*reference_ptr,
+                        &mut *dst,
+                        cur,
+                        arena,
+                        skip_from,
+                    );
                 } else {
                     compress_avx2_into(prev, &*reference_ptr, &mut *dst);
                 }
-                let src = (*dst).0.as_ptr();
-                let output = (*arena.add(cur)).0.as_mut_ptr();
-                // 16-byte NT stores.
-                for vector in 0..64 {
-                    let value = _mm_load_si128(src.add(vector * 2).cast::<__m128i>());
-                    _mm_stream_si128(output.add(vector * 2).cast::<__m128i>(), value);
+                if !store_skipped(cur, skip_from) || cur == last {
+                    let src = (*dst).0.as_ptr();
+                    let output = (*arena.add(cur)).0.as_mut_ptr();
+                    // 16-byte NT stores.
+                    for vector in 0..64 {
+                        let value = _mm_load_si128(src.add(vector * 2).cast::<__m128i>());
+                        _mm_stream_si128(output.add(vector * 2).cast::<__m128i>(), value);
+                    }
                 }
                 if cur & 31 == 31 {
                     _mm_sfence();
@@ -956,6 +971,28 @@ unsafe fn rebuild_skipped<const FULL_WIDTH: bool>(
     }
 }
 
+/// AVX2 counterpart of `rebuild_skipped`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[inline(never)]
+unsafe fn rebuild_skipped_avx2(
+    arena: *const PowBlock,
+    skip_from: usize,
+    index: usize,
+    out: &mut PowBlock,
+) {
+    let prev = &*arena.add(index - 1);
+    let reference = reference_index(index - 1, prev.0[0]);
+    let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
+    let reference_block = if store_skipped(reference, skip_from) {
+        rebuild_skipped_avx2(arena, skip_from, reference, &mut *rebuilt.as_mut_ptr());
+        &*rebuilt.as_ptr()
+    } else {
+        &*arena.add(reference)
+    };
+    compress_avx2_into(prev, reference_block, out);
+}
+
 #[inline(always)]
 fn reference_index(reference_area_size: usize, rand: u64) -> usize {
     debug_assert!(reference_area_size > 0);
@@ -1036,6 +1073,7 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
                 dst,
                 next_ref_area_size,
                 base as *const PowBlock,
+                usize::MAX,
             );
         }
     }
@@ -1833,6 +1871,7 @@ unsafe fn compress_avx2_into_mid_prefetch(
     dst: &mut PowBlock,
     next_ref_area_size: usize,
     memory_blocks_base: *const PowBlock,
+    skip_from: usize,
 ) {
     use std::arch::x86_64::{
         __m128i, __m256i, _mm256_castsi128_si256, _mm256_castsi256_si128, _mm256_extracti128_si256,
@@ -1938,7 +1977,11 @@ unsafe fn compress_avx2_into_mid_prefetch(
     // and prefetch it.
     {
         let rand = *dst_ptr;
-        let next_ref = reference_index(next_ref_area_size, rand);
+        let mut next_ref = reference_index(next_ref_area_size, rand);
+        if store_skipped(next_ref, skip_from) {
+            // Rebuilt from its stored predecessor, so fetch that instead.
+            next_ref -= 1;
+        }
         prefetch_pow_block::<ISA_AVX2>(&*memory_blocks_base.add(next_ref));
     }
 
@@ -3683,15 +3726,19 @@ mod tests {
 
     #[test]
     fn skipped_stores_match_reference_on_streaming_kernels() {
-        if !super::CpuKernel::Avx512Stream.is_supported() {
-            return;
+        let mut isas = Vec::new();
+        if super::CpuKernel::Avx2Stream.is_supported() {
+            isas.push(super::ISA_AVX2_STREAM);
         }
-        for isa in [
-            super::ISA_AVX512_STREAM,
-            super::ISA_AVX512_256_STREAM,
-            super::ISA_AVX512_256_STREAM_L2,
-            super::ISA_AVX512_STREAM_L2,
-        ] {
+        if super::CpuKernel::Avx512Stream.is_supported() {
+            isas.extend([
+                super::ISA_AVX512_STREAM,
+                super::ISA_AVX512_256_STREAM,
+                super::ISA_AVX512_256_STREAM_L2,
+                super::ISA_AVX512_STREAM_L2,
+            ]);
+        }
+        for isa in isas {
             for permille in [500u16, 600, 900] {
                 let memory_kib = 4096u32;
                 let params = Params::new(memory_kib, 1, 1, Some(32)).unwrap();
@@ -3913,6 +3960,7 @@ mod tests {
                                 &mut output[1],
                                 prefetch_memory.len(),
                                 prefetch_memory.as_ptr(),
+                                usize::MAX,
                             );
                         } else {
                             super::compress_avx2_into(&lhs, rhs, &mut output[1]);
