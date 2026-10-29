@@ -58,6 +58,8 @@ pub(crate) struct AmdDeviceInfo {
     pub wavefront_size: u32,
     pub memory_total_mib: u64,
     pub memory_free_mib: Option<u64>,
+    /// PCI address (`0000:c1:00.0`), the key for the device's amdgpu sysfs entries.
+    pub pci_address: String,
 }
 
 /// Query all visible HIP devices. Fails with the graceful "ROCm runtime not
@@ -85,6 +87,12 @@ pub(crate) fn query_amd_devices() -> Result<Vec<AmdDeviceInfo>> {
             wavefront_size: props.warp_size.max(0) as u32,
             memory_total_mib: (props.total_global_mem as u64) / (1024 * 1024),
             memory_free_mib,
+            pci_address: format!(
+                "{:04x}:{:02x}:{:02x}.0",
+                props.pci_domain_id.max(0),
+                props.pci_bus_id.max(0),
+                props.pci_device_id.max(0)
+            ),
         });
     }
     Ok(devices)
@@ -213,11 +221,21 @@ pub(crate) fn build_hiprtc_options(
     ];
     // Wave-scoped cooperative barriers instead of __syncthreads(): the
     // cooperative group never spans more than one wavefront, so the LLVM AMDGPU
-    // memory model needs no waits at wavefront scope, and __syncthreads() was
-    // stalling every round on outstanding global stores. SEINE_AMD_BLOCK_SYNC=1
+    // memory model needs no waits at wavefront scope. SEINE_AMD_BLOCK_SYNC=1
     // restores the block barrier.
     if std::env::var_os("SEINE_AMD_BLOCK_SYNC").is_none() {
         options.push("-DSEINE_WAVE_SYNC=1".to_string());
+    }
+    // SEINE_AMD_DEFINES="NAME=1,OTHER=0" adds one -D per comma-separated entry.
+    if let Some(extra) = std::env::var_os("SEINE_AMD_DEFINES") {
+        for define in extra
+            .to_string_lossy()
+            .split(',')
+            .map(str::trim)
+            .filter(|define| !define.is_empty())
+        {
+            options.push(format!("-D{define}"));
+        }
     }
     options
 }
@@ -1309,7 +1327,7 @@ mod tests {
         );
         assert!(
             !src.contains("prefetch.global"),
-            "A73 dead-code prefetch is an NVIDIA PTXAS scheduling hack"
+            "the CUDA kernel's dead-code prefetch block is not part of the HIP kernel"
         );
         assert!(
             !src.contains("tid < 8U"),

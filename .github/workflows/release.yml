@@ -14,6 +14,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             name: seine-linux-x86_64
+            # NVIDIA (default) plus the AMD HIP backend; both resolve their
+            # runtimes at startup via dlopen, so the build needs neither toolkit.
+            features: --features amd
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             name: seine-linux-aarch64

@@ -1654,6 +1654,18 @@ pub(crate) fn detect_nvidia_devices() -> Result<Vec<DetectedGpu>> {
 #[cfg(all(feature = "amd", unix))]
 pub(crate) fn detect_amd_devices(notices: &mut Vec<String>) -> Result<Vec<DetectedGpu>> {
     let devices = crate::backend::amd::query_amd_devices()?;
+    for device in &devices {
+        if !crate::backend::amd::supports_wavefront_size(device.wavefront_size) {
+            continue;
+        }
+        let outcome = crate::backend::amd::dpm::raise_performance_level(&device.pci_address);
+        notices.extend(crate::backend::amd::dpm::startup_notice(
+            device.index,
+            &device.name,
+            &device.pci_address,
+            &outcome,
+        ));
+    }
     let (usable, skipped) = partition_supported_amd_devices(devices);
     notices.extend(skipped);
     Ok(usable)

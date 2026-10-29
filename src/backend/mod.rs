@@ -159,6 +159,9 @@ pub mod amd {
         _device_index: Option<u32>,
     }
 
+    /// No DPM level is touched in builds without the AMD backend.
+    pub fn restore_performance_levels() {}
+
     impl AmdBackend {
         pub fn new(device_index: Option<u32>, _tuning_options: AmdBackendTuningOptions) -> Self {
             Self {

@@ -55,6 +55,7 @@ fn run() -> Result<()> {
     } else {
         miner::run(&cfg, shutdown)
     };
+    backend::amd::restore_performance_levels();
     if result.is_ok() && self_update::restart_pending() {
         self_update::restart()?;
     }

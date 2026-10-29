@@ -45,5 +45,5 @@ WSL's job-boundary latency.
 
 ## AMD GPUs
 
-An experimental HIP backend exists for RDNA3 (wave32) GPUs in builds with
-`--features amd`; it is never auto-selected.
+Radeon RDNA GPUs mine through the HIP backend on Linux: see
+[AMD GPUs](amd.md). It is never auto-selected; pass `--backend amd`.

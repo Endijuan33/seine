@@ -16,6 +16,8 @@
 //! kernel passes the CPU-differential bring-up tests on real RDNA3 hardware.
 
 mod engine;
+pub mod dpm;
+pub use dpm::restore_performance_levels;
 mod hip_ffi;
 
 use std::collections::VecDeque;
@@ -420,6 +422,9 @@ impl PowBackend for AmdBackend {
         }
 
         let selected = self.validate_or_select_device()?;
+        // Idempotent: config-time detection usually did this and printed the
+        // notice; explicit --amd-devices skips that probe, so do it here too.
+        let _ = dpm::raise_performance_level(&selected.pci_address);
         let mut engine = self.build_engine(&selected)?;
 
         let discovered_lanes = engine.max_lanes().max(1);
@@ -703,6 +708,9 @@ impl PowBackend for AmdBackend {
 impl BenchBackend for AmdBackend {
     fn kernel_bench(&self, seconds: u64, shutdown: &AtomicBool) -> Result<u64> {
         let selected = self.validate_or_select_device()?;
+        // Idempotent: config-time detection usually did this and printed the
+        // notice; explicit --amd-devices skips that probe, so do it here too.
+        let _ = dpm::raise_performance_level(&selected.pci_address);
         let mut engine = self.build_engine(&selected)?;
         engine.bind_thread()?;
 
@@ -745,6 +753,9 @@ impl BenchBackend for AmdBackend {
         shutdown: &AtomicBool,
     ) -> Result<Vec<KernelBenchSample>> {
         let selected = self.validate_or_select_device()?;
+        // Idempotent: config-time detection usually did this and printed the
+        // notice; explicit --amd-devices skips that probe, so do it here too.
+        let _ = dpm::raise_performance_level(&selected.pci_address);
         let mut engine = self.build_engine(&selected)?;
         engine.bind_thread()?;
 
