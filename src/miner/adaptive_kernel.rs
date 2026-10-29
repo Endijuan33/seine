@@ -252,8 +252,8 @@ pub(crate) fn cohort_side_cache_blocks(
 }
 
 /// Skipped-store permille for this host (see `set_skip_store_permille` in the
-/// kernel crate), or 0. On for Zen 4 desktops at 16 or more workers and Zen 5
-/// desktops at 8 or more; off elsewhere.
+/// kernel crate), or 0. On for Zen 4 desktops at 16 or more workers, Zen 5
+/// desktops at 8 or more and Zen 4c EPYC at 128 or more; off elsewhere.
 pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
     if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
         return 0;
@@ -269,6 +269,16 @@ pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
         // Granite Ridge and Fire Range (Ryzen 9000 desktop and HX laptop).
         Some("AuthenticAMD")
             if identity.family == Some(0x1a) && identity.model == Some(0x44) && workers >= 8 =>
+        {
+            600
+        }
+        // Bergamo and Siena (Zen 4c EPYC).
+        Some("AuthenticAMD")
+            if identity.family == Some(0x19)
+                && identity
+                    .model
+                    .is_some_and(|model| (0xa0..=0xaf).contains(&model))
+                && workers >= 128 =>
         {
             600
         }
