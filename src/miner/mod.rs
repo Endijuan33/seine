@@ -1369,9 +1369,8 @@ fn maybe_autotune_cpu_threads(
         }
     } else {
         // Coarse descending grid, then the local refinement below. Climbing one
-        // count at a time and stopping on dips left an EPYC 9355 at 41 of 64
-        // workers (68.9 vs ~75+ H/s); counts near capacity were best on every
-        // measured streaming-kernel host.
+        // count at a time and stopping on dips gets stuck far below capacity, and
+        // streaming kernels peak near capacity.
         let mut coarse: Vec<usize> = [
             max_threads,
             max_threads * 3 / 4,
@@ -2209,8 +2208,8 @@ fn maybe_warn_linux_hugepages_setup(cfg: &Config, mode: RuntimeMode) {
         return;
     }
     // Auto mode backs arenas with transparent huge pages when the kernel allows
-    // them; explicit 2 MiB or 1 GiB HugeTLB measured within 0.2% of THP with the
-    // streaming kernels (EPYC 9355, 32 workers), so only nag when THP is off.
+    // them; explicit HugeTLB adds nothing over THP with the streaming kernels, so
+    // only nag when THP is off.
     if cfg.cpu_page_mode == CpuPageMode::Auto && linux_thp_enabled() {
         return;
     }

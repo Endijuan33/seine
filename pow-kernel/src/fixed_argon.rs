@@ -321,11 +321,11 @@ impl FixedArgon2id {
         self.side_cache.as_ref().map_or(0, |s| s.slots)
     }
 
-    /// Research knob (AVX-512 streaming ring kernels): from `permille` of the
+    /// AVX-512 streaming ring kernels: from `permille` of the
     /// way through the arena, odd blocks are not written to memory and are
     /// rebuilt from their stored predecessor whenever referenced. Late blocks
     /// are referenced rarely, so this trades a little compute for less DRAM
-    /// traffic (model: ~4% at 600). 0 disables; values below 500 are raised to
+    /// traffic. 0 disables; values below 500 are raised to
     /// 500 so skipped blocks always use data-dependent addressing.
     pub fn set_skip_store_permille(&mut self, permille: u16) {
         self.skip_from = match permille {
@@ -452,12 +452,11 @@ impl FixedArgon2id {
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
     // Periodic mode issues no fence before arena loads (same-core loads observe
     // this core's NT stores) and an SFENCE every 32 blocks to bound
-    // write-combining occupancy. R8/D2 and R64/D3–6 use the measured
+    // write-combining occupancy. R8/D2 and R64/D3–6 use the
     // reference-demand policy: fence before reading an uncommitted arena block.
     // Recent references stay in the ring; finalization always fences.
     // FAR > 0 also prefetches data-independent references into L2 FAR blocks
-    // ahead (Zen 4: EPYC 9124P +6%, Ryzen 7 7700X +1-5%). Zen 5 lost 1-3% with
-    // it (EPYC 9R45, Ryzen 9 9900X), as did the AVX2 loop on Zen 3 (EPYC 7313P).
+    // ahead (used on Zen 4 only).
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,avx512f,avx512vl")]
     unsafe fn fill_streaming_ring<
@@ -640,9 +639,7 @@ impl FixedArgon2id {
     // whole-block prefetch while addresses are data independent. Same-core loads
     // observe this core's earlier NT stores to the same address, so arena reads
     // need no fence; a periodic SFENCE only bounds write-combining buffer
-    // occupancy. Native EPYC 7443P: +48% vs AVX2 at 12 workers. Dropping the
-    // prefetch gained 8.8% at 24 workers but lost 14.9% at 12, so it stays.
-    // Ring 2/depth 3 beat ring 8/depth 7 by 1-8% on EPYC 7R32 and 7R13.
+    // occupancy.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn fill_streaming_ring_avx2<const RING: usize, const DEPTH: usize>(
@@ -709,8 +706,7 @@ impl FixedArgon2id {
                 }
                 let src = (*dst).0.as_ptr();
                 let output = (*arena.add(cur)).0.as_mut_ptr();
-                // 16-byte NT stores: EPYC 7R13 +5.9%/+1.9% at 16/24 workers over
-                // 32-byte stores; neutral on EPYC 7R32.
+                // 16-byte NT stores.
                 for vector in 0..64 {
                     let value = _mm_load_si128(src.add(vector * 2).cast::<__m128i>());
                     _mm_stream_si128(output.add(vector * 2).cast::<__m128i>(), value);
@@ -2557,7 +2553,7 @@ unsafe fn neon_round<const SHA3: bool>(
 ///
 /// By interleaving instructions from both columns, the OOO core can fill
 /// multiply-port idle slots that occur during each column's serial BLAMKA
-/// dependency chain, potentially improving throughput by ~20%.
+/// dependency chain.
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 #[allow(clippy::too_many_arguments)] // Two independent rounds expose register-level ILP.

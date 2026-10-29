@@ -14,7 +14,6 @@
 //! the AMD tuning surface (waves-per-SIMD occupancy, launch depth, cadence of
 //! cancel checks, scheduling experiments) is intentionally deferred until the
 //! kernel passes the CPU-differential bring-up tests on real RDNA3 hardware.
-//! See docs/AMD_BRINGUP.md.
 
 mod engine;
 mod hip_ffi;

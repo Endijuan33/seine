@@ -24,8 +24,8 @@ const HIP_KERNEL_PROGRAM_NAME: &str = "seine_argon2id_fill.hip";
 
 pub(crate) const MAX_LANES_HARD_LIMIT: usize = 1024;
 /// Lanes per lane-memory allocation. One hipMalloc per 32 lanes (64 GiB) stays
-/// well under the per-allocation ceiling seen on an MI325X (about 157 GiB of
-/// 256 GiB), which otherwise capped the probe at 78 lanes with 100 GiB free.
+/// well under the per-allocation ceiling of large cards, which otherwise caps the
+/// lane probe long before VRAM runs out.
 pub(crate) const LANE_CHUNK_LANES: usize = 32;
 pub(crate) const KERNEL_THREADS: u32 = 32;
 pub(crate) const SEED_KERNEL_THREADS: u32 = 64;
@@ -38,7 +38,7 @@ pub(crate) fn warps_per_block(wavefront_size: u32) -> u32 {
     (wavefront_size / KERNEL_THREADS).max(1)
 }
 /// AMD keeps the conservative default cancel-check cadence; the Ampere+
-/// widening in the CUDA backend is NVIDIA-measured and does not carry over.
+/// widening in the CUDA backend is NVIDIA-specific.
 pub(crate) const CANCEL_CHECK_BLOCK_INTERVAL: u32 = 64;
 pub(crate) const AMD_MEMORY_RESERVE_MIB_FLOOR: u64 = 64;
 pub(crate) const AMD_MEMORY_RESERVE_RATIO_DENOM: u64 = 64;
@@ -214,8 +214,8 @@ pub(crate) fn build_hiprtc_options(
     // Wave-scoped cooperative barriers instead of __syncthreads(): the
     // cooperative group never spans more than one wavefront, so the LLVM AMDGPU
     // memory model needs no waits at wavefront scope, and __syncthreads() was
-    // stalling every round on outstanding global stores (+6% on MI325X, bit-exact
-    // in the differential). SEINE_AMD_BLOCK_SYNC=1 restores the block barrier.
+    // stalling every round on outstanding global stores. SEINE_AMD_BLOCK_SYNC=1
+    // restores the block barrier.
     if std::env::var_os("SEINE_AMD_BLOCK_SYNC").is_none() {
         options.push("-DSEINE_WAVE_SYNC=1".to_string());
     }

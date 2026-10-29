@@ -2070,9 +2070,8 @@ impl MmapArena {
     ) -> Result<Self, String> {
         #[cfg(target_os = "linux")]
         // Hint THP and let the first hash fault 2 MiB pages, like a writing prefault
-        // but overlapped with hashing: 128 EPYC 9554P workers were ready in 0.5 s
-        // instead of 11.3 s (+0.9% over 15 min, steady unchanged); 256 EPYC 9754
-        // workers had taken 33 s to prefault. MAP_POPULATE and a synchronous
+        // but overlapped with hashing, so many-worker hosts start hashing in
+        // under a second instead of waiting on a prefault. MAP_POPULATE and a synchronous
         // collapse remain the fallback when the hint fails.
         let prefault_advice = (page_mode == CpuPageMode::Auto
             && byte_len == POW_MEMORY_KB as usize * 1024)

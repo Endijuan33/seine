@@ -51,8 +51,7 @@ close now permits up to four seconds of normal cleanup, and a completed run clea
 its marker before final HTTP delivery. Ordinary checkpoints remain five seconds;
 the reporting worker checks for a shutdown request every second, subject to ongoing
 IO. Abrupt termination can still beat a checkpoint. Windows automatic large-page
-fallbacks now retain their numeric error at the source. See the
-[investigation and validation](../docs/validation/reliability-followup-20261027.md).
+fallbacks now retain their numeric error at the source.
 
 Schema 6 adds [paired CPU trial evidence](TUNING.md), including inconclusive and
 aborted comparisons, bounded delivery and installation-weighted research hints.
@@ -60,8 +59,7 @@ The productive CPU kernel tuner emits these trials when telemetry is enabled.
 Worker-count and joint producers are still pending. Kernel records can qualify
 with complete, stable measured CPU masks and topology on supported Linux and
 single-processor-group Windows hosts. Unknown or changed context remains coverage
-only. Missing trials do not imply no gain. See the [runtime validation scope](../docs/validation/runtime-kernel-trials-20261026.md)
-and [placement observations and limits](../docs/validation/trial-placement-20261026.md).
+only. Missing trials do not imply no gain.
 
 ## Miner preferences and collection
 
@@ -318,8 +316,6 @@ After the first backup succeeds, install and enable
 HTTPS, database connectivity, retention, disk headroom, backup freshness and
 performance-sample completeness;
 failures appear in systemd/journald. It does not send external notifications.
-The current host and maintenance commands are in
-[the production runbook](deploy/PRODUCTION.md).
 
 ## Analysis
 
@@ -369,8 +365,7 @@ Send the user a concise interpretation and next action rather than raw SQL outpu
 The command is invoked during agent work; it does not schedule unattended agent
 runs or notifications. Existing service health checks continue every five minutes.
 It neither modifies miner settings nor deploys changes. Backups remain local and
-a separate stateful Discord alert timer handles fleet incidents, as described in
-the [production runbook](deploy/PRODUCTION.md#discord-fleet-alerts).
+a separate stateful Discord alert timer handles fleet incidents.
 
 ### Manual SQL
 
@@ -414,8 +409,7 @@ to that database's connection string, then run `python3 telemetry/test_integrati
 It writes synthetic reports and checks validation, throttling, legacy uploads,
 storage, cohort separation, duplicate-device weighting and data-quality detection/recovery.
 Do not run it against production. Set `TELEMETRY_TEST_TRIAL_FIXTURE` to the runtime
-Monitor artifact to also verify producer-to-collector-to-SQL qualification; see
-[the reproduction steps](../docs/validation/trial-placement-20261026.md).
+Monitor artifact to also verify producer-to-collector-to-SQL qualification.
 
 Run the real collector against that disposable DB:
 

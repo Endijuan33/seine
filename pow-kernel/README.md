@@ -38,7 +38,7 @@ incomplete replay has a null work ratio, not an estimated completed result.
 Reported residency is block storage plus a separately reported reference-table
 size. It excludes implementation-specific allocation, index and policy metadata.
 This is not a reduced-memory hashing implementation, an optimal tradeoff search,
-or a prediction of CPU throughput. See the [full-size experiment](../experiments/cpu-research-20261024/README.md).
+or a prediction of CPU throughput.
 
 ## Faraday BLAKE2b-512 PoW
 

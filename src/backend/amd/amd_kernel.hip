@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // HIP Argon2id lane-fill kernel specialized for Seine's PoW profile.
 //
-// Port of src/backend/nvidia_kernel.cu (see NVIDIA_OPTIMIZATION_LOG.md for
-// the optimization lineage). Retained from the CUDA kernel:
-//   - A29 full-warp (32-thread) cooperative block compression mapping.
-//   - A77/A78 unrolled global loads/stores for memory-level parallelism.
-//   - A81 closed-form G-round index computation (no switch/branch divergence).
-//   - A82 warp-shuffle G-round fusion (row-columns->row-diagonals and
+// Port of src/backend/nvidia_kernel.cu. Retained from the CUDA kernel:
+//   - full-warp (32-thread) cooperative block compression mapping.
+//   - unrolled global loads/stores for memory-level parallelism.
+//   - closed-form G-round index computation (no switch/branch divergence).
+//   - warp-shuffle G-round fusion (row-columns->row-diagonals and
 //     col-columns->col-diagonals passed lane-to-lane via shuffles).
-// Deliberately OMITTED (NVIDIA/PTXAS-specific scheduling hacks, see A73/A77):
+// Deliberately OMITTED (NVIDIA/PTXAS-specific scheduling hacks):
 //   - The dead-code L2-prefetch address-computation block and its
 //     first-8-threads guard. That code exists purely to nudge NVRTC/PTXAS
 //     instruction scheduling on sm_120 and has no meaning for AMD's LLVM
@@ -55,9 +54,8 @@ constexpr unsigned int WARPS_PER_BLOCK = SEINE_WARPS_PER_BLOCK;
 // lane on wave32, two on wave64), so a wave-scoped fence (LDS/global ordering
 // for this wave only) plus a scheduling barrier is all the hardware needs per
 // the LLVM AMDGPU memory model; __syncthreads() additionally waited for every
-// outstanding global store before each round (-6% on MI325X). The wave-scoped
-// form is the default since the MI325X differential cleared it (2026-10-28);
-// the host passes SEINE_WAVE_SYNC unless SEINE_AMD_BLOCK_SYNC is set.
+// outstanding global store before each round. The wave-scoped form is the
+// default; the host passes SEINE_WAVE_SYNC unless SEINE_AMD_BLOCK_SYNC is set.
 __device__ __forceinline__ void coop_sync() {
 #if defined(SEINE_WAVE_SYNC) && SEINE_WAVE_SYNC
     __builtin_amdgcn_fence(__ATOMIC_SEQ_CST, "wavefront");
@@ -480,7 +478,7 @@ __device__ __forceinline__ void compress_block_coop(
     unsigned int tid
 ) {
     // Issue all global loads into registers first to maximize
-    // memory-level parallelism (multiple loads in flight at once, A77).
+    // memory-level parallelism (multiple loads in flight at once).
     const unsigned long long r0 = rhs[tid]       ^ lhs[tid];
     const unsigned long long r1 = rhs[tid + 32U]  ^ lhs[tid + 32U];
     const unsigned long long r2 = rhs[tid + 64U]  ^ lhs[tid + 64U];
@@ -491,7 +489,7 @@ __device__ __forceinline__ void compress_block_coop(
     scratch_r[tid + 96U] = r3;  scratch_q[tid + 96U] = r3;
     coop_sync();
 
-    // G-rounds with wave-shuffle fusion (A82) and closed-form indexing (A81).
+    // G-rounds with wave-shuffle fusion and closed-form indexing.
     const unsigned int state = tid >> 2;
     const unsigned int lane = tid & 3U;
     const unsigned int shfl_base = state * 4U; // absolute lane base for shuffles
@@ -550,7 +548,7 @@ __device__ __forceinline__ void compress_block_coop(
     coop_sync();
 
     // Unrolled final store: read all shared-memory values into registers
-    // first, then issue all global stores to maximize MLP (A78).
+    // first, then issue all global stores to maximize MLP.
     {
         const unsigned long long m0 = scratch_q[tid]       ^ scratch_r[tid];
         const unsigned long long m1 = scratch_q[tid + 32U] ^ scratch_r[tid + 32U];
@@ -604,7 +602,7 @@ __device__ __forceinline__ void update_address_block_coop(
 
 // Lane memory is allocated in chunks of `lanes_per_chunk` lanes (one hipMalloc
 // each) because a single allocation hits per-allocation limits long before VRAM
-// runs out on large cards (MI325X: ~157 GiB of 256 GiB). `lane_chunks` is a
+// runs out on large cards. `lane_chunks` is a
 // device-side table of chunk base pointers.
 __device__ __forceinline__ unsigned long long *lane_base(
     unsigned long long *const *lane_chunks,
@@ -826,7 +824,7 @@ __device__ __forceinline__ void argon2id_fill_kernel_impl(
                         static_cast<unsigned long long>(ref_index) * 128ULL;
 
                     // NOTE: the CUDA kernel carries an NVRTC/PTXAS
-                    // scheduling hack here (A73): a dead-code L2-prefetch
+                    // scheduling hack here: a dead-code L2-prefetch
                     // address computation restricted to the first 8
                     // threads. Both parts are NVIDIA sm_120-specific and
                     // are intentionally omitted from the HIP port.

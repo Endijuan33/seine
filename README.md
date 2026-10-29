@@ -69,8 +69,8 @@ automatically. More options: [setup and configuration](docs/guides/configuration
 the EPYC 9554P** with 64 mining threads and 1 GiB huge pages.
 [Measurements and settings](docs/PERFORMANCE.md).
 
-Every number is a measured result from repeated runs. Results for every CPU tested,
-method and tuning: **[performance results](docs/PERFORMANCE.md)**.
+Every number is a measured result from repeated runs. Results for every CPU tested:
+**[performance results](docs/PERFORMANCE.md)**.
 
 ## Get the most from your hardware
 
@@ -93,8 +93,7 @@ Seine is fast out of the box. These guides cover the last few percent:
 - [Flag reference](docs/MINER_FLAGS.md): every command-line option
 - [Building from source](docs/BUILDING.md)
 - [Changelog](CHANGELOG.md)
-- For contributors: [architecture and agent notes](AGENTS.md), [benchmark lab](docs/benchmarks.md),
-  [CPU](CPU_OPTIMIZATION_LOG.md) and [NVIDIA](NVIDIA_OPTIMIZATION_LOG.md) optimization logs
+- For contributors: [architecture and agent notes](AGENTS.md)
 
 ## License
 

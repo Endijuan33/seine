@@ -716,14 +716,14 @@ struct Cli {
 
     /// Experimental: side-buffer slots (1 KiB each) that serve scheduled
     /// data-independent references in the AVX-512 streaming kernels; 0 disables,
-    /// unset uses the measured default for this CPU (512 on Linux Zen 5 EPYC
+    /// unset uses the default for this CPU (512 on Linux Zen 5 EPYC
     /// with one worker per core, otherwise off).
     #[arg(long, hide = true)]
     cpu_side_cache_blocks: Option<usize>,
 
     /// Experimental: from this permille of the arena on (500-1000), odd blocks
     /// skip their memory store and are rebuilt when referenced (AVX-512
-    /// streaming kernels); 0 disables, unset uses the measured default for this
+    /// streaming kernels); 0 disables, unset uses the default for this
     /// CPU (600 on Linux Zen 4 desktops at 16 or more workers, otherwise off).
     #[arg(long, hide = true)]
     cpu_skip_store_permille: Option<u16>,
@@ -1578,7 +1578,7 @@ fn resolve_backend_selection(
     }
 
     // Metal is not auto-enabled: on Apple Silicon unified memory, Argon2id is
-    // memory-latency-bound and CPU lanes are ~12× faster per lane than Metal.
+    // memory-latency-bound and CPU lanes are much faster per lane than Metal.
     // Running both degrades total throughput.  Users can opt in via --backend cpu,metal.
     let mut selected = vec![BackendKind::Cpu];
     if nvidia_available || !nvidia_devices.is_empty() {
@@ -3012,8 +3012,7 @@ fn underused_threads_notice(
 }
 
 /// WSL2 gives its Linux VM half of the PC's RAM by default, so desktops with the
-/// cores for a dozen workers often fit three. 499 of 2,124 telemetry installs
-/// (2026-10-28) ran under WSL2 at 2-4 lanes. Name the two fixes once at startup.
+/// cores for a dozen workers often fit three. Name the two fixes once at startup.
 fn wsl_sizing_notice_for(
     cpu_backend_instances: usize,
     gpu_memory_reservation: u64,
