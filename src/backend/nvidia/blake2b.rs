@@ -39,10 +39,9 @@ const MAX_LAUNCH_WAVES: u64 = 4096;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct KernelParams {
-    h: [u64; 8],
+    v: [u64; 16],
     m: [u64; 16],
-    counter_lo: u64,
-    counter_hi: u64,
+    h0: u64,
     target_limb0: u64,
 }
 
@@ -54,6 +53,7 @@ struct KernelShape {
     nonce_word: usize,
     nonce_shift: u32,
     message_words: usize,
+    pre_columns: u8,
 }
 
 impl KernelShape {
@@ -62,6 +62,12 @@ impl KernelShape {
             nonce_word: layout.nonce_word,
             nonce_shift: layout.nonce_shift,
             message_words: layout.message_words,
+            pre_columns: if cfg!(test) && std::env::var_os("SEINE_B2_NO_PRECOMPUTE").is_some() {
+                // Benchmark A/B only: compute every round-0 column per nonce.
+                0
+            } else {
+                layout.nonce_free_round0_columns()
+            },
         }
     }
 }
@@ -75,6 +81,10 @@ pub(super) struct CudaBlake2bEngine {
     candidates: CudaSlice<u64>,
     candidate_count: CudaSlice<u32>,
     grid_blocks: u32,
+    threads_per_block: u32,
+    /// Read by the benchmark launch-shape override.
+    #[cfg_attr(not(test), allow(dead_code))]
+    sm_count: u32,
 }
 
 impl CudaBlake2bEngine {
@@ -103,13 +113,22 @@ impl CudaBlake2bEngine {
             candidates,
             candidate_count,
             grid_blocks: u32::try_from(sm_count.max(1)).unwrap_or(1) * BLOCKS_PER_SM,
+            threads_per_block: THREADS_PER_BLOCK,
+            sm_count: u32::try_from(sm_count.max(1)).unwrap_or(1),
         })
     }
 
     /// Nonces per full launch wave; `scan` counts that are multiples of this
     /// keep every thread equally busy.
     pub(super) fn wave_nonces(&self) -> u64 {
-        u64::from(self.grid_blocks) * u64::from(THREADS_PER_BLOCK)
+        u64::from(self.grid_blocks) * u64::from(self.threads_per_block)
+    }
+
+    /// Benchmark-only launch shape override.
+    #[cfg(test)]
+    fn set_launch_shape(&mut self, threads_per_block: u32, blocks_per_sm: u32) {
+        self.threads_per_block = threads_per_block.max(32);
+        self.grid_blocks = self.sm_count * blocks_per_sm.max(1);
     }
 
     /// Hashes `count` nonces from `start_nonce` (wrapping) and returns every
@@ -127,12 +146,12 @@ impl CudaBlake2bEngine {
         if count == 0 {
             return Ok(Vec::new());
         }
-        let kernel = self.kernel(KernelShape::of(&layout))?;
+        let shape = KernelShape::of(&layout);
+        let kernel = self.kernel(shape)?;
         let params = KernelParams {
-            h: layout.h,
+            v: layout.round0_state(shape.pre_columns),
             m: layout.message,
-            counter_lo: layout.counter as u64,
-            counter_hi: (layout.counter >> 64) as u64,
+            h0: layout.h[0],
             target_limb0: u64::from_be_bytes(target[..8].try_into().expect("8 bytes")),
         };
 
@@ -171,11 +190,11 @@ impl CudaBlake2bEngine {
             .memset_zeros(&mut self.candidate_count)
             .map_err(cuda_driver_err)?;
         let blocks = u64::from(self.grid_blocks)
-            .min(count.div_ceil(u64::from(THREADS_PER_BLOCK)))
+            .min(count.div_ceil(u64::from(self.threads_per_block)))
             .max(1) as u32;
         let cfg = LaunchConfig {
             grid_dim: (blocks, 1, 1),
-            block_dim: (THREADS_PER_BLOCK, 1, 1),
+            block_dim: (self.threads_per_block, 1, 1),
             shared_mem_bytes: 0,
         };
         let capacity = CANDIDATE_CAPACITY as u32;
@@ -218,6 +237,7 @@ impl CudaBlake2bEngine {
             format!("-DSEINE_B2_NONCE_WORD={}", shape.nonce_word),
             format!("-DSEINE_B2_NONCE_SHIFT={}", shape.nonce_shift),
             format!("-DSEINE_B2_MSG_WORDS={}", shape.message_words),
+            format!("-DSEINE_B2_PRE_COLUMNS={}", shape.pre_columns),
         ];
         let (major, minor) = self.arch;
         let mut cubin_options = common.clone();
@@ -402,23 +422,42 @@ mod tests {
     #[test]
     #[ignore = "requires NVIDIA GPU + CUDA runtime; run manually under gpuq"]
     fn gpu_blake2b_rate() {
+        // SEINE_B2_SHAPES="256x16,128x32" sweeps threads-per-block x blocks-per-SM;
+        // SEINE_B2_RUNS repeats each shape (default 1).
         let mut engine = engine("rate");
         let midstate = midstate(FARADAY_HEADER_BASE_LEN);
         let target = target_with_limb0(0);
-        let launch = engine.wave_nonces() * 256;
-        engine.scan(&midstate, 0, launch, &target).unwrap();
-        let started = Instant::now();
-        let (mut nonce, mut hashes) = (0u64, 0u64);
-        while started.elapsed().as_secs_f64() < 5.0 {
-            engine.scan(&midstate, nonce, launch, &target).unwrap();
-            nonce = nonce.wrapping_add(launch);
-            hashes += launch;
+        let shapes: Vec<(u32, u32)> = std::env::var("SEINE_B2_SHAPES")
+            .unwrap_or_else(|_| format!("{THREADS_PER_BLOCK}x{BLOCKS_PER_SM}"))
+            .split(',')
+            .map(|shape| {
+                let (tpb, bpsm) = shape.split_once('x').expect("TPBxBPSM");
+                (tpb.parse().expect("tpb"), bpsm.parse().expect("bpsm"))
+            })
+            .collect();
+        let runs: usize = std::env::var("SEINE_B2_RUNS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
+        for _ in 0..runs {
+            for &(tpb, bpsm) in &shapes {
+                engine.set_launch_shape(tpb, bpsm);
+                let launch = (engine.wave_nonces() * 256).min(1 << 28);
+                engine.scan(&midstate, 0, launch, &target).unwrap();
+                let started = Instant::now();
+                let (mut nonce, mut hashes) = (0u64, 0u64);
+                while started.elapsed().as_secs_f64() < 5.0 {
+                    engine.scan(&midstate, nonce, launch, &target).unwrap();
+                    nonce = nonce.wrapping_add(launch);
+                    hashes += launch;
+                }
+                let secs = started.elapsed().as_secs_f64();
+                println!(
+                    "blake2b-rate | shape={tpb}x{bpsm} launch={launch} hashes={hashes} secs={secs:.3} ghs={:.3}",
+                    hashes as f64 / secs / 1e9
+                );
+            }
         }
-        let secs = started.elapsed().as_secs_f64();
-        println!(
-            "blake2b-rate | launch={launch} hashes={hashes} secs={secs:.3} ghs={:.3}",
-            hashes as f64 / secs / 1e9
-        );
     }
 
     #[test]
