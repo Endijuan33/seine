@@ -21,6 +21,7 @@ supported hardware only.
 - Mine from networks that block pool ports: `--pool-proxy socks5://host:port` sends pool connections through a SOCKS5 proxy, including Tor or an SSH tunnel.
 - **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
 - Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
+- The local control API reports live hashrate, accepted and rejected shares, and per-GPU rates with PCI addresses at `GET /v1/miner/stats`, for rig dashboards and mining OS stats scripts. See [docs/API.md](docs/API.md).
 - Seine backs off when a pool connection keeps failing (2 seconds, doubling to a minute) and follows a full pool's suggested wait, instead of reconnecting in a tight loop. Self-hosted telemetry collectors need the schema 12 update before this release.
 
 ## v0.2.45

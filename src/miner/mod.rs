@@ -11,6 +11,7 @@ mod bench;
 pub(crate) mod block_latency;
 mod hash_poll;
 mod hashrate_tracker;
+pub(crate) mod live_stats;
 mod mining;
 mod mining_pool;
 mod mining_tui;

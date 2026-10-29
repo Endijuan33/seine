@@ -1033,6 +1033,16 @@ pub trait PowBackend: Send + Sync {
         None
     }
 
+    /// Index of the GPU this instance mines on, once the device is resolved.
+    fn device_index(&self) -> Option<u32> {
+        None
+    }
+
+    /// PCI address (`dddd:bb:dd.f`) of the GPU this instance mines on, if known.
+    fn pci_address(&self) -> Option<String> {
+        None
+    }
+
     fn set_instance_id(&self, id: BackendInstanceId);
 
     fn set_event_sink(&self, sink: Sender<BackendEvent>);

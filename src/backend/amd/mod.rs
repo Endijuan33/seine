@@ -428,6 +428,20 @@ impl PowBackend for AmdBackend {
         })
     }
 
+    fn device_index(&self) -> Option<u32> {
+        self.resolved_device
+            .read()
+            .ok()
+            .and_then(|dev| dev.as_ref().map(|d| d.index))
+    }
+
+    fn pci_address(&self) -> Option<String> {
+        self.resolved_device
+            .read()
+            .ok()
+            .and_then(|dev| dev.as_ref().map(|d| d.pci_address.clone()))
+    }
+
     fn set_instance_id(&self, id: BackendInstanceId) {
         self.instance_id.store(id, Ordering::Release);
     }

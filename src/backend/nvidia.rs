@@ -1227,6 +1227,7 @@ pub struct NvidiaBackend {
     autotune_secs: u64,
     tuning_options: NvidiaBackendTuningOptions,
     resolved_device: RwLock<Option<NvidiaDeviceInfo>>,
+    pci_address: Mutex<Option<String>>,
     kernel_tuning: RwLock<Option<NvidiaKernelTuning>>,
     shared: Arc<NvidiaShared>,
     nonblocking_control: Mutex<NonblockingControlState>,
@@ -1266,6 +1267,7 @@ impl NvidiaBackend {
                 enforce_template_stop: tuning_options.enforce_template_stop,
             },
             resolved_device: RwLock::new(None),
+            pci_address: Mutex::new(None),
             kernel_tuning: RwLock::new(None),
             shared: Arc::new(NvidiaShared::new()),
             nonblocking_control: Mutex::new(NonblockingControlState::default()),
@@ -1691,6 +1693,21 @@ impl PowBackend for NvidiaBackend {
             dev.as_ref()
                 .map(|d| d.memory_total_mib.saturating_mul(1024 * 1024))
         })
+    }
+
+    fn device_index(&self) -> Option<u32> {
+        self.resolved_device
+            .read()
+            .ok()
+            .and_then(|dev| dev.as_ref().map(|d| d.index))
+    }
+
+    fn pci_address(&self) -> Option<String> {
+        let mut cached = self.pci_address.lock().ok()?;
+        if cached.is_none() {
+            *cached = query_cuda_pci_address(self.device_index()?);
+        }
+        cached.clone()
     }
 
     fn set_instance_id(&self, id: BackendInstanceId) {
@@ -3557,6 +3574,29 @@ fn build_nvidia_autotune_key(
         cuda_kernel_fingerprint: cuda_kernel_fingerprint(),
         nvrtc_version: nvrtc_compiler_identity(),
     }
+}
+
+/// PCI address of the CUDA device at `device_index`, read from the driver so it
+/// names the device CUDA actually opens for that index.
+fn query_cuda_pci_address(device_index: u32) -> Option<String> {
+    use cudarc::driver::{result as driver_result, sys::CUdevice_attribute};
+
+    // Calling into a driver library that failed to load panics.
+    if !unsafe { cudarc::driver::sys::is_culib_present() } {
+        return None;
+    }
+    driver_result::init().ok()?;
+    let device = driver_result::device::get(i32::try_from(device_index).ok()?).ok()?;
+    let attribute = |attrib| unsafe { driver_result::device::get_attribute(device, attrib) }.ok();
+    let domain = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID)?;
+    let bus = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_BUS_ID)?;
+    let slot = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID)?;
+    Some(format!(
+        "{:04x}:{:02x}:{:02x}.0",
+        domain.max(0),
+        bus.max(0),
+        slot.max(0)
+    ))
 }
 
 fn query_cuda_compute_capability(device_index: u32) -> Option<(u32, u32)> {

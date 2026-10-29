@@ -71,6 +71,7 @@ Rules:
 | `POST` | `/v1/miner/stop` | Stop mining (optional wait budget) |
 | `POST` | `/v1/miner/restart` | Stop then start with optional sparse overrides |
 | `PATCH` | `/v1/miner/live-config` | Stage config changes for next start/session |
+| `GET` | `/v1/miner/stats` | Live hashrate, share counters and per-device rates |
 | `GET` | `/v1/backends` | Backend phase visibility, configured backends, and detected GPUs (`available_devices`) |
 | `POST` | `/v1/wallet/unlock` | Store wallet password for future startup attempts |
 | `GET` | `/v1/events/stream` | Runtime SSE event stream |
@@ -103,6 +104,38 @@ High-impact groups:
 - UI/SSE behavior: `ui_mode`, `sse_enabled`, `refresh_on_same_height`
 
 For the full field list and value constraints, use `docs/schemas/start-request.schema.json`.
+
+## Live Stats (`GET /v1/miner/stats`)
+
+Returns current and average hashrate (H/s), uptime, submitted/accepted/rejected
+counters, and one entry per backend instance with its GPU index and PCI address.
+Mining-OS stats scripts and dashboards can poll it every few seconds. `mining` is
+`null` until the first sample of a session, and current rates read as zero while
+the miner is not hashing (for example during a pool reconnect).
+
+```json
+{
+  "version": "0.2.46",
+  "lifecycle": "running",
+  "running": true,
+  "mining": {
+    "state": "working",
+    "uptime_secs": 3605.2,
+    "updated_at_unix_ms": 1767225600000,
+    "hashrate_hps": 412.5,
+    "average_hashrate_hps": 409.8,
+    "total_hashes": 1477390,
+    "submitted": 52,
+    "accepted": 51,
+    "rejected": 1,
+    "devices": [
+      {"label": "nvidia#1", "kind": "nvidia", "device_index": 0,
+       "pci_address": "0000:01:00.0", "lanes": 11,
+       "hashrate_hps": 206.1, "average_hashrate_hps": 204.9}
+    ]
+  }
+}
+```
 
 ## Live Config Semantics (`PATCH /v1/miner/live-config`)
 
