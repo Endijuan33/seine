@@ -77,6 +77,22 @@ pub(crate) fn raise_at_path(path: &Path) -> PerfLevelOutcome {
     PerfLevelOutcome::Raised { from: current }
 }
 
+/// Put one device's level back to what it was, if this process raised it.
+pub(crate) fn restore_performance_level(pci_address: &str) {
+    restore_at_path(&level_path_for_pci(pci_address));
+}
+
+pub(crate) fn restore_at_path(path: &Path) {
+    let previous = match CHANGED.lock() {
+        Ok(mut changed) => match changed.iter().position(|(recorded, _)| recorded == path) {
+            Some(index) => changed.remove(index).1,
+            None => return,
+        },
+        Err(_) => return,
+    };
+    let _ = fs::write(path, format!("{previous}\n"));
+}
+
 /// Put every level this process raised back to what it was.
 pub fn restore_performance_levels() {
     let changed = match CHANGED.lock() {
@@ -137,8 +153,13 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(&path).unwrap().trim(), "high");
         assert_eq!(raise_at_path(&path), PerfLevelOutcome::AlreadyHigh);
-        restore_performance_levels();
+        restore_at_path(&path);
         assert_eq!(fs::read_to_string(&path).unwrap().trim(), "auto");
+        // A second restore is a no-op, and the global restore has nothing left.
+        fs::write(&path, "manual\n").unwrap();
+        restore_at_path(&path);
+        restore_performance_levels();
+        assert_eq!(fs::read_to_string(&path).unwrap().trim(), "manual");
         let _ = fs::remove_dir_all(&dir);
     }
 

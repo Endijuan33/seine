@@ -503,6 +503,9 @@ impl PowBackend for AmdBackend {
             }
             let _ = worker.handle.join();
         }
+        if let Some(device) = self.resolved_device.try_read().ok().and_then(|d| d.clone()) {
+            dpm::restore_performance_level(&device.pci_address);
+        }
         if let Ok(mut slot) = self.interrupt_controller.write() {
             *slot = None;
         }
