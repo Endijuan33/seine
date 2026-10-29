@@ -10,7 +10,7 @@ supported hardware only.
 ## Unreleased
 
 - **CPU threads start on a new block about 0.3 s sooner.** When the pool moves to a new block, Seine now drops hashes that can no longer win instead of finishing them first (job switch measured at 240 ms → 7 ms on a Zen 4 EPYC). Job refreshes within the same block still finish their hashes, so those shares still count.
-- **Ryzen 7000 desktops mine about 7% faster on Linux** (measured on a Zen 4 desktop (Ryzen 7 7700X) with every thread in use).
+- **Ryzen 9000 and 7000 desktops mine faster on Linux:** about 16% on Zen 5 (Ryzen 7 9700X) and 7% on Zen 4 (Ryzen 7 7700X) with every thread in use.
 - **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
 - Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
 

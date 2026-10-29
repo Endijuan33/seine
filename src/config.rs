@@ -724,7 +724,8 @@ struct Cli {
     /// Experimental: from this permille of the arena on (500-1000), odd blocks
     /// skip their memory store and are rebuilt when referenced (AVX-512
     /// streaming kernels); 0 disables, unset uses the default for this
-    /// CPU (600 on Linux Zen 4 desktops at 16 or more workers, otherwise off).
+    /// CPU (600 on Linux Zen 4 desktops at 16 or more workers and Zen 5
+    /// desktops at 8 or more, otherwise off).
     #[arg(long, hide = true)]
     cpu_skip_store_permille: Option<u16>,
 

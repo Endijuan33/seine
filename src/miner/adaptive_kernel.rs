@@ -258,7 +258,7 @@ pub(crate) fn cohort_side_cache_blocks(
 /// Skipped-store permille for this host (see `set_skip_store_permille` in the
 /// kernel crate), or 0. Rebuilding late odd blocks trades DRAM traffic for extra
 /// compressions, which only pays where the streaming kernels are bandwidth-bound:
-/// Zen 4 desktops with every thread in use. Servers stay off.
+/// Zen 4 desktops with every thread in use and Zen 5 desktops. Servers stay off.
 pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
     if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
         return 0;
@@ -268,6 +268,12 @@ pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
         // Raphael and Dragon Range (Ryzen 7000 desktop and HX laptop).
         Some("AuthenticAMD")
             if identity.family == Some(0x19) && identity.model == Some(0x61) && workers >= 16 =>
+        {
+            600
+        }
+        // Granite Ridge and Fire Range (Ryzen 9000 desktop and HX laptop).
+        Some("AuthenticAMD")
+            if identity.family == Some(0x1a) && identity.model == Some(0x44) && workers >= 8 =>
         {
             600
         }
