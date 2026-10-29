@@ -1279,6 +1279,11 @@ fn maybe_autotune_cpu_threads(
     }
 
     let tag = runtime_mode_tag(mode);
+    // BLAKE2b work runs every CPU worker; the thread search measures Argon2.
+    if cfg.bench_pow == crate::config::BenchPow::Blake2b {
+        info(tag, "cpu-autotune | skipped for BLAKE2b; every CPU worker runs");
+        return Ok(());
+    }
     let cpu_instance_count = cfg
         .backend_specs
         .iter()
