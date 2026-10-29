@@ -19,7 +19,7 @@ data="$pkg/testdata"
 work=$(mktemp -d)
 server_pid=""
 cleanup() {
-	[[ -n $server_pid ]] && kill "$server_pid" 2>/dev/null || true
+	if [[ -n $server_pid ]]; then kill "$server_pid" 2>/dev/null || true; fi
 	rm -rf "$work"
 }
 trap cleanup EXIT
@@ -42,7 +42,7 @@ address=8yAUM9aprE1ffiEm5KugyGH1TUqXQTuF9j5Mt2ZabBJmM9HAb5bfPkpa5JjgGQHU8bAmsuuJ
 # --- shellcheck -------------------------------------------------------------
 shellcheck_bin=${SHELLCHECK:-shellcheck}
 if command -v "$shellcheck_bin" >/dev/null 2>&1; then
-	(cd "$pkg" && "$shellcheck_bin" -x h-config.sh h-run.sh h-stats.sh build.sh h-manifest.conf) ||
+	(cd "$pkg" && "$shellcheck_bin" -x -P SCRIPTDIR h-config.sh h-run.sh h-stats.sh build.sh h-manifest.conf ../lib/package.sh) ||
 		fail "shellcheck packaging/hiveos"
 	"$shellcheck_bin" "$repo/scripts/test_hiveos_package.sh" || fail "shellcheck test script"
 	ok "shellcheck"
@@ -147,32 +147,8 @@ ok "h-config: rejects a missing wallet and broken extra config"
 port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 export SEINE_HIVEOS_API_PORT=$port
 token=test-token-123
-cat >"$work/fake_api.py" <<'EOF'
-import http.server, sys
-
-port, token, body_path = int(sys.argv[1]), sys.argv[2], sys.argv[3]
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.headers.get("Authorization") != f"Bearer {token}":
-            self.send_response(401); self.end_headers(); return
-        if self.path != "/v1/miner/stats":
-            self.send_response(404); self.end_headers(); return
-        with open(body_path, "rb") as f:
-            body = f.read()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args):
-        pass
-
-http.server.HTTPServer(("127.0.0.1", port), Handler).serve_forever()
-EOF
 cp "$data/miner-stats.json" "$work/body.json"
-python3 "$work/fake_api.py" "$port" "$token" "$work/body.json" &
+python3 -I "$repo/scripts/package_test_api.py" "$port" "$token" "$work/body.json" &
 server_pid=$!
 for _ in $(seq 50); do
 	curl -s -o /dev/null "http://127.0.0.1:$port/" && break
