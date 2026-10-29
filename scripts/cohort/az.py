@@ -53,11 +53,15 @@ def save(receipt):
 
 
 def cloud_init(public_key, minutes):
-    # Azure's cloud-init manages root's authorized_keys with a command= prefix for the keys it
-    # installs; appending our own key afterwards and allowing root key logins is what gcp.py does.
+    # Azure writes the admin key into root's authorized_keys with a forced command that only
+    # prints "Please login as the user seine". The lease key IS that admin key, so a plain
+    # append is skipped by the duplicate check and root keeps the forced-command line only
+    # (seen on the first V710 lease, 2026-10-28). Drop the forced-command line, then append,
+    # and allow root key logins as gcp.py does.
     return f"""#cloud-config
 runcmd:
   - mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  - sed -i '/command=/d' /root/.ssh/authorized_keys 2>/dev/null || true
   - grep -qF '{public_key}' /root/.ssh/authorized_keys 2>/dev/null || echo '{public_key}' >> /root/.ssh/authorized_keys
   - chmod 600 /root/.ssh/authorized_keys
   - mkdir -p /etc/ssh/sshd_config.d
