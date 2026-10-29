@@ -425,6 +425,7 @@ mod tests {
             backend: Some("cpu#1".to_string()),
             retries: 0,
             timing: None,
+            worker: None,
         }
     }
 

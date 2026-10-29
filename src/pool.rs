@@ -60,6 +60,8 @@ const STRATUM_METHOD_REFILL: &str = "refill";
 const REFILL_REPLY_TIMEOUT: Duration = Duration::from_secs(10);
 /// Wait before asking again after a `refill rate limited` reply.
 const REFILL_RATE_LIMIT_RETRY: Duration = Duration::from_secs(1);
+/// The pool credits each share to the worker named on its submit.
+pub(crate) const STRATUM_CAPABILITY_PROXY_WORKERS_V1: &str = "proxy_workers_v1";
 /// The pool accepts miner-side timing fields on submits.
 const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
 /// This miner hashes Faraday BLAKE2b work. The pool refuses fork-height work to
@@ -87,6 +89,7 @@ const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
     STRATUM_CAPABILITY_NONCE_REFILL_V1,
+    STRATUM_CAPABILITY_PROXY_WORKERS_V1,
 ];
 
 const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
@@ -97,6 +100,7 @@ const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
     STRATUM_CAPABILITY_NONCE_REFILL_V1,
+    STRATUM_CAPABILITY_PROXY_WORKERS_V1,
     STRATUM_CAPABILITY_POW_BLAKE2B_V1,
 ];
 
@@ -217,6 +221,8 @@ struct PoolSubmit {
     /// Resubmits already sent for this share after retryable rejects.
     retries: u32,
     timing: Option<SubmitTiming>,
+    /// The worker to credit, from a farm proxy naming its rig.
+    worker: Option<String>,
 }
 
 /// Miner-side timings reported on a share's first submit when the pool
@@ -333,6 +339,30 @@ impl PoolClient {
                 backend: backend.map(str::to_string),
                 retries: 0,
                 timing,
+                worker: None,
+            })
+            .map_err(|_| anyhow!("pool submit channel closed"))
+    }
+
+    /// Submits a share credited to `worker`, for pools that accept
+    /// `proxy_workers_v1`; other pools ignore the name.
+    pub fn submit_share_for_worker(
+        &self,
+        job_id: String,
+        nonce: u64,
+        claimed_hash: Option<[u8; 32]>,
+        backend: Option<&str>,
+        worker: &str,
+    ) -> Result<()> {
+        self.submit_tx
+            .send(PoolSubmit {
+                job_id,
+                nonce,
+                claimed_hash,
+                backend: backend.map(str::to_string),
+                retries: 0,
+                timing: None,
+                worker: Some(worker.to_string()),
             })
             .map_err(|_| anyhow!("pool submit channel closed"))
     }
@@ -402,6 +432,8 @@ struct SubmitParams<'a> {
     found_to_send_us: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     job_switch_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    worker: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1563,6 +1595,7 @@ fn submit_payload(
             backend: submit.backend.as_deref(),
             found_to_send_us,
             job_switch_us,
+            worker: submit.worker.as_deref(),
         },
     };
     serde_json::to_string(&request).context("failed to serialize stratum submit payload")
@@ -2261,6 +2294,7 @@ mod tests {
                 found_at: Instant::now() - Duration::from_millis(3),
                 job_switch: Some(Duration::from_micros(1_500)),
             }),
+            worker: None,
         };
         let params = |submit: &PoolSubmit, include_timing: bool| -> Value {
             let payload =
@@ -2359,6 +2393,7 @@ mod tests {
                 backend: Some("nvidia#1".to_string()),
                 retries: 0,
                 timing: None,
+                worker: None,
             },
             99,
             true,
@@ -2417,6 +2452,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
             100,
             false,
@@ -2522,6 +2558,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
         );
         let raw = r#"{"id":42,"status":"ok","result":{"accepted":true,"difficulty":128}}"#;
@@ -2627,6 +2664,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
         );
         let raw = r#"{"id":9,"result":{}}"#;

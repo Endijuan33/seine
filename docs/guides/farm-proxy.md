@@ -35,9 +35,11 @@ Mining OS flight sheets work the same way: put the proxy's address in the pool U
 - **Payouts.** Each rig's shares pay the address the rig logs in with, so rigs mining to
   different wallets can share one proxy (up to 16 addresses). A rig whose address is
   missing or invalid pays the proxy's `--address`.
-- **Stats.** The pool shows the farm under the proxy's `--pool-worker` name. The proxy
-  logs connected rigs, accepted and rejected shares, an estimated hashrate and its pool
-  connections every minute, and logs each rig as it connects and disconnects.
+- **Stats.** On pools that credit shares per rig, such as bntpool.com, each rig shows on
+  the pool dashboard under its own worker name. Other pools show the farm under the
+  proxy's `--pool-worker` name. The proxy also logs connected rigs, accepted and rejected
+  shares, an estimated hashrate and its pool connections every minute, and logs each rig
+  as it connects and disconnects.
 - **Dev fee.** Each rig still runs its own dev-fee rounds. They go straight to
   bntpool.com, or through the proxy when the rig cannot reach bntpool.com, and in both
   cases they pay the dev fee address.

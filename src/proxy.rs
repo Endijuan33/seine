@@ -1292,9 +1292,10 @@ impl Hub {
             return self.reply_error(conn, id, "duplicate share");
         }
         let backend = params.get("backend").and_then(Value::as_str);
+        let worker = self.rigs.get(&conn).map_or("", |rig| rig.worker.as_str());
         if session
             .client
-            .submit_share_with_timing(upstream_job_id, nonce, claimed_hash, backend, None)
+            .submit_share_for_worker(upstream_job_id, nonce, claimed_hash, backend, worker)
             .is_err()
         {
             return self.reply_error(conn, id, "pool unavailable");
@@ -1855,6 +1856,10 @@ mod tests {
         let (address, submit) = next_from(&seen, "submit");
         assert_eq!(address, dev);
         assert_eq!(submit["params"]["nonce"], job["params"]["nonce_start"]);
+        assert_eq!(
+            submit["params"]["worker"], "rig",
+            "shares name the rig that found them"
+        );
         assert_eq!(dev_rig.recv()["id"], 5);
 
         // A rig with an invalid address mines to the proxy's --address.
