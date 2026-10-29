@@ -10,7 +10,7 @@ use std::ffi::{c_char, c_int, c_uint, c_void, CString};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, bail, Context, Result};
-use blocknet_pow_spec::{pow_params, CPU_LANE_MEMORY_BYTES, POW_HEADER_BASE_LEN, POW_OUTPUT_LEN};
+use blocknet_pow_spec::{pow_params, CPU_LANE_MEMORY_BYTES, POW_OUTPUT_LEN};
 
 use super::hip_ffi::{
     is_hip_oom_code, HipApi, HipDevicePropR0000, HipDeviceptr, HipError, HipFunction, HipModule,
@@ -722,13 +722,8 @@ impl HipArgon2Engine {
         target: Option<&[u8; POW_OUTPUT_LEN]>,
         network_target: Option<&[u8; POW_OUTPUT_LEN]>,
     ) -> Result<FillBatchResult> {
-        if header_base.len() != POW_HEADER_BASE_LEN {
-            bail!(
-                "invalid header base length: expected {} bytes, got {}",
-                POW_HEADER_BASE_LEN,
-                header_base.len()
-            );
-        }
+        let header_len = blocknet_pow_spec::validate_header_length(header_base.len())
+            .map_err(|reason| anyhow!(reason))?;
 
         if nonces.is_empty() {
             return Ok(FillBatchResult {
@@ -808,7 +803,7 @@ impl HipArgon2Engine {
                 .saturating_div(SEED_KERNEL_THREADS)
                 .max(1);
             let mut header_ptr = self.header_base_input.device_ptr();
-            let mut header_len = POW_HEADER_BASE_LEN as u32;
+            let mut header_len = header_len;
             let mut nonce_ptr = self.nonce_input.device_ptr();
             let mut active = requested_hashes_u32;
             let mut m_cost_kib = self.m_cost_kib;
@@ -1028,7 +1023,7 @@ fn try_allocate_hip_buffers(
         seed_blocks: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(256 * 8))?,
         last_blocks: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(128 * 8))?,
         nonce_input: DeviceBuffer::alloc(api, launch_capacity.saturating_mul(8))?,
-        header_base_input: DeviceBuffer::alloc(api, POW_HEADER_BASE_LEN)?,
+        header_base_input: DeviceBuffer::alloc(api, blocknet_pow_spec::MAX_POW_HEADER_BASE_LEN)?,
         target_input: DeviceBuffer::alloc(api, POW_OUTPUT_LEN)?,
         cancel_flag: DeviceBuffer::alloc(api, 4)?,
         completed_iters: DeviceBuffer::alloc(api, 4)?,

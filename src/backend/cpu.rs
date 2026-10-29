@@ -174,6 +174,7 @@ struct Shared {
     completed_assignment_hashes: AtomicU64,
     completed_assignment_micros: AtomicU64,
     dropped_events: AtomicU64,
+    pending_events: AtomicUsize,
     arena_explicit_large_workers: AtomicU64,
     arena_explicit_large_1g_workers: AtomicU64,
     arena_transparent_huge_workers: AtomicU64,
@@ -265,6 +266,7 @@ impl CpuBackend {
                 completed_assignment_hashes: AtomicU64::new(0),
                 completed_assignment_micros: AtomicU64::new(0),
                 dropped_events: AtomicU64::new(0),
+                pending_events: AtomicUsize::new(0),
                 arena_explicit_large_workers: AtomicU64::new(0),
                 arena_explicit_large_1g_workers: AtomicU64::new(0),
                 arena_transparent_huge_workers: AtomicU64::new(0),
@@ -345,6 +347,7 @@ impl CpuBackend {
             .completed_assignment_micros
             .store(0, Ordering::Release);
         self.shared.dropped_events.store(0, Ordering::Release);
+        self.shared.pending_events.store(0, Ordering::Release);
         reset_arena_telemetry(&self.shared);
         reset_hash_slots(&self.shared.hash_slots);
         for generation in &self.shared.finished_generations {
@@ -377,6 +380,7 @@ impl CpuBackend {
             .spawn(move || {
                 while let Ok(event) = dispatch_rx.recv() {
                     forward_event(&shared, event);
+                    shared.pending_events.fetch_sub(1, Ordering::AcqRel);
                 }
             })
             .map_err(|err| anyhow!("failed to spawn CPU event forwarder: {err}"))?;
@@ -751,7 +755,11 @@ impl PowBackend for CpuBackend {
 
         BackendTelemetry {
             active_lanes: self.shared.active_workers.load(Ordering::Acquire) as u64,
-            pending_work: u64::from(has_pending_work(&self.shared)),
+            // Workers can finish before their final solutions reach the runtime.
+            pending_work: u64::from(
+                has_pending_work(&self.shared)
+                    || self.shared.pending_events.load(Ordering::Acquire) > 0,
+            ),
             dropped_events: self.shared.dropped_events.swap(0, Ordering::AcqRel),
             completed_assignments: self.shared.completed_assignments.swap(0, Ordering::AcqRel),
             completed_assignment_hashes: self
@@ -1956,6 +1964,45 @@ mod tests {
             .worker_allocation_failures
             .store(1, Ordering::Release);
         assert_eq!(backend.adaptive_snapshot().allocation_failures, 1);
+    }
+
+    #[test]
+    fn idle_workers_remain_pending_until_solution_forwarding_finishes() {
+        let backend = CpuBackend::new(1, CpuAffinityMode::Off);
+        backend.shared.started.store(true, Ordering::Release);
+        // A rendezvous sink keeps the last solution in the forwarder until read.
+        let (tx, rx) = crossbeam_channel::bounded(0);
+        backend.set_event_sink(tx);
+        backend.start_event_forwarder().unwrap();
+        super::emit_event(
+            &backend.shared,
+            BackendEvent::Solution(MiningSolution {
+                epoch: 1,
+                nonce: 7,
+                hash: None,
+                share_binding_id: 1,
+                backend_id: 1,
+                backend: "cpu",
+                found_at: Instant::now(),
+            }),
+        );
+        let telemetry = backend.take_telemetry();
+        assert_eq!(telemetry.active_lanes, 0);
+        assert_eq!(
+            telemetry.pending_work, 1,
+            "idle must include buffered solutions"
+        );
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            BackendEvent::Solution(_)
+        ));
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while backend.take_telemetry().pending_work != 0 && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert_eq!(backend.take_telemetry().pending_work, 0);
+        backend.stop_event_forwarder();
+        backend.shared.started.store(false, Ordering::Release);
     }
 
     #[test]

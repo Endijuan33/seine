@@ -864,13 +864,8 @@ impl CudaArgon2Engine {
         target: Option<&[u8; POW_OUTPUT_LEN]>,
         network_target: Option<&[u8; POW_OUTPUT_LEN]>,
     ) -> Result<FillBatchResult> {
-        if header_base.len() != POW_HEADER_BASE_LEN {
-            bail!(
-                "invalid header base length: expected {} bytes, got {}",
-                POW_HEADER_BASE_LEN,
-                header_base.len()
-            );
-        }
+        let header_len = blocknet_pow_spec::validate_header_length(header_base.len())
+            .map_err(|reason| anyhow!(reason))?;
 
         if nonces.is_empty() {
             return Ok(FillBatchResult {
@@ -899,7 +894,7 @@ impl CudaArgon2Engine {
             {
                 let mut header_view = self
                     .header_base_input
-                    .try_slice_mut(0..POW_HEADER_BASE_LEN)
+                    .try_slice_mut(0..header_base.len())
                     .ok_or_else(|| anyhow!("failed to slice CUDA header buffer"))?;
                 self.stream
                     .memcpy_htod(header_base, &mut header_view)
@@ -990,7 +985,7 @@ impl CudaArgon2Engine {
                 let mut launch = self.stream.launch_builder(&self.seed_kernel);
                 launch
                     .arg(&self.header_base_input)
-                    .arg(&(POW_HEADER_BASE_LEN as u32))
+                    .arg(&header_len)
                     .arg(&self.nonce_input)
                     .arg(&requested_hashes_u32)
                     .arg(&self.m_cost_kib)
@@ -3155,7 +3150,8 @@ fn try_allocate_cuda_buffers(
     let seed_blocks = unsafe { stream.alloc::<u64>(launch_capacity.saturating_mul(256)) }?;
     let last_blocks = unsafe { stream.alloc::<u64>(launch_capacity.saturating_mul(128)) }?;
     let nonce_input = unsafe { stream.alloc::<u64>(launch_capacity) }?;
-    let header_base_input = unsafe { stream.alloc::<u8>(POW_HEADER_BASE_LEN) }?;
+    let header_base_input =
+        unsafe { stream.alloc::<u8>(blocknet_pow_spec::MAX_POW_HEADER_BASE_LEN) }?;
     let target_input = unsafe { stream.alloc::<u8>(POW_OUTPUT_LEN) }?;
     let cancel_flag = unsafe { stream.alloc::<u32>(1) }?;
     let completed_iters = unsafe { stream.alloc::<u32>(1) }?;

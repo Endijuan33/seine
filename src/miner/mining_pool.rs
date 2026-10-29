@@ -152,6 +152,9 @@ struct ActivePoolJob {
     share_bindings: HashMap<ShareBindingId, PoolShareBinding>,
     next_nonce: u64,
     dispatch_nonce: u64,
+    dispatch_exhausted: bool,
+    range_completed: bool,
+    refill_requested: bool,
     epoch: u64,
     height: String,
     round_start: Instant,
@@ -285,6 +288,9 @@ impl ActivePoolJob {
             share_bindings,
             next_nonce,
             dispatch_nonce,
+            dispatch_exhausted: false,
+            range_completed: false,
+            refill_requested: false,
             job,
             epoch,
             round_start: now,
@@ -374,6 +380,7 @@ fn rebind_active_pool_job(
     active_job.share_difficulty = job.difficulty;
     active_job.height = job.height.to_string();
     active_job.job_received_at = now;
+    active_job.refill_requested = false;
     active_job.register_share_binding(job.job_id.clone(), target);
     active_job.job = job.clone();
 
@@ -456,7 +463,24 @@ enum PoolShareSubmitOutcome {
 }
 
 fn should_resume_pool_assignment(job: &ActivePoolJob, has_pending_work: bool) -> bool {
-    !has_pending_work && job.next_nonce <= job.job.nonce_end
+    !has_pending_work && !job.range_completed && job.next_nonce <= job.job.nonce_end
+}
+
+fn settle_idle_pool_assignment(job: &mut ActivePoolJob, pending_work: bool, events_empty: bool) {
+    if pending_work || !events_empty {
+        return;
+    }
+    // Retire the reserved span, not just the prefix up to the last solution.
+    // A completed window can have no solutions at all. Never hash it again.
+    job.next_nonce = job.next_nonce.max(job.dispatch_nonce);
+    job.range_completed = job.dispatch_exhausted;
+}
+
+fn should_refill_pool_job(job: &ActivePoolJob) -> bool {
+    job.range_completed
+        && !job.refill_requested
+        && job.pending_submit_nonces.is_empty()
+        && job.deferred_submits.is_empty()
 }
 
 fn advance_pool_nonce_cursor(job: &mut ActivePoolJob, solved_nonce: u64) {
@@ -1379,8 +1403,24 @@ pub(super) fn run_pool_mining_loop(
             if let Some(active_job) = active_job.as_mut() {
                 let has_pending_work =
                     collect_pool_backend_samples(backends, backend_executor, &stats, active_job);
+                let events_empty = backend_events.is_empty();
+                settle_idle_pool_assignment(active_job, has_pending_work, events_empty);
                 should_resume_assignment =
-                    should_resume_pool_assignment(active_job, has_pending_work);
+                    events_empty && should_resume_pool_assignment(active_job, has_pending_work);
+                if should_refill_pool_job(active_job) {
+                    active_job.refill_requested = true;
+                    match active_mode {
+                        PoolConnectionMode::Dev => dev_session
+                            .client
+                            .request_nonce_refill(&active_job.job.job_id),
+                        PoolConnectionMode::User => user_session
+                            .client
+                            .request_nonce_refill(&active_job.job.job_id),
+                    }
+                    if active_mode.is_user() {
+                        info("JOB", "nonce range finished; requesting fresh work");
+                    }
+                }
                 update_tui(
                     &mut tui,
                     &stats,
@@ -2030,6 +2070,10 @@ fn assign_pool_job(
     tui: &mut Option<TuiDisplay>,
 ) -> Result<()> {
     let handled_at = Instant::now();
+    // Returning an error exits the mining loop through normal backend teardown.
+    // Merely ignoring this job would leave workers hashing the previous template.
+    blocknet_pow_spec::ensure_supported_pow(job.height)
+        .map_err(|reason| anyhow::anyhow!(reason))?;
     let nonce_count = job.nonce_count();
     if nonce_count == 0 {
         if mode.is_user() {
@@ -2047,6 +2091,8 @@ fn assign_pool_job(
             return Ok(());
         }
     };
+    blocknet_pow_spec::validate_header_length(header_base.len())
+        .map_err(|reason| anyhow::anyhow!(reason))?;
 
     if let Some(current) = active_job.as_mut() {
         if same_pool_template_identity(current, &job, header_base.as_ref(), network_target.as_ref())
@@ -2146,7 +2192,11 @@ fn restart_pool_assignment(
     backend_weights: &mut BTreeMap<u64, f64>,
     active_job: &mut ActivePoolJob,
 ) -> Result<()> {
+    if active_job.range_completed {
+        return Ok(());
+    }
     active_job.dispatch_nonce = active_job.next_nonce;
+    active_job.dispatch_exhausted = false;
     assign_pool_continuation(
         cfg,
         work_id_cursor,
@@ -2211,6 +2261,7 @@ fn assign_pool_continuation(
         },
         backend_executor,
     )?;
+    active_job.dispatch_exhausted = distribution.consumed_span >= remaining_span;
     active_job.dispatch_nonce = active_job
         .dispatch_nonce
         .saturating_add(distribution.consumed_span);
@@ -2243,7 +2294,7 @@ fn maybe_hot_rebalance_active_pool_job(
     let Some(job) = active_job.as_ref() else {
         return Ok(());
     };
-    if job.next_nonce > job.job.nonce_end || backends.is_empty() {
+    if job.range_completed || job.next_nonce > job.job.nonce_end || backends.is_empty() {
         return Ok(());
     }
 
@@ -3595,6 +3646,54 @@ mod tests {
         );
 
         job.next_nonce = job.job.nonce_end.saturating_add(1);
+        assert!(!should_resume_pool_assignment(&job, false));
+    }
+
+    #[test]
+    fn completed_range_waits_for_events_and_submissions_before_refill() {
+        let mut job = test_active_job(13);
+        job.dispatch_nonce = job.job.nonce_end + 1;
+        job.dispatch_exhausted = true;
+        let original = job.next_nonce;
+        super::settle_idle_pool_assignment(&mut job, true, true);
+        assert_eq!(job.next_nonce, original);
+        super::settle_idle_pool_assignment(&mut job, false, false);
+        assert!(
+            !job.range_completed,
+            "last solution is still in the runtime queue"
+        );
+        super::settle_idle_pool_assignment(&mut job, false, true);
+        assert!(job.range_completed);
+        assert!(
+            !should_resume_pool_assignment(&job, false),
+            "must not rehash a completed window"
+        );
+        job.pending_submit_nonces.insert(
+            ("job".into(), 5),
+            PendingPoolSubmit {
+                found_at: Instant::now(),
+                submitted_at: Instant::now(),
+                backend_label: "cpu".into(),
+            },
+        );
+        assert!(!super::should_refill_pool_job(&job));
+        job.pending_submit_nonces.clear();
+        assert!(super::should_refill_pool_job(&job));
+        job.refill_requested = true;
+        assert!(!super::should_refill_pool_job(&job), "request exactly once");
+    }
+
+    #[test]
+    fn completed_range_needs_no_solution_and_handles_maximum_nonce() {
+        let mut job = test_active_job(13);
+        job.job.nonce_start = u64::MAX - 100;
+        job.job.nonce_end = u64::MAX;
+        job.next_nonce = job.job.nonce_start;
+        job.dispatch_nonce = u64::MAX;
+        job.dispatch_exhausted = true;
+        super::settle_idle_pool_assignment(&mut job, false, true);
+        assert!(job.submitted_nonces.is_empty());
+        assert!(super::should_refill_pool_job(&job));
         assert!(!should_resume_pool_assignment(&job, false));
     }
 

@@ -3795,9 +3795,13 @@ mod tests {
 
     fn assert_fixed_kernel_matches_reference(isa: Option<u8>) {
         let memory_kib_values = [8u32, 32u32, 65u32, 4096u32];
+        let extended_header = [0xabu8; 156];
+        let long_header = [0x73u8; 512];
         let salts = [
             b"12345678".as_slice(),
             b"headerbase0123456789abcdefghijklmnop".as_slice(),
+            extended_header.as_slice(),
+            long_header.as_slice(),
         ];
         let nonces = [0u64, 1u64, 7u64, 42u64, 1_000_003u64];
 

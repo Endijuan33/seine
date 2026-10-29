@@ -6,6 +6,36 @@ pub const POW_PARALLELISM: u32 = 1;
 pub const POW_OUTPUT_LEN: usize = 32;
 pub const POW_HEADER_BASE_LEN: usize = 92;
 
+/// First height mined with BLAKE2b-512 and 10-minute blocks. Templates below
+/// it stay Argon2id.
+pub const FARADAY_ACTIVATION_HEIGHT: u64 = 103_680;
+
+pub fn target_block_seconds(template_height: u64) -> u64 {
+    if template_height >= FARADAY_ACTIVATION_HEIGHT {
+        600
+    } else {
+        300
+    }
+}
+
+/// A transport/resource bound, not a consensus header layout.
+pub const MAX_POW_HEADER_BASE_LEN: usize = 4096;
+
+pub fn validate_header_length(length: usize) -> Result<u32, &'static str> {
+    if !(8..=MAX_POW_HEADER_BASE_LEN).contains(&length) {
+        return Err("header_base must contain 8..4096 bytes");
+    }
+    Ok(length as u32)
+}
+
+pub fn ensure_supported_pow(height: u64) -> Result<(), &'static str> {
+    if height >= FARADAY_ACTIVATION_HEIGHT {
+        Err("Faraday PoW is not supported by this build; upgrade before height 103680")
+    } else {
+        Ok(())
+    }
+}
+
 pub const CPU_LANE_MEMORY_BYTES: u64 = (POW_MEMORY_KB as u64) * 1024;
 
 pub fn pow_params() -> Result<Params, Error> {
@@ -21,8 +51,6 @@ pub fn pow_params() -> Result<Params, Error> {
 // has not published test vectors yet; the vectors in the tests below come from
 // Python's hashlib.blake2b and must be replaced by the official ones.
 
-/// First height mined with BLAKE2b-512. Templates below it stay Argon2id.
-pub const FARADAY_ACTIVATION_HEIGHT: u64 = 103_680;
 /// Header v2 without the nonce: v1 fields plus a 64-byte tree root (proposal).
 pub const FARADAY_HEADER_BASE_LEN: usize = 156;
 pub const BLAKE2B_POW_OUTPUT_LEN: usize = 64;
@@ -159,5 +187,25 @@ mod tests {
 
     fn hex(bytes: &[u8]) -> String {
         bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn faraday_selection_uses_template_height() {
+        assert_eq!(target_block_seconds(FARADAY_ACTIVATION_HEIGHT - 1), 300);
+        assert_eq!(target_block_seconds(FARADAY_ACTIVATION_HEIGHT), 600);
+        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1).is_ok());
+        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT).is_err());
+        assert!(ensure_supported_pow(u64::MAX).is_err());
+        // A reorg can return to legacy work; no wall-clock or latched era.
+        assert!(ensure_supported_pow(FARADAY_ACTIVATION_HEIGHT - 1).is_ok());
+    }
+
+    #[test]
+    fn header_lengths_are_dynamic_and_bounded() {
+        for len in [8, 92, 156, 512, MAX_POW_HEADER_BASE_LEN] {
+            assert_eq!(validate_header_length(len).unwrap() as usize, len);
+        }
+        assert!(validate_header_length(7).is_err());
+        assert!(validate_header_length(MAX_POW_HEADER_BASE_LEN + 1).is_err());
     }
 }
