@@ -151,6 +151,9 @@ struct Shared {
     solution_state: AtomicU64,
     error_emitted: AtomicBool,
     work_generation: AtomicU64,
+    /// Workers on this generation or older abandon a hash in flight at the
+    /// next Argon2 slice boundary (see `PowBackend::abandon_in_flight_work`).
+    abandon_through_generation: AtomicU64,
     active_workers: AtomicUsize,
     ready_workers: AtomicUsize,
     startup_failed: AtomicBool,
@@ -237,6 +240,7 @@ impl CpuBackend {
                 solution_state: AtomicU64::new(0),
                 error_emitted: AtomicBool::new(false),
                 work_generation: AtomicU64::new(0),
+                abandon_through_generation: AtomicU64::new(0),
                 active_workers: AtomicUsize::new(0),
                 ready_workers: AtomicUsize::new(0),
                 startup_failed: AtomicBool::new(false),
@@ -315,6 +319,9 @@ impl CpuBackend {
         self.shared.solution_state.store(0, Ordering::Release);
         self.shared.error_emitted.store(false, Ordering::Release);
         self.shared.work_generation.store(0, Ordering::Release);
+        self.shared
+            .abandon_through_generation
+            .store(0, Ordering::Release);
         self.shared.active_workers.store(0, Ordering::Release);
         self.shared.ready_workers.store(0, Ordering::Release);
         self.shared.startup_failed.store(false, Ordering::Release);
@@ -669,6 +676,13 @@ impl PowBackend for CpuBackend {
             ));
         }
         Ok(())
+    }
+
+    fn abandon_in_flight_work(&self) {
+        let generation = self.shared.work_generation.load(Ordering::Acquire);
+        self.shared
+            .abandon_through_generation
+            .fetch_max(generation, Ordering::AcqRel);
     }
 
     fn cancel_work(&self) -> Result<()> {

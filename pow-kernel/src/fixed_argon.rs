@@ -49,6 +49,10 @@ const ISA_AVX512_256_STREAM_L2: u8 = 13;
 const ISA_AVX512_STREAM_L2: u8 = 14;
 const ADDRESSES_IN_BLOCK: usize = 128;
 const SYNC_POINTS: usize = 4;
+/// `hash_password_into_with_memory_until` also asks its stop hook every
+/// 32Ki blocks inside a slice (64 times per 2 GiB hash), so an abandoned
+/// hash stops within about 1/64 of a hash time.
+const STOP_CHECK_MASK: usize = (1 << 15) - 1;
 const MAX_PWD_LEN: usize = 0xFFFF_FFFF;
 const MIN_SALT_LEN: usize = 8;
 const MAX_SALT_LEN: usize = 0xFFFF_FFFF;
@@ -353,6 +357,23 @@ impl FixedArgon2id {
         out: &mut [u8],
         memory_blocks: &mut [PowBlock],
     ) -> Result<()> {
+        self.hash_password_into_with_memory_until(pwd, salt, out, memory_blocks, &|| false)
+            .map(|_| ())
+    }
+
+    /// Like `hash_password_into_with_memory`, but asks `stop` at each Argon2
+    /// slice boundary and every 32Ki blocks, and abandons the hash when it
+    /// returns true. Returns whether the hash completed; `out` is only
+    /// written when it did. Miners use this to drop a stale nonce on a new
+    /// job instead of finishing it.
+    pub fn hash_password_into_with_memory_until(
+        &self,
+        pwd: &[u8],
+        salt: &[u8],
+        out: &mut [u8],
+        memory_blocks: &mut [PowBlock],
+        stop: &dyn Fn() -> bool,
+    ) -> Result<bool> {
         verify_inputs(pwd, salt, out)?;
         let memory_blocks = memory_blocks
             .get_mut(..self.block_count)
@@ -369,51 +390,63 @@ impl FixedArgon2id {
 
         initialize_lane_blocks(memory_blocks, initial_hash)?;
 
-        match self.isa {
-            ISA_AVX512 => self.fill_blocks::<ISA_AVX512, true, false>(memory_blocks),
-            ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks),
+        let completed = match self.isa {
+            ISA_AVX512 => self.fill_blocks::<ISA_AVX512, true, false>(memory_blocks, stop),
+            ISA_AVX512_256 => self.fill_blocks::<ISA_AVX512_256, true, false>(memory_blocks, stop),
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM => unsafe {
-                self.fill_streaming_ring::<2, 3, false, false, 0>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, false, 0>(memory_blocks, stop)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_L2 => unsafe {
-                self.fill_streaming_ring::<2, 3, false, false, STREAM_FAR_PREFETCH>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, false, STREAM_FAR_PREFETCH>(
+                    memory_blocks,
+                    stop,
+                )
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_STREAM_L2 => unsafe {
-                self.fill_streaming_ring::<2, 3, false, true, STREAM_FAR_PREFETCH>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, true, STREAM_FAR_PREFETCH>(
+                    memory_blocks,
+                    stop,
+                )
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_STREAM => unsafe {
-                self.fill_streaming_ring::<2, 3, false, true, 0>(memory_blocks)
+                self.fill_streaming_ring::<2, 3, false, true, 0>(memory_blocks, stop)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R8D2 => unsafe {
-                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }, false, 0>(memory_blocks)
+                self.fill_streaming_ring::<8, 2, { cfg!(any(target_os = "linux", target_os = "windows")) }, false, 0>(memory_blocks, stop)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D3 => unsafe {
-                self.fill_streaming_ring::<64, 3, true, false, 0>(memory_blocks)
+                self.fill_streaming_ring::<64, 3, true, false, 0>(memory_blocks, stop)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D4 => unsafe {
-                self.fill_streaming_ring::<64, 4, true, false, 0>(memory_blocks)
+                self.fill_streaming_ring::<64, 4, true, false, 0>(memory_blocks, stop)
             },
             #[cfg(target_arch = "x86_64")]
             ISA_AVX512_256_STREAM_R64D6 => unsafe {
-                self.fill_streaming_ring::<64, 6, true, false, 0>(memory_blocks)
+                self.fill_streaming_ring::<64, 6, true, false, 0>(memory_blocks, stop)
             },
-            ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks),
+            ISA_AVX2 => self.fill_blocks::<ISA_AVX2, true, false>(memory_blocks, stop),
             #[cfg(target_arch = "x86_64")]
-            ISA_AVX2_STREAM => unsafe { self.fill_streaming_ring_avx2::<2, 3>(memory_blocks) },
-            ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks),
+            ISA_AVX2_STREAM => unsafe {
+                self.fill_streaming_ring_avx2::<2, 3>(memory_blocks, stop)
+            },
+            ISA_NEON => self.fill_blocks::<ISA_NEON, false, true>(memory_blocks, stop),
             #[cfg(target_arch = "aarch64")]
-            ISA_NEON_SHA3 => unsafe { self.fill_blocks_neon_sha3(memory_blocks) },
-            _ => self.fill_blocks::<ISA_SCALAR, false, false>(memory_blocks),
+            ISA_NEON_SHA3 => unsafe { self.fill_blocks_neon_sha3(memory_blocks, stop) },
+            _ => self.fill_blocks::<ISA_SCALAR, false, false>(memory_blocks, stop),
+        };
+        if !completed {
+            return Ok(false);
         }
 
-        finalize(memory_blocks, out)
+        finalize(memory_blocks, out)?;
+        Ok(true)
     }
 
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
@@ -436,7 +469,8 @@ impl FixedArgon2id {
     >(
         &self,
         memory: &mut [PowBlock],
-    ) {
+        stop: &dyn Fn() -> bool,
+    ) -> bool {
         use std::arch::x86_64::{__m256i, _mm256_load_si256, _mm256_stream_si256, _mm_mfence};
         assert!(RING >= 2 && RING.is_power_of_two());
         assert!((1..=8).contains(&DEPTH));
@@ -459,10 +493,18 @@ impl FixedArgon2id {
         let last = memory.len() - 1;
         let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
         for slice in 0..SYNC_POINTS {
+            if slice > 0 && stop() {
+                _mm_mfence(); // Leave no streaming stores in flight.
+                return false;
+            }
             let first = if slice == 0 { 2 } else { 0 };
             let di = slice < 2;
             let base = slice * self.segment_length;
             for block in first..self.segment_length {
+                if block & STOP_CHECK_MASK == STOP_CHECK_MASK && stop() {
+                    _mm_mfence(); // Leave no streaming stores in flight.
+                    return false;
+                }
                 let cur = base + block;
                 let prev = &*cache.add((cur - 1) & mask);
                 let reference = if di {
@@ -590,6 +632,7 @@ impl FixedArgon2id {
             }
         }
         _mm_mfence(); // Finalization consumes the final arena block.
+        true
     }
 
     // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512 (Zen 2/3):
@@ -605,7 +648,8 @@ impl FixedArgon2id {
     unsafe fn fill_streaming_ring_avx2<const RING: usize, const DEPTH: usize>(
         &self,
         memory: &mut [PowBlock],
-    ) {
+        stop: &dyn Fn() -> bool,
+    ) -> bool {
         use std::arch::x86_64::{
             __m128i, _mm_load_si128, _mm_mfence, _mm_sfence, _mm_stream_si128,
         };
@@ -620,10 +664,18 @@ impl FixedArgon2id {
         debug_assert_eq!(arena as usize % 64, 0);
         debug_assert_eq!(cache as usize % 64, 0);
         for slice in 0..SYNC_POINTS {
+            if slice > 0 && stop() {
+                _mm_mfence(); // Leave no streaming stores in flight.
+                return false;
+            }
             let first = if slice == 0 { 2 } else { 0 };
             let di = slice < 2;
             let base = slice * self.segment_length;
             for block in first..self.segment_length {
+                if block & STOP_CHECK_MASK == STOP_CHECK_MASK && stop() {
+                    _mm_mfence(); // Leave no streaming stores in flight.
+                    return false;
+                }
                 let cur = base + block;
                 let prev = &*cache.add((cur - 1) & mask);
                 let reference = if di {
@@ -670,6 +722,7 @@ impl FixedArgon2id {
             }
         }
         _mm_mfence(); // Finalization consumes the final arena block.
+        true
     }
 
     // Keep the x86 loop out of the dispatch function. The ARM target-feature
@@ -683,17 +736,25 @@ impl FixedArgon2id {
     >(
         &self,
         memory_blocks: &mut [PowBlock],
-    ) {
-        self.fill_blocks_impl::<ISA, USE_X86_MID_PREFETCH, USE_AARCH64_MID_PREFETCH>(memory_blocks);
+        stop: &dyn Fn() -> bool,
+    ) -> bool {
+        self.fill_blocks_impl::<ISA, USE_X86_MID_PREFETCH, USE_AARCH64_MID_PREFETCH>(
+            memory_blocks,
+            stop,
+        )
     }
 
     #[cfg(target_arch = "aarch64")]
     #[target_feature(enable = "sha3")]
-    unsafe fn fill_blocks_neon_sha3(&self, memory_blocks: &mut [PowBlock]) {
+    unsafe fn fill_blocks_neon_sha3(
+        &self,
+        memory_blocks: &mut [PowBlock],
+        stop: &dyn Fn() -> bool,
+    ) -> bool {
         // Feature detection happens in with_kernel/set_kernel, once per selection.
         // Inline the loop and its NEON helpers into this feature-enabled boundary
         // so XAR is emitted directly, without a function call for every rotation.
-        self.fill_blocks_impl::<ISA_NEON_SHA3, false, true>(memory_blocks);
+        self.fill_blocks_impl::<ISA_NEON_SHA3, false, true>(memory_blocks, stop)
     }
 
     #[inline(always)]
@@ -704,10 +765,14 @@ impl FixedArgon2id {
     >(
         &self,
         memory_blocks: &mut [PowBlock],
-    ) {
+        stop: &dyn Fn() -> bool,
+    ) -> bool {
         debug_assert_eq!(ARGON2_LANES, 1);
         debug_assert_eq!(memory_blocks.len(), self.block_count);
         for slice in 0..SYNC_POINTS {
+            if slice > 0 && stop() {
+                return false;
+            }
             let data_independent_addressing = slice < (SYNC_POINTS / 2);
 
             let first_block = if slice == 0 { 2 } else { 0 };
@@ -728,6 +793,9 @@ impl FixedArgon2id {
                     }
                 }
                 for block in first_block..self.segment_length {
+                    if block & STOP_CHECK_MASK == STOP_CHECK_MASK && stop() {
+                        return false;
+                    }
                     let ref_index = self.data_independent_ref_indexes[ref_base + block];
                     let ahead = block + DI_PREFETCH_DISTANCE;
                     if ahead < self.segment_length {
@@ -742,6 +810,9 @@ impl FixedArgon2id {
             } else {
                 let slice_prefix = (slice * self.segment_length) - 1;
                 for block in first_block..self.segment_length {
+                    if block & STOP_CHECK_MASK == STOP_CHECK_MASK && stop() {
+                        return false;
+                    }
                     let rand = memory_blocks[prev_index].as_ref()[0];
                     let reference_area_size = slice_prefix + block;
                     let ref_index = reference_index(reference_area_size, rand);
@@ -789,6 +860,7 @@ impl FixedArgon2id {
                 }
             }
         }
+        true
     }
 }
 
@@ -3421,6 +3493,116 @@ mod tests {
                     &mut arena,
                 )
                 .unwrap();
+            assert_eq!(actual, expected, "path {kernel}");
+        }
+    }
+
+    #[test]
+    fn stopped_hashes_are_abandoned_and_the_arena_stays_usable() {
+        use std::cell::Cell;
+        let memory = 4096;
+        let reference = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(memory, 1, 1, Some(32)).unwrap(),
+        );
+        for kernel in crate::CpuKernel::ALL {
+            if !kernel.is_supported() {
+                continue;
+            }
+            let fixed = FixedArgon2id::with_kernel(memory, kernel).unwrap();
+            let mut arena = vec![PowBlock::default(); fixed.block_count()];
+            for stop_at in 1..super::SYNC_POINTS {
+                let asked = Cell::new(0);
+                let mut out = [0x5au8; 32];
+                let completed = fixed
+                    .hash_password_into_with_memory_until(
+                        &[7; 8],
+                        b"stop-test",
+                        &mut out,
+                        &mut arena,
+                        &|| {
+                            asked.set(asked.get() + 1);
+                            asked.get() >= stop_at
+                        },
+                    )
+                    .unwrap();
+                assert!(!completed, "path {kernel} stop_at {stop_at}");
+                assert_eq!(out, [0x5au8; 32], "abandoned hash wrote output");
+                assert_eq!(asked.get(), stop_at);
+
+                // The next hash on the same arena is unaffected.
+                let mut expected = [0u8; 32];
+                let mut actual = [0u8; 32];
+                reference
+                    .hash_password_into(&[9; 8], b"stop-test", &mut expected)
+                    .unwrap();
+                let completed = fixed
+                    .hash_password_into_with_memory_until(
+                        &[9; 8],
+                        b"stop-test",
+                        &mut actual,
+                        &mut arena,
+                        &|| false,
+                    )
+                    .unwrap();
+                assert!(completed);
+                assert_eq!(actual, expected, "path {kernel} after stop_at {stop_at}");
+            }
+        }
+    }
+
+    #[test]
+    fn hashes_stop_inside_a_slice_and_the_arena_stays_usable() {
+        use std::cell::Cell;
+        // 64Ki blocks per slice, so each slice has inner stop checks.
+        let memory = 256 * 1024;
+        let reference = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(memory, 1, 1, Some(32)).unwrap(),
+        );
+        let mut expected = [0u8; 32];
+        reference
+            .hash_password_into(&[3; 8], b"inner-stop", &mut expected)
+            .unwrap();
+        let mut arena = Vec::new();
+        for kernel in crate::CpuKernel::ALL {
+            if !kernel.is_supported() {
+                continue;
+            }
+            let fixed = FixedArgon2id::with_kernel(memory, kernel).unwrap();
+            arena.resize(fixed.block_count(), PowBlock::default());
+            // Slice 0 asks at block 32767 first; stop at the second ask,
+            // which falls inside slice 0 or right at slice 1.
+            for stop_at in [1, 2, 5] {
+                let asked = Cell::new(0);
+                let mut out = [0u8; 32];
+                let completed = fixed
+                    .hash_password_into_with_memory_until(
+                        &[1; 8],
+                        b"inner-stop",
+                        &mut out,
+                        &mut arena,
+                        &|| {
+                            asked.set(asked.get() + 1);
+                            asked.get() >= stop_at
+                        },
+                    )
+                    .unwrap();
+                assert!(!completed, "path {kernel} stop_at {stop_at}");
+                assert_eq!(asked.get(), stop_at);
+            }
+            let mut actual = [0u8; 32];
+            assert!(fixed
+                .hash_password_into_with_memory_until(
+                    &[3; 8],
+                    b"inner-stop",
+                    &mut actual,
+                    &mut arena,
+                    &|| false,
+                )
+                .unwrap());
             assert_eq!(actual, expected, "path {kernel}");
         }
     }

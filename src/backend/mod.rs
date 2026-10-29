@@ -1107,6 +1107,13 @@ pub trait PowBackend: Send + Sync {
         Ok(BackendCallStatus::Complete)
     }
 
+    /// Marks the work in flight as stale (the chain tip moved), so the next
+    /// cancel may abandon hashes part-way instead of finishing them. Without
+    /// it a cancel lets in-flight hashes complete, since a same-height job
+    /// refresh still accepts their shares. Backends that cannot abandon a
+    /// hash ignore it.
+    fn abandon_in_flight_work(&self) {}
+
     /// Request the backend to stop processing the current assignment.
     fn cancel_work(&self) -> Result<()> {
         Err(anyhow!(

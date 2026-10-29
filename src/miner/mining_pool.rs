@@ -2060,6 +2060,16 @@ fn assign_pool_job(
 
     let mut cancel_latency = None;
     if cancel_prior_work {
+        // A new height makes every hash in flight worthless; a same-height
+        // refresh still takes their shares, so those finish.
+        if active_job
+            .as_ref()
+            .is_some_and(|current| current.job.height != job.height)
+        {
+            for slot in backends.iter() {
+                slot.backend.abandon_in_flight_work();
+            }
+        }
         let cancel_started = Instant::now();
         if let Err(err) =
             super::cancel_backend_slots(backends, RuntimeMode::Mining, backend_executor)

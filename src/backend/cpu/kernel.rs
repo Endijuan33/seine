@@ -345,10 +345,15 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
         }
         let target_snapshot = template.target_snapshot();
         let nonce_bytes = nonce.to_le_bytes();
-        if hasher
+        // When the tip moves, the miner marks this generation's work stale.
+        // The hash in flight then stops at the next slice boundary instead
+        // of finishing, so the job switch no longer waits on a whole hash.
+        let superseded =
+            || shared.abandon_through_generation.load(Ordering::Relaxed) >= local_generation;
+        match hasher
             .as_ref()
             .expect("enabled worker has a hasher")
-            .hash_password_into_with_memory(
+            .hash_password_into_with_memory_until(
                 &nonce_bytes,
                 &template.header_base,
                 &mut output,
@@ -356,15 +361,18 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
                     .as_mut()
                     .expect("enabled worker has an arena")
                     .as_mut_slice(),
-            )
-            .is_err()
-        {
-            emit_error(
-                &shared,
-                format!("cpu thread {thread_idx}: hash_password_into_with_memory failed"),
-            );
-            request_shutdown(&shared);
-            break;
+                &superseded,
+            ) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(_) => {
+                emit_error(
+                    &shared,
+                    format!("cpu thread {thread_idx}: hash_password_into_with_memory failed"),
+                );
+                request_shutdown(&shared);
+                break;
+            }
         }
 
         lane_iters += 1;
