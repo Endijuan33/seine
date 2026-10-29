@@ -1,11 +1,14 @@
-//! Farm proxy: rigs on a local network share one upstream pool session.
+//! Farm proxy: rigs on a local network share upstream pool sessions.
 //!
-//! Each rig gets its own slice of the upstream job's nonce range, so the pool
-//! sees one session while every rig hashes distinct nonces. Shares are checked
-//! against the submitting rig's slice before they go upstream, and the pool's
-//! answer is routed back to that rig. Rigs top up their slice with `refill`;
-//! the proxy asks the pool for more range the same way, or reconnects for
-//! fresh work when the pool does not offer `refill`.
+//! Rigs are grouped by the payout address they log in with, and each address
+//! mines through its own upstream session, so every share pays the address
+//! its rig asked for (dev-fee rounds included). Each rig gets its own slice of
+//! a session's nonce range, so the pool sees one session while every rig hashes
+//! distinct nonces. Shares are checked against the submitting rig's slice
+//! before they go upstream, and the pool's answer is routed back to that rig.
+//! Rigs top up their slice with `refill`; the proxy asks the pool for more range
+//! the same way, or opens another session for the address when the pool does
+//! not offer `refill`.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
@@ -22,8 +25,9 @@ use tokio::sync::mpsc;
 use crate::config::Config;
 use crate::miner::ui::{info, success, warn};
 use crate::pool::{
-    PoolClient, PoolEvent, PoolJob, PoolNotification, POOL_NOTIFICATION_MINER_BLOCK_FOUND,
-    POOL_NOTIFICATION_POOL_BLOCK_SOLVED, STRATUM_CAPABILITY_NONCE_REFILL_V1,
+    PoolClient, PoolEvent, PoolJob, PoolNotification, SocksProxy,
+    POOL_NOTIFICATION_MINER_BLOCK_FOUND, POOL_NOTIFICATION_POOL_BLOCK_SOLVED,
+    STRATUM_CAPABILITY_NONCE_REFILL_V1,
 };
 
 const MAX_RIG_MESSAGE_BYTES: usize = 8 * 1024;
@@ -42,6 +46,23 @@ const QUICK_REFILL: Duration = Duration::from_secs(30);
 const SLOW_REFILL: Duration = Duration::from_secs(10 * 60);
 /// An unanswered upstream refill is asked for again after this long.
 const UPSTREAM_REFILL_RETRY: Duration = Duration::from_secs(15);
+/// Refills per session and template before opening another session; pools
+/// cap live assignments per connection.
+const MAX_REFILLS_PER_TEMPLATE: usize = 200;
+/// Distinct payout addresses served at once; more fall back to --address.
+const MAX_ADDRESSES: usize = 16;
+/// Upstream sessions per payout address.
+const MAX_SESSIONS_PER_ADDRESS: usize = 64;
+/// Shortest gap between opening upstream sessions.
+const SESSION_OPEN_INTERVAL: Duration = Duration::from_millis(500);
+/// Range kept per template beyond what rigs' current slices add up to, in
+/// percent, so a new template hands every rig a slice at once.
+const CAPACITY_HEADROOM_PCT: u64 = 125;
+/// Upstream range assumed before any session has a job.
+const DEFAULT_RANGE: u64 = 1_000_000;
+/// A session no rig has used for this long is closed, except the first
+/// session of --address.
+const IDLE_SESSION_CLOSE: Duration = Duration::from_secs(10 * 60);
 const SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
 const TICK: Duration = Duration::from_secs(1);
 
@@ -92,21 +113,16 @@ pub fn run(cfg: &Config, shutdown: Arc<AtomicBool>) -> Result<()> {
 async fn serve(
     listener: TcpListener,
     pool_url: String,
-    pool_proxy: Option<crate::pool::SocksProxy>,
+    pool_proxy: Option<SocksProxy>,
     address: String,
     worker: String,
     shutdown: Arc<AtomicBool>,
 ) -> Result<()> {
+    // Validate the pool URL list up front rather than on the first session.
+    crate::pool::normalize_pool_urls(&pool_url)?;
     let local = listener
         .local_addr()
         .map_or_else(|_| "?".to_string(), |addr| addr.to_string());
-    let upstream = Arc::new(PoolClient::connect_via(
-        &pool_url,
-        pool_proxy.as_ref(),
-        address.clone(),
-        worker.clone(),
-        Arc::clone(&shutdown),
-    )?);
     success(
         "PROXY",
         format!(
@@ -116,7 +132,6 @@ async fn serve(
     );
 
     let (hub_tx, hub_rx) = mpsc::unbounded_channel::<HubMsg>();
-    spawn_upstream_bridge(Arc::clone(&upstream), hub_tx.clone(), Arc::clone(&shutdown));
     let ticker_tx = hub_tx.clone();
     let ticker_shutdown = Arc::clone(&shutdown);
     tokio::spawn(async move {
@@ -144,30 +159,59 @@ async fn serve(
             }
         }
     });
-    drop(hub_tx);
 
-    let mut hub = Hub::new(upstream, pool_url, address);
+    let upstreams = Upstreams {
+        pool_url,
+        pool_proxy,
+        worker,
+        hub_tx,
+        shutdown: Arc::clone(&shutdown),
+    };
+    let mut hub = Hub::new(upstreams, address);
     hub.run(hub_rx, shutdown).await;
     Ok(())
 }
 
-/// Forwards upstream pool events into the hub.
-fn spawn_upstream_bridge(
-    upstream: Arc<PoolClient>,
+/// Opens upstream pool sessions and forwards their events into the hub.
+struct Upstreams {
+    pool_url: String,
+    pool_proxy: Option<SocksProxy>,
+    worker: String,
     hub_tx: mpsc::UnboundedSender<HubMsg>,
     shutdown: Arc<AtomicBool>,
-) {
-    let _ = std::thread::Builder::new()
-        .name("proxy-upstream".to_string())
-        .spawn(move || {
-            while !shutdown.load(Ordering::Relaxed) {
-                if let Some(event) = upstream.recv_event_timeout(Duration::from_millis(200)) {
-                    if hub_tx.send(HubMsg::Upstream(event)).is_err() {
-                        break;
+}
+
+impl Upstreams {
+    fn open(&self, session: usize, address: &str) -> Result<(Arc<PoolClient>, Arc<AtomicBool>)> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let client = Arc::new(PoolClient::connect_via(
+            &self.pool_url,
+            self.pool_proxy.as_ref(),
+            address.to_string(),
+            self.worker.clone(),
+            Arc::clone(&stop),
+        )?);
+        let bridge_client = Arc::clone(&client);
+        let bridge_stop = Arc::clone(&stop);
+        let shutdown = Arc::clone(&self.shutdown);
+        let hub_tx = self.hub_tx.clone();
+        std::thread::Builder::new()
+            .name(format!("proxy-upstream-{session}"))
+            .spawn(move || {
+                while !shutdown.load(Ordering::Relaxed) && !bridge_stop.load(Ordering::Relaxed) {
+                    if let Some(event) =
+                        bridge_client.recv_event_timeout(Duration::from_millis(200))
+                    {
+                        if hub_tx.send(HubMsg::Upstream(session, event)).is_err() {
+                            break;
+                        }
                     }
                 }
-            }
-        });
+                bridge_stop.store(true, Ordering::Relaxed);
+            })
+            .context("failed to start a proxy upstream thread")?;
+        Ok((client, stop))
+    }
 }
 
 async fn serve_rig(
@@ -204,7 +248,7 @@ async fn serve_rig(
 }
 
 enum HubMsg {
-    Upstream(PoolEvent),
+    Upstream(usize, PoolEvent),
     Connected {
         conn: u64,
         peer: SocketAddr,
@@ -274,7 +318,7 @@ impl Assignment {
     }
 }
 
-/// Upstream work for one block template.
+/// Upstream work for one block template on one session.
 #[derive(Debug)]
 struct Template {
     generation: u64,
@@ -321,10 +365,40 @@ fn template_key(job: &PoolJob) -> String {
     }
 }
 
+/// One upstream pool session, mining to one payout address.
+struct Session {
+    address: String,
+    client: Arc<PoolClient>,
+    stop: Arc<AtomicBool>,
+    logged_in: bool,
+    refill: bool,
+    /// The most recent upstream job id, which a refill request must name.
+    last_upstream_job: Option<String>,
+    current: Option<Template>,
+    previous: Option<Template>,
+    last_used: Instant,
+    /// The first session of --address stays open while the proxy runs.
+    permanent: bool,
+}
+
+impl Session {
+    fn template(&self, generation: u64) -> Option<&Template> {
+        [self.current.as_ref(), self.previous.as_ref()]
+            .into_iter()
+            .flatten()
+            .find(|template| template.generation == generation)
+    }
+
+    fn live(&self) -> Option<&Template> {
+        self.current.as_ref().filter(|template| !template.dead)
+    }
+}
+
 /// A slice of upstream range given to one rig under a proxy job id.
 #[derive(Debug, Clone)]
 struct LocalJob {
     conn: u64,
+    session: usize,
     generation: u64,
     assignment: usize,
     start: u64,
@@ -336,6 +410,7 @@ struct Rig {
     tx: mpsc::UnboundedSender<String>,
     peer: SocketAddr,
     worker: String,
+    address: String,
     logged_in: bool,
     blake2b: bool,
     slice_size: u64,
@@ -353,7 +428,7 @@ impl Rig {
 
 #[derive(Debug)]
 enum Waiter {
-    /// Logged in with no work yet.
+    /// Logged in or moved off its slice with no work yet.
     Job(u64),
     /// Asked to refill; `Value` is its request id.
     Refill(u64, Value),
@@ -367,47 +442,48 @@ struct Window {
 }
 
 struct Hub {
-    upstream: Arc<PoolClient>,
-    upstream_url: String,
+    upstreams: Upstreams,
     address: String,
-    upstream_logged_in: bool,
-    upstream_refill: bool,
-    /// The most recent upstream job id, which a refill request must name.
-    last_upstream_job: Option<String>,
+    sessions: HashMap<usize, Session>,
+    next_session: usize,
+    last_session_opened: Option<Instant>,
     generation: u64,
-    current: Option<Template>,
-    previous: Option<Template>,
     rigs: HashMap<u64, Rig>,
     local_jobs: HashMap<String, LocalJob>,
     next_local_job: u64,
-    pending_acks: HashMap<(String, u64), VecDeque<(u64, Value)>>,
+    pending_acks: HashMap<(usize, String, u64), VecDeque<(u64, Value)>>,
     waiting: VecDeque<Waiter>,
+    /// Addresses a rig could not get a slice for since capacity was last
+    /// checked; other addresses are checked on the tick.
+    short_of_range: HashSet<String>,
     window: Window,
     last_summary: Instant,
-    warned_addresses: HashSet<String>,
 }
 
 impl Hub {
-    fn new(upstream: Arc<PoolClient>, upstream_url: String, address: String) -> Self {
-        Self {
-            upstream,
-            upstream_url,
-            address,
-            upstream_logged_in: false,
-            upstream_refill: false,
-            last_upstream_job: None,
+    fn new(upstreams: Upstreams, address: String) -> Self {
+        let mut hub = Self {
+            upstreams,
+            address: address.clone(),
+            sessions: HashMap::new(),
+            next_session: 0,
+            last_session_opened: None,
             generation: 0,
-            current: None,
-            previous: None,
             rigs: HashMap::new(),
             local_jobs: HashMap::new(),
             next_local_job: 0,
             pending_acks: HashMap::new(),
             waiting: VecDeque::new(),
+            short_of_range: HashSet::new(),
             window: Window::default(),
             last_summary: Instant::now(),
-            warned_addresses: HashSet::new(),
+        };
+        if let Some(session) = hub.open_session(&address) {
+            if let Some(session) = hub.sessions.get_mut(&session) {
+                session.permanent = true;
+            }
         }
+        hub
     }
 
     async fn run(&mut self, mut rx: mpsc::UnboundedReceiver<HubMsg>, shutdown: Arc<AtomicBool>) {
@@ -416,7 +492,7 @@ impl Hub {
                 break;
             }
             match message {
-                HubMsg::Upstream(event) => self.on_upstream(event),
+                HubMsg::Upstream(session, event) => self.on_upstream(session, event),
                 HubMsg::Connected { conn, peer, tx } => {
                     self.rigs.insert(
                         conn,
@@ -424,6 +500,7 @@ impl Hub {
                             tx,
                             peer,
                             worker: peer.to_string(),
+                            address: self.address.clone(),
                             logged_in: false,
                             blake2b: false,
                             slice_size: 0,
@@ -438,35 +515,271 @@ impl Hub {
                 HubMsg::Closed { conn } => self.on_rig_closed(conn),
                 HubMsg::Tick => self.on_tick(),
             }
+            for address in std::mem::take(&mut self.short_of_range) {
+                self.grow_capacity(&address);
+            }
+        }
+        for session in self.sessions.values() {
+            session.stop.store(true, Ordering::Relaxed);
+        }
+    }
+
+    // ---- sessions -------------------------------------------------------
+
+    fn open_session(&mut self, address: &str) -> Option<usize> {
+        let id = self.next_session;
+        match self.upstreams.open(id, address) {
+            Ok((client, stop)) => {
+                self.next_session += 1;
+                self.last_session_opened = Some(Instant::now());
+                self.sessions.insert(
+                    id,
+                    Session {
+                        address: address.to_string(),
+                        client,
+                        stop,
+                        logged_in: false,
+                        refill: false,
+                        last_upstream_job: None,
+                        current: None,
+                        previous: None,
+                        last_used: Instant::now(),
+                        permanent: false,
+                    },
+                );
+                Some(id)
+            }
+            Err(err) => {
+                warn(
+                    "PROXY",
+                    format!("could not open an upstream session: {err:#}"),
+                );
+                None
+            }
+        }
+    }
+
+    /// Sessions mining to `address`, oldest first.
+    fn sessions_for(&self, address: &str) -> Vec<usize> {
+        let mut ids: Vec<usize> = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.address == address)
+            .map(|(id, _)| *id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// The payout address a rig's login maps to: its own when it is a valid
+    /// Blocknet address and there is room, otherwise --address.
+    fn payout_address(&self, requested: &str) -> String {
+        let requested = requested.trim();
+        let valid = !requested.is_empty()
+            && !requested.starts_with(['@', '$'])
+            && crate::shortname::validate_destination(requested).is_ok();
+        if !valid {
+            return self.address.clone();
+        }
+        let known: HashSet<&str> = self.sessions.values().map(|s| s.address.as_str()).collect();
+        if known.contains(requested) || known.len() < MAX_ADDRESSES {
+            requested.to_string()
+        } else {
+            self.address.clone()
+        }
+    }
+
+    /// Range one template holds and the range `address`'s rigs want per
+    /// template, from their current slice sizes.
+    fn demand(&self, address: &str) -> (u64, u64) {
+        let range = self
+            .sessions
+            .values()
+            .filter(|s| s.address == address)
+            .find_map(|s| s.live().map(|t| t.range_size))
+            .unwrap_or(DEFAULT_RANGE)
+            .max(1);
+        let initial = (range / INITIAL_SLICE_DIVISOR).max(1);
+        let demand = self
+            .rigs
+            .values()
+            .filter(|rig| rig.logged_in && rig.address == address)
+            .map(|rig| {
+                if rig.slice_size == 0 {
+                    initial
+                } else {
+                    rig.slice_size
+                }
+            })
+            .fold(0u64, u64::saturating_add);
+        (range, demand)
+    }
+
+    /// Sessions `address` needs so one template's ranges cover a slice for
+    /// every rig mining to it.
+    fn session_target(&self, address: &str) -> usize {
+        let (range, demand) = self.demand(address);
+        let wanted = demand.saturating_mul(CAPACITY_HEADROOM_PCT) / 100;
+        (wanted.div_ceil(range) as usize).clamp(1, MAX_SESSIONS_PER_ADDRESS)
+    }
+
+    /// Keeps enough upstream range for `address`: sessions sized to its rigs'
+    /// demand, then a refill where the pool offers one when the live range
+    /// runs low, or another session when no session can refill.
+    fn grow_capacity(&mut self, address: &str) {
+        let ids = self.sessions_for(address);
+        let paced = self
+            .last_session_opened
+            .is_none_or(|at| at.elapsed() >= SESSION_OPEN_INTERVAL);
+        if ids.is_empty() || (ids.len() < self.session_target(address) && paced) {
+            self.open_session(address);
+            return;
+        }
+        let (range, demand) = self.demand(address);
+        let live_remaining = ids
+            .iter()
+            .filter_map(|id| self.sessions[id].live())
+            .map(Template::remaining)
+            .fold(0u64, u64::saturating_add);
+        if live_remaining >= (range / 2).max(demand / 4) {
+            return;
+        }
+        let refilling = ids.iter().any(|id| {
+            self.sessions[id].live().is_some_and(|t| {
+                t.refill_requested_at
+                    .is_some_and(|at| at.elapsed() < UPSTREAM_REFILL_RETRY)
+            })
+        });
+        if refilling {
+            return;
+        }
+        let refillable = ids.iter().copied().find(|id| {
+            let session = &self.sessions[id];
+            session.logged_in
+                && session.refill
+                && session
+                    .live()
+                    .is_some_and(|t| t.assignments.len() <= MAX_REFILLS_PER_TEMPLATE)
+        });
+        if let Some(id) = refillable {
+            let session = self.sessions.get_mut(&id).expect("listed session");
+            if let (Some(job_id), Some(template)) =
+                (session.last_upstream_job.clone(), session.current.as_mut())
+            {
+                session.client.request_nonce_refill(&job_id);
+                template.refill_requested_at = Some(Instant::now());
+            }
+            return;
+        }
+        // No session can refill: another session brings its own range for
+        // each job. Wait for sessions still connecting first.
+        let connecting = ids.iter().any(|id| {
+            let session = &self.sessions[id];
+            !session.logged_in || session.current.is_none()
+        });
+        if !connecting && paced && ids.len() < MAX_SESSIONS_PER_ADDRESS {
+            if let Some(id) = self.open_session(address) {
+                info(
+                    "PROXY",
+                    format!(
+                        "opened upstream session {} for {} ({} total)",
+                        id,
+                        compact_address(address),
+                        ids.len() + 1
+                    ),
+                );
+            }
+        }
+    }
+
+    fn close_idle_sessions(&mut self) {
+        let in_use: HashSet<usize> = self
+            .rigs
+            .values()
+            .filter_map(|rig| self.local_jobs.get(rig.current_job.as_deref()?))
+            .map(|local| local.session)
+            .collect();
+        let mut idle: Vec<usize> = self
+            .sessions
+            .iter()
+            .filter(|(id, session)| {
+                !session.permanent
+                    && !in_use.contains(id)
+                    && session.last_used.elapsed() >= IDLE_SESSION_CLOSE
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        // Newest first, keeping what each address's demand still needs.
+        idle.sort_unstable_by(|a, b| b.cmp(a));
+        let mut open: HashMap<String, usize> = HashMap::new();
+        for session in self.sessions.values() {
+            *open.entry(session.address.clone()).or_default() += 1;
+        }
+        let targets: HashMap<String, usize> = open
+            .keys()
+            .map(|address| (address.clone(), self.session_target(address)))
+            .collect();
+        idle.retain(|id| {
+            let address = &self.sessions[id].address;
+            let count = open.get_mut(address).expect("counted address");
+            if *count > targets[address] {
+                *count -= 1;
+                true
+            } else {
+                false
+            }
+        });
+        for id in idle {
+            if let Some(session) = self.sessions.remove(&id) {
+                session.stop.store(true, Ordering::Relaxed);
+                self.local_jobs.retain(|_, local| local.session != id);
+                self.pending_acks
+                    .retain(|(session, _, _), _| *session != id);
+            }
         }
     }
 
     // ---- upstream -------------------------------------------------------
 
-    fn on_upstream(&mut self, event: PoolEvent) {
+    fn on_upstream(&mut self, id: usize, event: PoolEvent) {
+        let Some(session) = self.sessions.get_mut(&id) else {
+            return;
+        };
         match event {
             PoolEvent::Connected => {}
             PoolEvent::LoginAccepted(ack) => {
-                self.upstream_logged_in = true;
-                self.upstream_refill = ack.supports(STRATUM_CAPABILITY_NONCE_REFILL_V1);
-                success("PROXY", "upstream pool login accepted");
-            }
-            PoolEvent::LoginRejected(message) => {
-                self.upstream_logged_in = false;
-                warn("PROXY", format!("upstream pool rejected login: {message}"));
-            }
-            PoolEvent::Disconnected(message) => {
-                self.upstream_logged_in = false;
-                warn("PROXY", format!("upstream: {message}"));
-                // Work from the ended session cannot be submitted any more.
-                if let Some(mut current) = self.current.take() {
-                    current.dead = true;
-                    self.previous = Some(current);
+                session.logged_in = true;
+                session.refill = ack.supports(STRATUM_CAPABILITY_NONCE_REFILL_V1);
+                if id == 0 {
+                    success("PROXY", "upstream pool login accepted");
                 }
             }
-            PoolEvent::Job(job) => self.on_upstream_job(job),
+            PoolEvent::LoginRejected(message) => {
+                session.logged_in = false;
+                warn(
+                    "PROXY",
+                    format!(
+                        "upstream pool rejected login for {}: {message}",
+                        compact_address(&session.address)
+                    ),
+                );
+            }
+            PoolEvent::Disconnected(message) => {
+                session.logged_in = false;
+                if session.permanent {
+                    warn("PROXY", format!("upstream: {message}"));
+                }
+                // Work from the ended session cannot be submitted any more.
+                if let Some(mut current) = session.current.take() {
+                    current.dead = true;
+                    let generation = current.generation;
+                    session.previous = Some(current);
+                    self.move_rigs_off(id, generation, |_| true);
+                }
+            }
+            PoolEvent::Job(job) => self.on_upstream_job(id, job),
             PoolEvent::SubmitAck(ack) => {
-                let key = (ack.job_id.clone(), ack.nonce);
+                let key = (id, ack.job_id.clone(), ack.nonce);
                 let Some(queue) = self.pending_acks.get_mut(&key) else {
                     return;
                 };
@@ -496,11 +809,14 @@ impl Hub {
                 }
             }
             PoolEvent::SubmitRetry(_) => {}
-            PoolEvent::Notification(notification) => self.on_upstream_notification(notification),
+            PoolEvent::Notification(notification) => {
+                let permanent = session.permanent;
+                self.on_upstream_notification(notification, permanent);
+            }
         }
     }
 
-    fn on_upstream_notification(&mut self, notification: PoolNotification) {
+    fn on_upstream_notification(&mut self, notification: PoolNotification, log_other: bool) {
         let kind = notification.kind.as_str();
         if kind == POOL_NOTIFICATION_POOL_BLOCK_SOLVED
             || kind == POOL_NOTIFICATION_MINER_BLOCK_FOUND
@@ -513,14 +829,14 @@ impl Hub {
             for rig in self.rigs.values().filter(|rig| rig.logged_in) {
                 rig.send(message.clone());
             }
-        } else {
+        } else if log_other {
             info("POOL", &notification.message);
         }
     }
 
-    fn on_upstream_job(&mut self, job: PoolJob) {
+    fn on_upstream_job(&mut self, id: usize, job: PoolJob) {
         enum Fit {
-            /// The pool re-issued a range we hold under a new job id.
+            /// The pool re-issued a range this session holds under a new job id.
             Reissue {
                 generation: u64,
                 index: usize,
@@ -531,9 +847,12 @@ impl Hub {
             Refill,
             New,
         }
-        self.last_upstream_job = Some(job.job_id.clone());
+        let Some(session) = self.sessions.get_mut(&id) else {
+            return;
+        };
+        session.last_upstream_job = Some(job.job_id.clone());
         let key = template_key(&job);
-        let fit = match self.current.as_mut().filter(|t| t.template_key == key) {
+        let fit = match session.current.as_mut().filter(|t| t.template_key == key) {
             Some(current) => {
                 if let Some(index) = current.assignments.iter().position(|assignment| {
                     assignment.start == job.nonce_start && assignment.end == job.nonce_end
@@ -577,62 +896,86 @@ impl Hub {
                 retired_others,
             } => {
                 if target_changed {
-                    self.reissue_slices(generation, index);
+                    self.reissue_slices(id, generation, index);
                 }
                 if retired_others {
-                    self.move_rigs_off_retired_ranges(generation);
+                    self.move_rigs_off(id, generation, |assignment| assignment.retired);
                 }
             }
             Fit::Refill => self.serve_waiting(),
-            Fit::New => self.start_generation(&job),
+            Fit::New => self.start_generation(id, &job),
         }
     }
 
-    fn start_generation(&mut self, job: &PoolJob) {
+    fn start_generation(&mut self, id: usize, job: &PoolJob) {
         self.generation += 1;
         let generation = self.generation;
-        self.previous = self.current.take();
-        self.current = Some(Template::from_job(generation, job));
-        // Shares on the template before last are stale everywhere.
+        let Some(session) = self.sessions.get_mut(&id) else {
+            return;
+        };
+        let old = session.current.take();
+        session.previous = old;
+        session.current = Some(Template::from_job(generation, job));
+        // Shares on this session's template before last are stale everywhere.
+        let keep_from = session
+            .previous
+            .as_ref()
+            .map_or(generation, |t| t.generation);
         self.local_jobs
-            .retain(|_, local| local.generation + 1 >= generation);
-        self.waiting.clear();
+            .retain(|_, local| local.session != id || local.generation >= keep_from);
 
         let fork = job.height >= blocknet_pow_spec::FARADAY_ACTIVATION_HEIGHT;
-        let conns: Vec<u64> = self
-            .rigs
-            .iter()
-            .filter(|(_, rig)| rig.logged_in)
-            .map(|(conn, _)| *conn)
-            .collect();
         let mut dropped = Vec::new();
-        for conn in conns {
-            if fork && !self.rigs[&conn].blake2b {
-                let rig = &self.rigs[&conn];
+        let mut moving = Vec::new();
+        for (conn, rig) in &self.rigs {
+            if !rig.logged_in {
+                continue;
+            }
+            if fork && !rig.blake2b {
                 rig.send(json!({
                     "method": "notification",
                     "params": {"kind": "pool_notice", "message": FARADAY_UPGRADE_MESSAGE},
                 }));
-                dropped.push(conn);
+                dropped.push(*conn);
                 continue;
             }
-            self.push_new_slice(conn);
+            // Rigs on this session's older work, and rigs of this address
+            // still waiting for any work, get a slice of the new template.
+            let on_session = rig
+                .current_job
+                .as_deref()
+                .and_then(|job_id| self.local_jobs.get(job_id))
+                .is_none_or(|local| local.session == id);
+            if on_session && rig.address == self.sessions[&id].address {
+                moving.push(*conn);
+            }
         }
         for conn in dropped {
             // Dropping the sender closes the rig's connection.
             self.rigs.remove(&conn);
         }
+        let moving: HashSet<u64> = moving.into_iter().collect();
+        self.waiting.retain(|waiter| match waiter {
+            Waiter::Job(conn) => !moving.contains(conn),
+            Waiter::Refill(..) => true,
+        });
+        for conn in moving {
+            self.push_new_slice(conn);
+        }
+        self.serve_waiting();
     }
 
     /// Sends rigs mining slices of `assignment` the same slices under new
     /// job ids carrying the assignment's new share target.
-    fn reissue_slices(&mut self, generation: u64, assignment: usize) {
+    fn reissue_slices(&mut self, session: usize, generation: u64, assignment: usize) {
         let updates: Vec<(u64, LocalJob)> = self
             .rigs
             .iter()
             .filter_map(|(conn, rig)| {
                 let local = self.local_jobs.get(rig.current_job.as_deref()?)?;
-                (local.generation == generation && local.assignment == assignment)
+                (local.session == session
+                    && local.generation == generation
+                    && local.assignment == assignment)
                     .then(|| (*conn, local.clone()))
             })
             .collect();
@@ -647,9 +990,19 @@ impl Hub {
         }
     }
 
-    /// Gives rigs mining a retired range a fresh slice of live range.
-    fn move_rigs_off_retired_ranges(&mut self, generation: u64) {
-        let Some(template) = self.template(generation) else {
+    /// Gives rigs mining ranges of `session`/`generation` that match `gone`
+    /// a fresh slice of live range.
+    fn move_rigs_off(
+        &mut self,
+        session: usize,
+        generation: u64,
+        gone: impl Fn(&Assignment) -> bool,
+    ) {
+        let Some(template) = self
+            .sessions
+            .get(&session)
+            .and_then(|s| s.template(generation))
+        else {
             return;
         };
         let stranded: Vec<u64> = self
@@ -658,12 +1011,13 @@ impl Hub {
             .filter(|(_, rig)| rig.logged_in)
             .filter_map(|(conn, rig)| {
                 let local = self.local_jobs.get(rig.current_job.as_deref()?)?;
-                let retired = local.generation == generation
+                let affected = local.session == session
+                    && local.generation == generation
                     && template
                         .assignments
                         .get(local.assignment)
-                        .is_some_and(|assignment| assignment.retired);
-                retired.then_some(*conn)
+                        .is_some_and(&gone);
+                affected.then_some(*conn)
             })
             .collect();
         for conn in stranded {
@@ -673,36 +1027,49 @@ impl Hub {
 
     // ---- nonce slices ---------------------------------------------------
 
-    /// Carves the next slice for `conn`, asking the pool for more range when
-    /// it runs low. `None` when no range is left yet.
+    /// Carves the next slice for `conn` from a session of its payout address,
+    /// growing upstream capacity when it runs low. `None` when no range is
+    /// left yet.
     fn allocate_slice(&mut self, conn: u64) -> Option<(String, Value)> {
-        let current = self.current.as_mut().filter(|template| !template.dead)?;
-        let rig = self.rigs.get_mut(&conn)?;
-        let range = current.range_size;
-        let min_slice = (range / INITIAL_SLICE_DIVISOR).max(1);
-        let max_slice = (range / MAX_SLICE_DIVISOR).max(min_slice);
-        if rig.slice_size == 0 {
-            rig.slice_size = min_slice;
+        let address = self.rigs.get(&conn)?.address.clone();
+        let candidates = self.sessions_for(&address);
+        let mut slice = None;
+        for id in candidates {
+            let session = self.sessions.get_mut(&id).expect("listed session");
+            let Some(template) = session.current.as_mut().filter(|t| !t.dead) else {
+                continue;
+            };
+            let rig = self.rigs.get_mut(&conn)?;
+            let range = template.range_size;
+            let min_slice = (range / INITIAL_SLICE_DIVISOR).max(1);
+            let max_slice = (range / MAX_SLICE_DIVISOR).max(min_slice);
+            if rig.slice_size == 0 {
+                rig.slice_size = min_slice;
+            }
+            let size = rig.slice_size.clamp(min_slice, max_slice);
+            let Some(index) = template
+                .assignments
+                .iter()
+                .rposition(|assignment| assignment.remaining() > 0)
+            else {
+                continue;
+            };
+            if let Some((start, end)) = template.assignments[index].take(size) {
+                session.last_used = Instant::now();
+                slice = Some(LocalJob {
+                    conn,
+                    session: id,
+                    generation: template.generation,
+                    assignment: index,
+                    start,
+                    end,
+                });
+                break;
+            }
         }
-        let size = rig.slice_size.clamp(min_slice, max_slice);
-        let index = current
-            .assignments
-            .iter()
-            .rposition(|assignment| assignment.remaining() > 0);
-        let slice = index.and_then(|index| {
-            current.assignments[index]
-                .take(size)
-                .map(|(start, end)| (index, start, end))
-        });
-        let generation = current.generation;
-        self.maybe_request_refill();
-        let (assignment, start, end) = slice?;
-        let local = LocalJob {
-            conn,
-            generation,
-            assignment,
-            start,
-            end,
+        let Some(local) = slice else {
+            self.short_of_range.insert(address);
+            return None;
         };
         let job_id = self.register_local_job(local.clone());
         let params = self.job_params(&job_id, &local)?;
@@ -710,30 +1077,6 @@ impl Hub {
         rig.current_job = Some(job_id.clone());
         rig.slice_issued_at = Instant::now();
         Some((job_id, params))
-    }
-
-    fn maybe_request_refill(&mut self) {
-        let Some(current) = self.current.as_mut().filter(|template| !template.dead) else {
-            return;
-        };
-        let remaining = current.remaining();
-        // Without `refill` the pool only gives new range on a new session,
-        // which ends every slice, so wait until nothing is left.
-        let low = if self.upstream_refill {
-            remaining < current.range_size / 2
-        } else {
-            remaining == 0
-        };
-        let due = current
-            .refill_requested_at
-            .is_none_or(|at| at.elapsed() >= UPSTREAM_REFILL_RETRY);
-        if !low || !due || !self.upstream_logged_in {
-            return;
-        }
-        if let Some(job_id) = self.last_upstream_job.as_deref() {
-            self.upstream.request_nonce_refill(job_id);
-            current.refill_requested_at = Some(Instant::now());
-        }
     }
 
     fn register_local_job(&mut self, local: LocalJob) -> String {
@@ -744,7 +1087,10 @@ impl Hub {
     }
 
     fn job_params(&self, job_id: &str, local: &LocalJob) -> Option<Value> {
-        let template = self.template(local.generation)?;
+        let template = self
+            .sessions
+            .get(&local.session)?
+            .template(local.generation)?;
         let assignment = template.assignments.get(local.assignment)?;
         Some(json!({
             "job_id": job_id,
@@ -759,13 +1105,6 @@ impl Hub {
         }))
     }
 
-    fn template(&self, generation: u64) -> Option<&Template> {
-        [self.current.as_ref(), self.previous.as_ref()]
-            .into_iter()
-            .flatten()
-            .find(|template| template.generation == generation)
-    }
-
     fn push_new_slice(&mut self, conn: u64) {
         match self.allocate_slice(conn) {
             Some((_, params)) => {
@@ -773,23 +1112,30 @@ impl Hub {
                     rig.send(json!({"method": "job", "params": params}));
                 }
             }
-            None => self.waiting.push_back(Waiter::Job(conn)),
+            None => {
+                let already = self.waiting.iter().any(|waiter| match waiter {
+                    Waiter::Job(waiting) | Waiter::Refill(waiting, _) => *waiting == conn,
+                });
+                if !already {
+                    self.waiting.push_back(Waiter::Job(conn));
+                }
+            }
         }
     }
 
     fn serve_waiting(&mut self) {
         let waiting = std::mem::take(&mut self.waiting);
-        for (position, waiter) in waiting.iter().enumerate() {
-            let conn = match waiter {
+        let mut still_waiting = VecDeque::new();
+        for waiter in waiting {
+            let conn = match &waiter {
                 Waiter::Job(conn) | Waiter::Refill(conn, _) => *conn,
             };
             if !self.rigs.contains_key(&conn) {
                 continue;
             }
             let Some((_, params)) = self.allocate_slice(conn) else {
-                // Out of range again; the rest keep waiting in order.
-                self.waiting.extend(waiting.into_iter().skip(position));
-                return;
+                still_waiting.push_back(waiter);
+                continue;
             };
             let rig = &self.rigs[&conn];
             match waiter {
@@ -799,6 +1145,8 @@ impl Hub {
                 }
             }
         }
+        still_waiting.extend(std::mem::take(&mut self.waiting));
+        self.waiting = still_waiting;
     }
 
     // ---- rigs -----------------------------------------------------------
@@ -844,11 +1192,12 @@ impl Hub {
             return self.reply_error(conn, id, "pool requires submit_claimed_hash capability");
         }
         let blake2b = capabilities.contains(CAP_POW_BLAKE2B_V1);
-        if !blake2b
-            && self.current.as_ref().is_some_and(|template| {
-                template.height >= blocknet_pow_spec::FARADAY_ACTIVATION_HEIGHT
-            })
-        {
+        let fork_era = self.sessions.values().any(|session| {
+            session
+                .live()
+                .is_some_and(|t| t.height >= blocknet_pow_spec::FARADAY_ACTIVATION_HEIGHT)
+        });
+        if !blake2b && fork_era {
             return self.reply_error(conn, id, FARADAY_UPGRADE_MESSAGE);
         }
         let worker = params
@@ -862,31 +1211,28 @@ impl Hub {
                     .collect::<String>()
             })
             .filter(|worker| !worker.trim().is_empty());
-        let rig_address = params.get("address").and_then(Value::as_str).unwrap_or("");
-        if !rig_address.is_empty()
-            && rig_address != self.address
-            && self.warned_addresses.insert(rig_address.to_string())
-        {
-            info(
-                "PROXY",
-                format!(
-                    "rig logged in with address {}; shares through this proxy pay {}",
-                    compact_address(rig_address),
-                    compact_address(&self.address)
-                ),
-            );
+        let address =
+            self.payout_address(params.get("address").and_then(Value::as_str).unwrap_or(""));
+        if self.sessions_for(&address).is_empty() {
+            self.open_session(&address);
         }
         let Some(rig) = self.rigs.get_mut(&conn) else {
             return;
         };
         rig.logged_in = true;
         rig.blake2b = blake2b;
+        rig.address = address;
         if let Some(worker) = worker {
             rig.worker = worker;
         }
         info(
             "PROXY",
-            format!("rig {} connected from {}", rig.worker, rig.peer),
+            format!(
+                "rig {} connected from {} paying {}",
+                rig.worker,
+                rig.peer,
+                compact_address(&rig.address)
+            ),
         );
         rig.send(json!({
             "id": id,
@@ -920,12 +1266,13 @@ impl Hub {
         if nonce < local.start || nonce > local.end {
             return self.reply_error(conn, id, "nonce out of range");
         }
-        let Some(template) = self.template(local.generation).filter(|t| !t.dead) else {
+        let Some(session) = self.sessions.get(&local.session) else {
             return self.reply_error(conn, id, "stale job");
         };
-        let Some(upstream_job_id) = template
-            .assignments
-            .get(local.assignment)
+        let Some(upstream_job_id) = session
+            .template(local.generation)
+            .filter(|t| !t.dead)
+            .and_then(|t| t.assignments.get(local.assignment))
             .map(|assignment| assignment.upstream_job_id.clone())
         else {
             return self.reply_error(conn, id, "stale job");
@@ -940,13 +1287,13 @@ impl Hub {
             },
             None => None,
         };
-        let key = (upstream_job_id.clone(), nonce);
+        let key = (local.session, upstream_job_id.clone(), nonce);
         if self.pending_acks.contains_key(&key) {
             return self.reply_error(conn, id, "duplicate share");
         }
         let backend = params.get("backend").and_then(Value::as_str);
-        if self
-            .upstream
+        if session
+            .client
             .submit_share_with_timing(upstream_job_id, nonce, claimed_hash, backend, None)
             .is_err()
         {
@@ -1006,13 +1353,36 @@ impl Hub {
     }
 
     fn on_tick(&mut self) {
-        if self
-            .current
-            .as_ref()
-            .is_some_and(|template| template.refill_requested_at.is_some())
-        {
-            self.maybe_request_refill();
+        let waiting_addresses: HashSet<String> = self
+            .waiting
+            .iter()
+            .filter_map(|waiter| match waiter {
+                Waiter::Job(conn) | Waiter::Refill(conn, _) => self.rigs.get(conn),
+            })
+            .map(|rig| rig.address.clone())
+            .collect();
+        let refilling: HashSet<String> = self
+            .sessions
+            .values()
+            .filter(|s| s.live().is_some_and(|t| t.refill_requested_at.is_some()))
+            .map(|s| s.address.clone())
+            .collect();
+        let active: HashSet<String> = self
+            .rigs
+            .values()
+            .filter(|rig| rig.logged_in)
+            .map(|rig| rig.address.clone())
+            .collect();
+        let addresses: HashSet<String> = waiting_addresses
+            .union(&refilling)
+            .cloned()
+            .chain(active)
+            .collect();
+        for address in addresses {
+            self.grow_capacity(&address);
         }
+        self.serve_waiting();
+        self.close_idle_sessions();
         if self.last_summary.elapsed() >= SUMMARY_INTERVAL {
             self.log_summary();
         }
@@ -1023,16 +1393,17 @@ impl Hub {
         let rigs = self.rigs.values().filter(|rig| rig.logged_in).count();
         let window = std::mem::take(&mut self.window);
         let hashrate = window.difficulty as f64 / elapsed;
+        let connected = self.sessions.values().filter(|s| s.logged_in).count();
         info(
             "PROXY",
             format!(
-                "{rigs} rigs, ~{} from shares, {} accepted, {} rejected in the last {:.0}s; upstream {} {}",
+                "{rigs} rigs, ~{} from shares, {} accepted, {} rejected in the last {:.0}s; {connected}/{} upstream sessions connected to {}",
                 format_hashrate(hashrate),
                 window.accepted,
                 window.rejected,
                 elapsed,
-                self.upstream_url,
-                if self.upstream_logged_in { "connected" } else { "reconnecting" },
+                self.sessions.len(),
+                self.upstreams.pool_url,
             ),
         );
         self.last_summary = Instant::now();
@@ -1347,6 +1718,192 @@ mod tests {
             disconnects, 0,
             "refill through the proxy must not reconnect"
         );
+    }
+
+    /// A fake pool that accepts any number of sessions. Each login gets its
+    /// own range; `refill` is offered only when `refill` is true. Every
+    /// message is reported with the address its session logged in with.
+    fn multi_pool(refill: bool) -> (u16, std_mpsc::Receiver<(String, Value)>) {
+        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (seen_tx, seen_rx) = std_mpsc::channel();
+        std::thread::spawn(move || {
+            for (session, stream) in listener.incoming().enumerate() {
+                let Ok(stream) = stream else { break };
+                let seen_tx = seen_tx.clone();
+                std::thread::spawn(move || {
+                    let mut writer = stream.try_clone().unwrap();
+                    let mut reader = StdBufReader::new(stream);
+                    let mut address = String::new();
+                    let mut line = String::new();
+                    while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                        let Ok(message) = serde_json::from_str::<Value>(line.trim()) else {
+                            line.clear();
+                            continue;
+                        };
+                        line.clear();
+                        let mut replies = Vec::new();
+                        match message["method"].as_str() {
+                            Some("login") => {
+                                address = message["params"]["address"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string();
+                                let caps: Vec<&str> = if refill {
+                                    vec!["submit_claimed_hash", "nonce_refill_v1"]
+                                } else {
+                                    vec!["submit_claimed_hash"]
+                                };
+                                replies.push(json!({"id": 1, "status": "ok",
+                                    "result": {"protocol_version": 2, "capabilities": caps}}));
+                                replies.push(job(
+                                    &format!("s{session}"),
+                                    "t1",
+                                    10,
+                                    100_000 * session as u64,
+                                ));
+                            }
+                            Some("submit") => replies.push(json!({"id": message["id"],
+                                "status": "ok", "result": {"accepted": true, "difficulty": 5}})),
+                            _ => {}
+                        }
+                        let _ = seen_tx.send((address.clone(), message));
+                        for reply in replies {
+                            if writeln!(writer, "{reply}").is_err() {
+                                return;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        (port, seen_rx)
+    }
+
+    fn start_proxy_on(pool_port: u16, address: &str) -> (u16, Arc<AtomicBool>) {
+        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let proxy_shutdown = Arc::clone(&shutdown);
+        let address = address.to_string();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .unwrap();
+            let _ = runtime.block_on(async move {
+                serve(
+                    TcpListener::from_std(listener).unwrap(),
+                    format!("127.0.0.1:{pool_port}"),
+                    None,
+                    address,
+                    "proxy".to_string(),
+                    proxy_shutdown,
+                )
+                .await
+            });
+        });
+        (port, shutdown)
+    }
+
+    fn login_as(port: u16, address: &str) -> (TestRig, Value) {
+        let stream = StdTcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut rig = TestRig {
+            writer: stream.try_clone().unwrap(),
+            reader: StdBufReader::new(stream),
+        };
+        rig.send(json!({"id": 1, "method": "login", "params": {
+            "address": address, "worker": "rig", "protocol_version": 2,
+            "capabilities": ["submit_claimed_hash", "nonce_refill_v1"]}}));
+        assert_eq!(rig.recv()["status"], "ok");
+        let job = rig.recv();
+        assert_eq!(job["method"], "job");
+        (rig, job)
+    }
+
+    fn next_from(seen: &std_mpsc::Receiver<(String, Value)>, method: &str) -> (String, Value) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while let Ok((address, message)) = seen.recv_timeout(deadline - Instant::now()) {
+            if message["method"] == method {
+                return (address, message);
+            }
+        }
+        panic!("upstream never saw {method}");
+    }
+
+    #[test]
+    fn dev_fee_rigs_mine_to_the_dev_address_through_their_own_session() {
+        let dev = crate::dev_fee::DEV_ADDRESS;
+        let (pool_port, seen) = multi_pool(true);
+        let (proxy_port, shutdown) = start_proxy_on(pool_port, "farmaddr");
+        assert_eq!(next_from(&seen, "login").0, "farmaddr");
+
+        let (mut dev_rig, job) = login_as(proxy_port, dev);
+        let (address, _) = next_from(&seen, "login");
+        assert_eq!(
+            address, dev,
+            "the dev address gets its own upstream session"
+        );
+        dev_rig.send(json!({"id": 5, "method": "submit", "params": {
+            "job_id": job["params"]["job_id"], "nonce": job["params"]["nonce_start"],
+            "claimed_hash": "00".repeat(32)}}));
+        let (address, submit) = next_from(&seen, "submit");
+        assert_eq!(address, dev);
+        assert_eq!(submit["params"]["nonce"], job["params"]["nonce_start"]);
+        assert_eq!(dev_rig.recv()["id"], 5);
+
+        // A rig with an invalid address mines to the proxy's --address.
+        let (mut other, job) = login_as(proxy_port, "not-an-address");
+        other.send(json!({"id": 6, "method": "submit", "params": {
+            "job_id": job["params"]["job_id"], "nonce": job["params"]["nonce_start"],
+            "claimed_hash": "00".repeat(32)}}));
+        assert_eq!(next_from(&seen, "submit").0, "farmaddr");
+        shutdown.store(true, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn pools_without_refill_get_more_sessions_instead_of_reconnects() {
+        let (pool_port, seen) = multi_pool(false);
+        let (proxy_port, shutdown) = start_proxy_on(pool_port, "farmaddr");
+        next_from(&seen, "login");
+        let (mut rig, job) = login_as(proxy_port, "farmaddr");
+        let mut job_id = job["params"]["job_id"].clone();
+        let mut last_start = job["params"]["nonce_start"].as_u64().unwrap();
+        let mut second_session = false;
+        for request in 0..60 {
+            rig.send(
+                json!({"id": 100 + request, "method": "refill", "params": {"job_id": job_id}}),
+            );
+            let reply = rig.recv();
+            assert_eq!(reply["status"], "ok", "{reply}");
+            let start = reply["result"]["nonce_start"].as_u64().unwrap();
+            job_id = reply["result"]["job_id"].clone();
+            if start >= 100_000 {
+                second_session = true;
+                break;
+            }
+            assert!(start > last_start);
+            last_start = start;
+        }
+        assert!(
+            second_session,
+            "the proxy never used a second upstream session"
+        );
+        let logins: Vec<String> = seen
+            .try_iter()
+            .filter(|(_, m)| m["method"] == "login")
+            .map(|(a, _)| a)
+            .collect();
+        assert!(
+            logins.len() <= 2,
+            "the proxy reconnected instead: {logins:?}"
+        );
+        shutdown.store(true, Ordering::Relaxed);
     }
 
     #[test]

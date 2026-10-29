@@ -58,6 +58,8 @@ pub(crate) const STRATUM_CAPABILITY_NONCE_REFILL_V1: &str = "nonce_refill_v1";
 const STRATUM_METHOD_REFILL: &str = "refill";
 /// A refill unanswered this long falls back to a fresh session.
 const REFILL_REPLY_TIMEOUT: Duration = Duration::from_secs(10);
+/// Wait before asking again after a `refill rate limited` reply.
+const REFILL_RATE_LIMIT_RETRY: Duration = Duration::from_secs(1);
 /// The pool accepts miner-side timing fields on submits.
 const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
 /// This miner hashes Faraday BLAKE2b work. The pool refuses fork-height work to
@@ -617,6 +619,7 @@ async fn run_pool_client_loop(
                 let mut submit_timing_enabled = false;
                 let mut nonce_refill_enabled = false;
                 let mut pending_refill = None::<(u64, Instant)>;
+                let mut refill_retry = None::<(Instant, String)>;
                 let mut last_outbound = Instant::now();
                 let mut submit_tick = tokio::time::interval(SUBMIT_POLL_INTERVAL);
                 submit_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -638,6 +641,15 @@ async fn run_pool_client_loop(
                             && (nonce_refill_enabled
                                 || (pending_submits.is_empty() && submit_rx.is_empty())),
                     );
+                    if refill_retry
+                        .as_ref()
+                        .is_some_and(|(at, _)| Instant::now() >= *at)
+                    {
+                        let (_, job_id) = refill_retry.take().expect("retry checked");
+                        if current_job_id.as_deref() == Some(job_id.as_str()) {
+                            *refill_requested.lock().expect("refill lock") = Some(job_id);
+                        }
+                    }
                     if pending_refill
                         .is_some_and(|(_, sent)| sent.elapsed() >= REFILL_REPLY_TIMEOUT)
                     {
@@ -921,6 +933,12 @@ async fn run_pool_client_loop(
                                     match outcome {
                                         RefillOutcome::Job(job) => Some((PoolEvent::Job(job), None)),
                                         RefillOutcome::Stale => None,
+                                        RefillOutcome::RateLimited => {
+                                            refill_retry = current_job_id.clone().map(|job_id| {
+                                                (Instant::now() + REFILL_RATE_LIMIT_RETRY, job_id)
+                                            });
+                                            None
+                                        }
                                         RefillOutcome::Refused => {
                                             // Fall back to a fresh session once
                                             // in-flight submits settle.
@@ -1564,7 +1582,9 @@ enum RefillOutcome {
     Job(PoolJob),
     /// The job moved on before the refill was handled; a new job is coming.
     Stale,
-    /// Rate limited, at the pool's cap, or malformed.
+    /// The pool asked for slower refills; retry shortly on the same session.
+    RateLimited,
+    /// At the pool's cap, or malformed.
     Refused,
 }
 
@@ -1576,8 +1596,11 @@ fn decode_refill_response(raw: &str, request_id: u64) -> Option<RefillOutcome> {
         return None;
     }
     if let Some(error) = msg.error {
-        return Some(if error.trim().eq_ignore_ascii_case("stale job") {
+        let error = error.trim();
+        return Some(if error.eq_ignore_ascii_case("stale job") {
             RefillOutcome::Stale
+        } else if error.eq_ignore_ascii_case("refill rate limited") {
+            RefillOutcome::RateLimited
         } else {
             RefillOutcome::Refused
         });
@@ -3372,7 +3395,7 @@ mod tests {
                         Some("refill") => {
                             assert_eq!(msg["params"]["job_id"], "job");
                             let reply = if refuse {
-                                serde_json::json!({"id": msg["id"], "error": "refill rate limited"})
+                                serde_json::json!({"id": msg["id"], "error": "refill limit reached"})
                             } else {
                                 serde_json::json!({"id": msg["id"], "status": "ok", "result": {
                                     "job_id": "job-2", "template_id": "t", "header_base": "11".repeat(92),

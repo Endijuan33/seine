@@ -19,7 +19,8 @@ supported hardware only.
 - **CPU threads start on a new block about 0.3 s sooner.** When the pool moves to a new block, Seine now drops hashes that can no longer win instead of finishing them first (job switch measured at 240 ms → 7 ms on a Zen 4 EPYC). Job refreshes within the same block still finish their hashes, so those shares still count.
 - **Encrypted pool connections and backup pools.** Point Seine at a pool's TLS port with `stratum+ssl://host:port`, and list backup pools with repeated `--pool-url` flags or commas: Seine switches to the next pool when one is down and returns to your first pool once it is back. See [pool connections](docs/guides/configuration.md#pool-connections).
 - Seine accepts the `-o URL -u ADDRESS.WORKER -p x` launch flags that mining OS templates use, so it drops into existing rig setups without custom scripts.
-- **Farm proxy for many rigs:** `seine --proxy-listen 0.0.0.0:3333` lets every rig on your network share one pool connection, with each rig mining its own part of the work. See [farm proxy](docs/guides/farm-proxy.md).
+- **Farm proxy for many rigs:** `seine --proxy-listen 0.0.0.0:3333` lets every rig on your network share a few pool connections instead of one each, with each rig mining its own part of the work and paying its own address. See [farm proxy](docs/guides/farm-proxy.md).
+- Seine shuts down cleanly when stopped by systemd, Docker or a closed terminal session, not only with Ctrl+C.
 - Fast rigs get more work from the pool without reconnecting, on pools that support it.
 - No more idle dev-fee rounds on networks that cannot reach bntpool.com: they now mine on your own pool instead.
 - Mine from networks that block pool ports: `--pool-proxy socks5://host:port` sends pool connections through a SOCKS5 proxy, including Tor or an SSH tunnel.

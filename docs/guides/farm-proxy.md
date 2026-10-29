@@ -32,17 +32,20 @@ Mining OS flight sheets work the same way: put the proxy's address in the pool U
 
 ## What to expect
 
-- **Payouts.** Every share through the proxy pays the proxy's `--address`. A rig that logs
-  in with a different address is noted once in the proxy's log.
-- **Stats.** The pool shows the farm as one worker, named by the proxy's `--pool-worker`.
-  The proxy logs connected rigs, accepted and rejected shares and an estimated hashrate
-  every minute, and logs each rig as it connects and disconnects.
-- **Dev fee.** Each rig still runs its own dev-fee rounds, which connect directly to
-  bntpool.com. Rigs therefore need outbound access to bntpool.com:3333 as well as to the
-  proxy.
-- **Any Blocknet pool.** On pools that hand out extra work on request, the proxy tops up
-  without interrupting rigs. On other pools it reconnects for new work when its share
-  runs out, and every rig switches to the new job.
+- **Payouts.** Each rig's shares pay the address the rig logs in with, so rigs mining to
+  different wallets can share one proxy (up to 16 addresses). A rig whose address is
+  missing or invalid pays the proxy's `--address`.
+- **Stats.** The pool shows the farm under the proxy's `--pool-worker` name. The proxy
+  logs connected rigs, accepted and rejected shares, an estimated hashrate and its pool
+  connections every minute, and logs each rig as it connects and disconnects.
+- **Dev fee.** Each rig still runs its own dev-fee rounds. They go straight to
+  bntpool.com, or through the proxy when the rig cannot reach bntpool.com, and in both
+  cases they pay the dev fee address.
+- **Pool connections.** The proxy opens as many pool connections as the farm needs for
+  every rig to get work on each new block, which for most farms is one or a few, and up to
+  64 per payout address for very large ones. On pools that hand out extra work on request
+  it tops up without interrupting rigs; on other pools the extra connections bring the
+  work instead.
 - **Upgrades.** At the Faraday network upgrade, rigs on a Seine release without support
   for it are asked to update and disconnected, the same way the pool treats them.
 
