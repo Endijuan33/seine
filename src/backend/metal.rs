@@ -19,6 +19,8 @@ use crate::backend::{
 use crate::types::hash_meets_target;
 
 const BACKEND_NAME: &str = "metal";
+mod blake2b;
+
 const METAL_KERNEL_SRC: &str = include_str!("metal_kernel.metal");
 const MAX_LANES_HARD_LIMIT: usize = 64;
 const ASSIGN_CHANNEL_CAPACITY: usize = 256;
@@ -58,6 +60,8 @@ struct MetalShared {
     cancel_requested: AtomicBool,
     error_emitted: AtomicBool,
     cancel_flag_ptr: AtomicU64, // raw pointer stored as u64 for Send
+    /// The worker's last batch was BLAKE2b (reported in telemetry).
+    blake2b_active: AtomicBool,
 }
 
 impl MetalShared {
@@ -76,6 +80,7 @@ impl MetalShared {
             active_hashes_per_launch_per_lane: AtomicU32::new(DEFAULT_HASHES_PER_LAUNCH_PER_LANE),
             cancel_requested: AtomicBool::new(false),
             error_emitted: AtomicBool::new(false),
+            blake2b_active: AtomicBool::new(false),
             cancel_flag_ptr: AtomicU64::new(0),
         }
     }
@@ -580,6 +585,30 @@ impl PowBackend for MetalBackend {
         BACKEND_NAME
     }
 
+    fn hardware_telemetry(&self) -> seine_telemetry::BackendSettings {
+        seine_telemetry::BackendSettings {
+            backend: BACKEND_NAME.into(),
+            device_model: None,
+            memory_mib: self.device_memory_bytes().map(|v| v / (1024 * 1024)),
+            lanes: self.enabled_lanes() as u32,
+            cpu_kernel: None,
+            cpu_page_mode: None,
+            gpu_register_cap: None,
+            gpu_launch_depth: None,
+            cpu_backing_mib: None,
+            cpu_affinity: None,
+            pow: self
+                .shared
+                .blake2b_active
+                .load(Ordering::Acquire)
+                .then(|| "blake2b".to_string()),
+        }
+    }
+
+    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
+        true
+    }
+
     fn lanes(&self) -> usize {
         self.max_lanes.load(Ordering::Acquire) as usize
     }
@@ -840,6 +869,7 @@ fn metal_worker_loop(
 
     let mut active: Option<ActiveAssignment> = None;
     let mut fence_waiters: Vec<Sender<()>> = Vec::new();
+    let mut blake2b = blake2b::Blake2bWorkerState::default();
 
     loop {
         // Drain control commands first
@@ -931,6 +961,51 @@ fn metal_worker_loop(
                 }
                 continue;
             }
+
+            if assignment.work.template.pow == crate::backend::PowAlgorithm::Blake2b512 {
+                shared.blake2b_active.store(true, Ordering::Release);
+                shared.active_lanes.store(lanes, Ordering::Release);
+                let target_snapshot = assignment.work.template.target_snapshot();
+                match blake2b.run_batch(
+                    &assignment.work.template.header_base,
+                    assignment.next_nonce,
+                    remaining,
+                    &target_snapshot.target,
+                    Some(assignment.work.template.stop_at),
+                ) {
+                    Ok(batch) => {
+                        assignment.next_nonce += batch.hashes;
+                        assignment.hashes_done += batch.hashes;
+                        shared.hashes.fetch_add(batch.hashes, Ordering::Relaxed);
+                        for (nonce, hash) in batch.solutions {
+                            shared.emit_solution(
+                                instance_id,
+                                assignment.work.template.epoch,
+                                nonce,
+                                Some(hash),
+                                target_snapshot.share_binding_id,
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        shared
+                            .emit_error(instance_id, format!("Metal BLAKE2b batch failed: {e:#}"));
+                        drop(active);
+                        shared.active_lanes.store(0, Ordering::Release);
+                        shared.pending_work.store(0, Ordering::Release);
+                        shared
+                            .inflight_assignment_hashes
+                            .store(0, Ordering::Release);
+                        *shared.inflight_assignment_started_at.lock().unwrap() = None;
+                        for waiter in fence_waiters.drain(..) {
+                            let _ = waiter.send(());
+                        }
+                        return;
+                    }
+                }
+                continue;
+            }
+            shared.blake2b_active.store(false, Ordering::Release);
 
             // Dispatch a batch
             let batch_size = remaining.min(engine.max_hashes_per_launch as u64) as usize;
