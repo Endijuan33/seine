@@ -192,6 +192,26 @@ grep -qx -- "stratum+tcp://a.example.com:3333,stratum+ssl://b.example.com:3443" 
 grep -qx -- "/mnt/my data" "$SEINE_TEST_ARGS" || fail "quoted value with a space was split"
 ok "mmp-launch: user flags win, backup pools, quoted values"
 
+# The guide's import profile: mmpOS substitutes the placeholders and runs the
+# arguments from the package directory.
+profile=$(awk '/^   ```json$/ { take = 1; next } /^   ```$/ { take = 0 } take' "$repo/docs/guides/mmpos.md")
+jq -e '.miner_profile.miner == "custom" and .miner_profile.coin == "BNT"
+	and (.miner_profile.custom_url | test("/vX.Y.Z/seine-mmpos-X.Y.Z.tar.gz$"))
+	and (.pools | length) == 1 and .pools[0].coin == "BNT" and .pools[0].url == "bntpool.com"
+	and .wallets[0].coin == "BNT"' <<<"$profile" >/dev/null || fail "guide import profile: $profile"
+line=$(jq -r .miner_profile.commandline <<<"$profile")
+line=${line//%coin%/BNT}
+line=${line//%pool_server%/bntpool.com}
+line=${line//%pool_port%/3333}
+line=${line//%user%/$address.rig01}
+line=${line//%password%/x}
+line=${line//%api_port%/$(jq -r .miner_profile.api_port <<<"$profile")}
+run_launch "$line"
+[[ $launch_status -eq 3 ]] || fail "guide arguments: $(cat "$work/launch.out")"
+launched_args | grep -A1 -x -- --pool-url | grep -qx stratum+tcp://bntpool.com:3333 || fail "guide pool"
+launched_args | grep -A1 -x -- --api-bind | grep -qx 127.0.0.1:4444 || fail "guide API port"
+ok "guide: the import profile parses and its arguments start seine"
+
 run_launch "./mmp-launch.sh --coin BNT tcp --pool bntpool.com:3333 --user .rig01 --password x"
 [[ $launch_status -ne 0 && ! -e $SEINE_TEST_ARGS ]] || fail "missing wallet should fail without starting seine"
 grep -q "no wallet" "$work/launch.out" || fail "missing wallet message"
