@@ -491,6 +491,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "blake2",
+ "blocknet-pow-spec",
 ]
 
 [[package]]
@@ -498,6 +499,7 @@ name = "blocknet-pow-spec"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "blake2",
 ]
 
 [[package]]

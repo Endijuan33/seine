@@ -1,4 +1,6 @@
+mod blake2b_pow;
 mod cpu_kernel;
+pub use blake2b_pow::{Blake2bPowError, Blake2bPowMidstate};
 mod fixed_argon;
 pub use cpu_kernel::CpuKernel;
 
