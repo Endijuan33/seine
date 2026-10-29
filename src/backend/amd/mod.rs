@@ -1193,6 +1193,7 @@ fn worker_loop(
             .store(current.hashes_done, Ordering::Release);
 
         if let Some(nonce) = done.solved_nonce {
+            let found_at = std::time::Instant::now();
             send_backend_event(
                 &shared,
                 BackendEvent::Solution(MiningSolution {
@@ -1202,10 +1203,24 @@ fn worker_loop(
                     share_binding_id: target_snapshot.share_binding_id,
                     backend_id: instance_id.load(Ordering::Acquire),
                     backend: BACKEND_NAME,
-                    found_at: std::time::Instant::now(),
+                    found_at,
                 }),
             );
             if !current.work.template.pause_on_solution {
+                for (nonce, hash) in done.extra_solutions {
+                    send_backend_event(
+                        &shared,
+                        BackendEvent::Solution(MiningSolution {
+                            epoch: current.work.template.epoch,
+                            nonce,
+                            hash: Some(hash),
+                            share_binding_id: target_snapshot.share_binding_id,
+                            backend_id: instance_id.load(Ordering::Acquire),
+                            backend: BACKEND_NAME,
+                            found_at,
+                        }),
+                    );
+                }
                 continue;
             }
             queued.clear();
