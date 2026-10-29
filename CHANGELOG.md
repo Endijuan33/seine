@@ -18,6 +18,7 @@ supported hardware only.
 - Seine accepts the `-o URL -u ADDRESS.WORKER -p x` launch flags that mining OS templates use, so it drops into existing rig setups without custom scripts.
 - **Farm proxy for many rigs:** `seine --proxy-listen 0.0.0.0:3333` lets every rig on your network share one pool connection, with each rig mining its own part of the work. See [farm proxy](docs/guides/farm-proxy.md).
 - Fast rigs get more work from the pool without reconnecting, on pools that support it.
+- No more idle dev-fee rounds on networks that cannot reach bntpool.com: they now mine on your own pool instead.
 - Mine from networks that block pool ports: `--pool-proxy socks5://host:port` sends pool connections through a SOCKS5 proxy, including Tor or an SSH tunnel.
 - **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
 - Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).

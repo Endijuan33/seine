@@ -126,6 +126,8 @@ startup. Full addresses work without contacting the resolver.
 
 Seine's dev fee is a flat **2% of mining time**, on every pool and in solo mode.
 It funds continued miner development. The first 10 minutes of each run are fee-free.
+Dev-fee rounds mine on bntpool.com; if your network cannot reach it, they mine on
+your own pool instead, so the miner never sits idle.
 
 ## Control API
 
