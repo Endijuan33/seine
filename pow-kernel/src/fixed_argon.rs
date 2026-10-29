@@ -168,6 +168,7 @@ pub struct FixedArgon2id {
 }
 
 /// Skip boundary used by `CpuKernel::Avx512StreamSkip`.
+#[allow(dead_code)]
 const KERNEL_SKIP_PERMILLE: usize = 600;
 
 const NO_SLOT: u16 = u16::MAX;
@@ -178,6 +179,7 @@ const NO_SLOT: u16 = u16::MAX;
 /// reference to it falls within `max_distance`, and frees the slot after that
 /// block's last such reader. Blocks that find no free slot are read from the
 /// arena. Output is identical either way.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct SideCacheSchedule {
     slots: usize,
@@ -254,6 +256,7 @@ impl SideCacheSchedule {
         }
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     fn read(&self, index: usize) -> u16 {
         self.read_slot.get(index).copied().unwrap_or(NO_SLOT)
@@ -925,6 +928,7 @@ fn precompute_data_independent_ref_indexes(
 
 /// Whether block `index` skips its arena store under `skip_from` (the last
 /// block is always stored: finalization reads it from the arena).
+#[allow(dead_code)]
 #[inline(always)]
 fn store_skipped(index: usize, skip_from: usize) -> bool {
     index >= skip_from && index & 1 == 1
@@ -1082,6 +1086,7 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
 }
 
 /// Distance, in blocks, of the streaming kernels' far data-independent prefetch.
+#[allow(dead_code)]
 const STREAM_FAR_PREFETCH: usize = 14;
 
 /// Prefetch a whole PowBlock with `prefetcht1`.
