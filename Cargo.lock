@@ -2601,8 +2601,10 @@ dependencies = [
  "sysinfo",
  "tar",
  "tokio",
+ "tokio-rustls",
  "tower",
  "tower-http 0.5.2",
+ "webpki-roots",
  "windows-sys 0.59.0",
  "zip",
 ]

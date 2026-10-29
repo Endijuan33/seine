@@ -343,14 +343,29 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     testnet: bool,
 
-    /// Stratum pool endpoint for pool mode.
-    /// Accepts host:port or stratum+tcp://host:port.
-    #[arg(long = "pool-url")]
+    /// Stratum pool endpoint for pool mode: host:port, stratum+tcp://host:port,
+    /// or stratum+ssl://host:port for TLS. Repeat the flag or separate URLs
+    /// with commas to list backup pools in failover order.
+    #[arg(
+        long = "pool-url",
+        short = 'o',
+        visible_alias = "url",
+        value_delimiter = ','
+    )]
+    pool_url_args: Vec<String>,
+
+    /// Pool URL list joined from `pool_url_args`.
+    #[arg(skip)]
     pool_url: Option<String>,
 
     /// Worker name used when logging into a pool.
-    #[arg(long = "pool-worker")]
+    #[arg(long = "pool-worker", visible_alias = "worker", alias = "rig-id")]
     pool_worker: Option<String>,
+
+    /// Accepted for compatibility with other miners' launch templates.
+    /// Blocknet pools do not use passwords.
+    #[arg(long = "pass", short = 'p', alias = "password")]
+    pool_password: Option<String>,
 
     /// API base URL for the blocknet daemon.
     /// When omitted, Seine prefers Blocknet wrapper config/pidfiles/processes and then falls back to 127.0.0.1:8332.
@@ -371,7 +386,8 @@ struct Cli {
 
     /// Optional payout address or Blocknet ID shortname (@name or $name).
     /// When set, block templates are requested with this address instead of daemon wallet default.
-    #[arg(long = "address")]
+    /// In pool mode ADDRESS.WORKER also sets the worker name.
+    #[arg(long = "address", short = 'u', visible_alias = "user")]
     mining_address: Option<String>,
 
     /// Path to api.cookie file.
@@ -914,6 +930,7 @@ impl Config {
         );
         let mut cli =
             Cli::from_arg_matches(&matches).expect("clap matches should deserialize into Cli");
+        cli.apply_miner_style_args();
         if let Some(kernel) = cli.bench_cpu_kernel {
             if !kernel.is_supported() {
                 bail!("CPU kernel {kernel} is not supported by this host/build");
@@ -983,8 +1000,8 @@ impl Config {
                 .map_err(|err| anyhow::anyhow!("invalid --address: {err}"))?;
         }
         if let Some(pool_url) = cli.pool_url.as_ref() {
-            if normalize_pool_url(pool_url).is_none() {
-                bail!("--pool-url must be host:port or stratum+tcp://host:port");
+            if let Err(err) = crate::pool::normalize_pool_urls(pool_url) {
+                bail!("invalid --pool-url: {err:#}");
             }
         }
         if let Some(pool_worker) = cli.pool_worker.as_ref() {
@@ -2420,29 +2437,46 @@ fn normalize_api_url(input: &str) -> String {
 }
 
 fn normalize_pool_url(input: &str) -> Option<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
+    crate::pool::normalize_pool_urls(input).ok()
+}
 
-    let (scheme, rest) = if let Some(rest) = trimmed.strip_prefix("stratum+tcp://") {
-        ("stratum+tcp://", rest)
-    } else if trimmed.starts_with("stratum+ws://") || trimmed.starts_with("stratum+wss://") {
-        return None;
-    } else {
-        ("stratum+tcp://", trimmed)
-    };
-    let authority = rest.split('/').next().unwrap_or(rest).trim();
-    if authority.is_empty() || authority.contains("://") || rest != authority {
+impl Cli {
+    /// Folds the launch-template conventions shared with other miners into
+    /// seine's own options: repeated or comma-separated `-o` pool URLs and a
+    /// `-u ADDRESS.WORKER` login. An explicit `--pool-worker` wins.
+    fn apply_miner_style_args(&mut self) {
+        let urls = self
+            .pool_url_args
+            .iter()
+            .map(|url| url.trim())
+            .filter(|url| !url.is_empty())
+            .collect::<Vec<_>>();
+        if !urls.is_empty() {
+            self.pool_url = Some(urls.join(","));
+        }
+        if let Some((address, worker)) = self
+            .mining_address
+            .as_deref()
+            .and_then(split_address_worker)
+        {
+            if self.pool_worker.is_none() {
+                self.pool_worker = Some(worker.to_string());
+            }
+            self.mining_address = Some(address.to_string());
+        }
+    }
+}
+
+/// Splits `ADDRESS.WORKER`. Shortnames may contain dots, so only plain
+/// addresses are split.
+fn split_address_worker(value: &str) -> Option<(&str, &str)> {
+    let value = value.trim();
+    if value.starts_with(['@', '$']) {
         return None;
     }
-    let (host, port) = parse_host_port(authority)?;
-    let host_for_url = if host.contains(':') && !host.starts_with('[') {
-        format!("[{host}]")
-    } else {
-        host
-    };
-    Some(format!("{scheme}{host_for_url}:{port}"))
+    let (address, worker) = value.split_once('.')?;
+    let worker = worker.trim();
+    (!address.is_empty() && !worker.is_empty()).then_some((address.trim(), worker))
 }
 
 fn apply_user_config_defaults(cli: &mut Cli, user_cfg: Option<&UserConfig>) {
@@ -2553,7 +2587,7 @@ fn ensure_pool_mode_inputs_available(cli: &Cli, user_config_path: &Path) -> Resu
     {
         bail!(
             "pool mode requires a valid pool URL.\n\
-             Pass --pool-url (host:port or stratum+tcp://host:port) or edit {}.",
+             Pass --pool-url (host:port, stratum+tcp://host:port or stratum+ssl://host:port) or edit {}.",
             user_config_path.display()
         );
     }
@@ -3622,8 +3656,10 @@ mod tests {
             telemetry_url: None,
             mode: Some(MiningMode::Daemon),
             testnet: false,
+            pool_url_args: Vec::new(),
             pool_url: None,
             pool_worker: None,
+            pool_password: None,
             api_url: None,
             token: None,
             wallet_password: None,
@@ -3739,6 +3775,52 @@ mod tests {
             None
         );
         assert_eq!(normalize_pool_url("pool.example.com:3334/miner"), None);
+    }
+
+    #[test]
+    fn miner_style_flags_set_pool_list_address_and_worker() {
+        let address = "8yAUM9aprE1ffiEm5KugyGH1TUqXQTuF9j5Mt2ZabBJmM9HAb5bfPkpa5JjgGQHU8bAmsuuJrcJVSXNWt5KLVn7Tv1bVm";
+        let mut cli = Cli::try_parse_from([
+            "seine",
+            "-o",
+            "stratum+ssl://1.2.3.4:3443",
+            "-o",
+            "bntpool.com:3333,backup.example.com:3333",
+            "-u",
+            &format!("{address}.rig7"),
+            "-p",
+            "x",
+        ])
+        .expect("miner-style flags should parse");
+        cli.apply_miner_style_args();
+        assert_eq!(
+            cli.pool_url.as_deref().and_then(normalize_pool_url).as_deref(),
+            Some("stratum+ssl://1.2.3.4:3443,stratum+tcp://bntpool.com:3333,stratum+tcp://backup.example.com:3333")
+        );
+        assert_eq!(cli.mining_address.as_deref(), Some(address));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig7"));
+
+        let mut cli = Cli::try_parse_from([
+            "seine",
+            "--url",
+            "bntpool.com:3333",
+            "--user",
+            &format!("{address}.rig7"),
+            "--worker",
+            "explicit",
+        ])
+        .unwrap();
+        cli.apply_miner_style_args();
+        assert_eq!(cli.pool_worker.as_deref(), Some("explicit"));
+        assert_eq!(cli.mining_address.as_deref(), Some(address));
+    }
+
+    #[test]
+    fn shortname_logins_are_not_split_on_dots() {
+        let mut cli = Cli::try_parse_from(["seine", "-u", "@miner.one"]).unwrap();
+        cli.apply_miner_style_args();
+        assert_eq!(cli.mining_address.as_deref(), Some("@miner.one"));
+        assert_eq!(cli.pool_worker, None);
     }
 
     #[cfg(target_os = "linux")]

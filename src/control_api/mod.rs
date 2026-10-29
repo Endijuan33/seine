@@ -1583,76 +1583,7 @@ fn parse_api_bind_addr(bind: &str) -> Result<SocketAddr> {
 }
 
 fn normalize_pool_url(value: &str) -> Result<String> {
-    let trimmed = value.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        bail!("pool_url cannot be empty");
-    }
-
-    let (scheme, rest) = if let Some(rest) = trimmed.strip_prefix("stratum+tcp://") {
-        ("stratum+tcp://", rest)
-    } else if trimmed.starts_with("stratum+ws://") || trimmed.starts_with("stratum+wss://") {
-        bail!("pool_url must be host:port or stratum+tcp://host:port");
-    } else {
-        ("stratum+tcp://", trimmed)
-    };
-    let authority = rest.split('/').next().unwrap_or(rest).trim();
-    if authority.is_empty() || authority.contains("://") || rest != authority {
-        bail!("pool_url must be host:port or stratum+tcp://host:port");
-    }
-
-    let (host, port) = parse_pool_host_port(authority)?;
-    let host_for_url = if host.contains(':') && !host.starts_with('[') {
-        format!("[{host}]")
-    } else {
-        host
-    };
-    Ok(format!("{scheme}{host_for_url}:{port}"))
-}
-
-fn parse_pool_host_port(authority: &str) -> Result<(String, u16)> {
-    let authority = authority.trim();
-    if authority.is_empty() {
-        bail!("pool_url authority is empty");
-    }
-    if authority.chars().all(|c| c.is_ascii_digit()) {
-        let port = authority
-            .parse::<u16>()
-            .with_context(|| format!("invalid pool port in '{authority}'"))?;
-        return Ok(("127.0.0.1".to_string(), port));
-    }
-
-    if let Some(rest) = authority.strip_prefix('[') {
-        let closing = rest
-            .find(']')
-            .ok_or_else(|| anyhow!("invalid IPv6 pool authority '{authority}'"))?;
-        let host = rest[..closing].to_string();
-        let port_part = rest
-            .get(closing + 1..)
-            .and_then(|v| v.strip_prefix(':'))
-            .ok_or_else(|| anyhow!("pool_url must include port in '{authority}'"))?;
-        let port = port_part
-            .parse::<u16>()
-            .with_context(|| format!("invalid pool port in '{authority}'"))?;
-        return Ok((host, port));
-    }
-
-    if authority.matches(':').count() == 1 {
-        let (host, port) = authority
-            .split_once(':')
-            .ok_or_else(|| anyhow!("pool_url must include port"))?;
-        let port = port
-            .parse::<u16>()
-            .with_context(|| format!("invalid pool port in '{authority}'"))?;
-        return Ok((host.to_string(), port));
-    }
-
-    let (host, port) = authority
-        .rsplit_once(':')
-        .ok_or_else(|| anyhow!("pool_url must include port"))?;
-    let port = port
-        .parse::<u16>()
-        .with_context(|| format!("invalid pool port in '{authority}'"))?;
-    Ok((host.to_string(), port))
+    crate::pool::normalize_pool_urls(value).context("invalid pool_url")
 }
 
 fn classify_start_or_restart_error(err: anyhow::Error, operation: &str) -> ApiError {

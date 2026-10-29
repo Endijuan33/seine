@@ -29,6 +29,11 @@ const MAX_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(120);
 /// Delay used when a `connection_limit` notice gives none.
 const DEFAULT_CONNECTION_LIMIT_DELAY: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+/// Connection attempts without a login before moving to the next pool.
+const FAILOVER_AFTER_FAILED_ATTEMPTS: u32 = 2;
+/// How often a backup session checks whether the primary pool is back.
+const PRIMARY_RECHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const MAX_PRIMARY_RECHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const CHANNEL_CAPACITY: usize = 4096;
 const MAX_SUBMITS_PER_IO_CYCLE: usize = 32;
 const MAX_RETRY_SUBMITS_PER_IO_CYCLE: usize = 4;
@@ -57,6 +62,8 @@ pub const POOL_NOTIFICATION_POOL_BLOCK_SOLVED: &str = "pool_block_solved";
 pub const POOL_NOTIFICATION_MINER_BLOCK_FOUND: &str = "miner_block_found";
 /// The pool refused this session at its connection limit and is closing it.
 pub const POOL_NOTIFICATION_CONNECTION_LIMIT: &str = "connection_limit";
+/// Seine moved between the configured pools.
+pub const POOL_NOTIFICATION_FAILOVER: &str = "pool_failover";
 
 const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_LOGIN_NEGOTIATION,
@@ -222,7 +229,7 @@ impl PoolClient {
         worker: String,
         process_shutdown: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let endpoint = parse_pool_endpoint(pool_url)?;
+        let endpoints = parse_pool_endpoints(pool_url)?;
         let (submit_tx, submit_rx) = bounded::<PoolSubmit>(CHANNEL_CAPACITY);
         let (event_tx, event_rx) = bounded::<PoolEvent>(CHANNEL_CAPACITY);
         let reconnect_requested = Arc::new(AtomicBool::new(false));
@@ -236,7 +243,7 @@ impl PoolClient {
             .name("pool-stratum".to_string())
             .spawn(move || {
                 run_pool_client_thread(
-                    endpoint,
+                    endpoints,
                     address,
                     worker,
                     submit_rx,
@@ -395,6 +402,8 @@ struct LoginResult {
 #[derive(Debug, Clone)]
 struct PoolEndpoint {
     authority: String,
+    host: String,
+    tls: bool,
     url: String,
 }
 
@@ -463,7 +472,7 @@ fn take_ready_nonce_refill(
 }
 
 fn run_pool_client_thread(
-    endpoint: PoolEndpoint,
+    endpoints: Vec<PoolEndpoint>,
     address: String,
     worker: String,
     submit_rx: Receiver<PoolSubmit>,
@@ -481,14 +490,14 @@ fn run_pool_client_thread(
         Err(err) => {
             let _ = event_tx.try_send(PoolEvent::Disconnected(format!(
                 "pool client runtime failed for {}: {err}",
-                endpoint.display()
+                endpoints[0].display()
             )));
             return;
         }
     };
 
     runtime.block_on(run_pool_client_loop(
-        endpoint,
+        endpoints,
         address,
         worker,
         submit_rx,
@@ -501,7 +510,7 @@ fn run_pool_client_thread(
 }
 
 async fn run_pool_client_loop(
-    endpoint: PoolEndpoint,
+    endpoints: Vec<PoolEndpoint>,
     address: String,
     worker: String,
     submit_rx: Receiver<PoolSubmit>,
@@ -514,7 +523,11 @@ async fn run_pool_client_loop(
     let mut next_request_id = LOGIN_REQUEST_ID + 1;
     let mut allow_login_difficulty_hint = false;
     let mut login_difficulty_hint: Option<u64> = None;
+    let mut failover = PoolFailover::new(endpoints.len());
     while !should_shutdown(process_shutdown.as_ref(), shutdown.as_ref()) {
+        let endpoint = endpoints[failover.active].clone();
+        let mut session_logged_in = false;
+        let mut switch_to_primary = false;
         match connect_pool_transport(&endpoint).await {
             Ok(mut connection) => {
                 reject_queued_submits(&event_tx, &submit_rx, SUBMIT_REJECT_REASON_DISCONNECTED);
@@ -572,6 +585,9 @@ async fn run_pool_client_loop(
                 let mut last_outbound = Instant::now();
                 let mut submit_tick = tokio::time::interval(SUBMIT_POLL_INTERVAL);
                 submit_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                let mut next_primary_probe = Instant::now() + failover.primary_recheck;
+                let mut primary_probe: Option<tokio::task::JoinHandle<bool>> = None;
+                let mut primary_back = false;
 
                 loop {
                     if should_shutdown(process_shutdown.as_ref(), shutdown.as_ref()) {
@@ -583,6 +599,37 @@ async fn run_pool_client_loop(
                         current_job_id.as_deref(),
                         login_confirmed && pending_submits.is_empty() && submit_rx.is_empty(),
                     );
+                    let idle = pending_submits.is_empty() && submit_rx.is_empty();
+                    if primary_back && idle {
+                        let _ = event_tx.try_send(PoolEvent::Notification(PoolNotification {
+                            kind: POOL_NOTIFICATION_FAILOVER.to_string(),
+                            message: format!(
+                                "primary pool {} is reachable again; switching back",
+                                endpoints[0].display()
+                            ),
+                            retry_after: None,
+                        }));
+                        let _ = event_tx.try_send(PoolEvent::Disconnected(format!(
+                            "leaving backup pool {}",
+                            endpoint.display()
+                        )));
+                        switch_to_primary = true;
+                        connection.abort();
+                        break;
+                    }
+                    if failover.active != 0
+                        && login_confirmed
+                        && primary_probe.is_none()
+                        && Instant::now() >= next_primary_probe
+                    {
+                        let primary = endpoints[0].clone();
+                        primary_probe = Some(tokio::spawn(async move {
+                            connect_pool_transport(&primary)
+                                .await
+                                .map(PoolConnection::abort)
+                                .is_ok()
+                        }));
+                    }
                     if reconnect_requested.swap(false, Ordering::Relaxed) || refill_ready {
                         *refill_requested.lock().expect("refill lock") = None;
                         reject_pending_submits(
@@ -601,6 +648,13 @@ async fn run_pool_client_loop(
                     }
 
                     tokio::select! {
+                        probe = async { primary_probe.as_mut().expect("probe guarded").await },
+                            if primary_probe.is_some() =>
+                        {
+                            primary_probe = None;
+                            next_primary_probe = Instant::now() + failover.primary_recheck;
+                            primary_back = matches!(probe, Ok(true));
+                        }
                         _ = submit_tick.tick() => {
                             let mut reconnect_now = false;
                             if login_confirmed {
@@ -900,6 +954,10 @@ async fn run_pool_client_loop(
                         }
                     }
                 }
+                if let Some(probe) = primary_probe.take() {
+                    probe.abort();
+                }
+                session_logged_in = login_confirmed;
             }
             Err(err) => {
                 reject_queued_submits(&event_tx, &submit_rx, SUBMIT_REJECT_REASON_DISCONNECTED);
@@ -914,16 +972,104 @@ async fn run_pool_client_loop(
                 );
             }
         }
+        let previous = failover.active;
+        if switch_to_primary {
+            failover.switch_to_primary();
+        } else if failover.session_ended(session_logged_in) {
+            let _ = event_tx.try_send(PoolEvent::Notification(PoolNotification {
+                kind: POOL_NOTIFICATION_FAILOVER.to_string(),
+                message: format!(
+                    "pool {} unavailable; switching to {}",
+                    endpoints[previous].display(),
+                    endpoints[failover.active].display()
+                ),
+                retry_after: None,
+            }));
+        }
+    }
+}
+
+/// Pool failover bookkeeping. Seine moves to the next pool in the list after
+/// repeated attempts that never log in, stays on a pool while sessions log in,
+/// and probes the primary pool periodically while on a backup.
+#[derive(Debug)]
+struct PoolFailover {
+    pools: usize,
+    active: usize,
+    failed_attempts: u32,
+    primary_recheck: Duration,
+    returned_to_primary: bool,
+}
+
+impl PoolFailover {
+    fn new(pools: usize) -> Self {
+        Self {
+            pools: pools.max(1),
+            active: 0,
+            failed_attempts: 0,
+            primary_recheck: PRIMARY_RECHECK_INTERVAL,
+            returned_to_primary: false,
+        }
+    }
+
+    /// Records how a connection attempt ended; returns true when it moved to
+    /// another pool.
+    fn session_ended(&mut self, logged_in: bool) -> bool {
+        if logged_in {
+            self.failed_attempts = 0;
+            if self.active == 0 {
+                self.returned_to_primary = false;
+                self.primary_recheck = PRIMARY_RECHECK_INTERVAL;
+            }
+            return false;
+        }
+        self.failed_attempts += 1;
+        if self.pools < 2 || self.failed_attempts < FAILOVER_AFTER_FAILED_ATTEMPTS {
+            return false;
+        }
+        if self.active == 0 && self.returned_to_primary {
+            // The primary answered the probe but still would not log in.
+            self.returned_to_primary = false;
+            self.primary_recheck = (self.primary_recheck * 2).min(MAX_PRIMARY_RECHECK_INTERVAL);
+        }
+        self.failed_attempts = 0;
+        self.active = (self.active + 1) % self.pools;
+        true
+    }
+
+    fn switch_to_primary(&mut self) {
+        self.active = 0;
+        self.failed_attempts = 0;
+        self.returned_to_primary = true;
     }
 }
 
 async fn connect_pool_transport(endpoint: &PoolEndpoint) -> Result<PoolConnection> {
-    connect_pool_tcp_transport(endpoint).await
+    let stream = connect_pool_tcp_stream(endpoint).await?;
+    if !endpoint.tls {
+        let (reader_half, writer_half) = stream.into_split();
+        return Ok(spawn_pool_io(reader_half, writer_half));
+    }
+    let stream = connect_pool_tls(endpoint, stream).await.inspect_err(|_| {
+        crate::diagnostics::record_failure(
+            seine_telemetry::DiagnosticCode::Warning,
+            seine_telemetry::DiagnosticKind::Connection,
+            None,
+            seine_telemetry::FailureDetail::new(
+                seine_telemetry::FailureReason::ConnectionFailed,
+                seine_telemetry::DiagnosticOperation::PoolConnect,
+            ),
+        );
+    })?;
+    let (reader_half, writer_half) = tokio::io::split(stream);
+    Ok(spawn_pool_io(reader_half, writer_half))
 }
 
-async fn connect_pool_tcp_transport(endpoint: &PoolEndpoint) -> Result<PoolConnection> {
-    let stream = connect_pool_tcp_stream(endpoint).await?;
-    let (reader_half, writer_half) = stream.into_split();
+fn spawn_pool_io<R, W>(reader_half: R, writer_half: W) -> PoolConnection
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
     let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
     let reader_task = tokio::spawn(async move {
         run_tcp_reader(TokioBufReader::new(reader_half), inbound_tx).await;
@@ -932,12 +1078,145 @@ async fn connect_pool_tcp_transport(endpoint: &PoolEndpoint) -> Result<PoolConne
     let writer_task = tokio::spawn(async move {
         run_tcp_writer(writer_half, outbound_rx).await;
     });
-    Ok(PoolConnection {
+    PoolConnection {
         outbound_tx,
         inbound_rx,
         reader_task,
         writer_task,
-    })
+    }
+}
+
+/// TLS to a pool named by hostname verifies its certificate against the
+/// public web roots. A pool named by IP address is encrypted without
+/// checking the certificate's identity, since pool certificates name hosts.
+async fn connect_pool_tls(
+    endpoint: &PoolEndpoint,
+    stream: TokioTcpStream,
+) -> Result<tokio_rustls::client::TlsStream<TokioTcpStream>> {
+    use tokio_rustls::rustls::pki_types::ServerName;
+
+    let (config, server_name) = match endpoint.host.parse::<std::net::IpAddr>() {
+        Ok(ip) => (pool_tls::encrypt_only_config(), ServerName::from(ip)),
+        Err(_) => (
+            pool_tls::verified_config(),
+            ServerName::try_from(endpoint.host.clone())
+                .map_err(|_| anyhow!("invalid TLS host name {}", endpoint.host))?,
+        ),
+    };
+    let connector = tokio_rustls::TlsConnector::from(config);
+    match tokio::time::timeout(CONNECT_TIMEOUT, connector.connect(server_name, stream)).await {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(err)) => Err(anyhow!(
+            "TLS handshake failed with pool at {}: {err}",
+            endpoint.display()
+        )),
+        Err(_) => Err(anyhow!(
+            "TLS handshake timed out with pool at {}",
+            endpoint.display()
+        )),
+    }
+}
+
+mod pool_tls {
+    use std::sync::{Arc, OnceLock};
+
+    use tokio_rustls::rustls::client::danger::{
+        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+    };
+    use tokio_rustls::rustls::crypto::{self, ring, CryptoProvider};
+    use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+    use tokio_rustls::rustls::{
+        ClientConfig, DigitallySignedStruct, Error, RootCertStore, SignatureScheme,
+    };
+
+    fn provider() -> Arc<CryptoProvider> {
+        Arc::new(ring::default_provider())
+    }
+
+    pub(super) fn verified_config() -> Arc<ClientConfig> {
+        static CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+        CONFIG
+            .get_or_init(|| {
+                let roots = RootCertStore {
+                    roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+                };
+                Arc::new(
+                    ClientConfig::builder_with_provider(provider())
+                        .with_safe_default_protocol_versions()
+                        .expect("ring provider supports the default TLS versions")
+                        .with_root_certificates(roots)
+                        .with_no_client_auth(),
+                )
+            })
+            .clone()
+    }
+
+    pub(super) fn encrypt_only_config() -> Arc<ClientConfig> {
+        static CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+        CONFIG
+            .get_or_init(|| {
+                let provider = provider();
+                Arc::new(
+                    ClientConfig::builder_with_provider(provider.clone())
+                        .with_safe_default_protocol_versions()
+                        .expect("ring provider supports the default TLS versions")
+                        .dangerous()
+                        .with_custom_certificate_verifier(Arc::new(EncryptOnly(provider)))
+                        .with_no_client_auth(),
+                )
+            })
+            .clone()
+    }
+
+    /// Accepts any certificate but still checks the handshake signatures, so
+    /// the session key is bound to the certificate the pool presented.
+    #[derive(Debug)]
+    struct EncryptOnly(Arc<CryptoProvider>);
+
+    impl ServerCertVerifier for EncryptOnly {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            crypto::verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            crypto::verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.0.signature_verification_algorithms.supported_schemes()
+        }
+    }
 }
 
 async fn connect_pool_tcp_stream(endpoint: &PoolEndpoint) -> Result<TokioTcpStream> {
@@ -1011,8 +1290,8 @@ fn resolve_pool_addrs(authority: &str) -> Result<Vec<SocketAddr>> {
     Ok(addrs)
 }
 
-async fn run_tcp_reader(
-    mut reader: TokioBufReader<tokio::net::tcp::OwnedReadHalf>,
+async fn run_tcp_reader<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: TokioBufReader<R>,
     inbound_tx: mpsc::UnboundedSender<InboundFrame>,
 ) {
     loop {
@@ -1068,8 +1347,8 @@ where
     }
 }
 
-async fn read_line_limited_async(
-    reader: &mut TokioBufReader<tokio::net::tcp::OwnedReadHalf>,
+async fn read_line_limited_async<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut TokioBufReader<R>,
     max_bytes: usize,
 ) -> Result<Option<String>> {
     let mut data = Vec::<u8>::with_capacity(256);
@@ -1168,6 +1447,18 @@ fn friendly_pool_connect_error(endpoint: &PoolEndpoint, detail: &str) -> String 
             return format!("pool offline at {}", endpoint.display());
         }
         return format!("pool unreachable at {}", endpoint.display());
+    }
+    if lower.contains("tls handshake") {
+        if lower.contains("certificate") {
+            return format!(
+                "pool TLS certificate not trusted at {} (connect by IP address to skip the name check)",
+                endpoint.display()
+            );
+        }
+        return format!(
+            "pool TLS failed at {} (check that this port uses TLS)",
+            endpoint.display()
+        );
     }
     if lower.contains("timed out") {
         return format!("pool timed out at {}", endpoint.display());
@@ -1513,33 +1804,108 @@ fn reject_queued_submits(
     }
 }
 
+const PLAIN_POOL_SCHEMES: &[&str] = &["stratum+tcp://", "tcp://"];
+const TLS_POOL_SCHEMES: &[&str] = &["stratum+ssl://", "stratum+tls://", "ssl://", "tls://"];
+
+/// Normalizes a pool URL, or a comma-separated list of them in failover
+/// order, to canonical `stratum+tcp://host:port` / `stratum+ssl://host:port`
+/// entries joined by commas.
+pub fn normalize_pool_urls(input: &str) -> Result<String> {
+    Ok(parse_pool_endpoints(input)?
+        .into_iter()
+        .map(|endpoint| endpoint.url)
+        .collect::<Vec<_>>()
+        .join(","))
+}
+
+/// The first (primary) pool in a normalized pool URL list.
+pub fn primary_pool_url(pool_urls: &str) -> &str {
+    pool_urls.split(',').next().unwrap_or(pool_urls).trim()
+}
+
+fn parse_pool_endpoints(input: &str) -> Result<Vec<PoolEndpoint>> {
+    let endpoints = input
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(parse_pool_endpoint)
+        .collect::<Result<Vec<_>>>()?;
+    if endpoints.is_empty() {
+        bail!("pool URL is empty");
+    }
+    Ok(endpoints)
+}
+
 fn parse_pool_endpoint(pool_url: &str) -> Result<PoolEndpoint> {
-    let trimmed = pool_url.trim();
+    let trimmed = pool_url.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         bail!("pool URL is empty");
     }
     if trimmed.starts_with("stratum+ws://") || trimmed.starts_with("stratum+wss://") {
         bail!(
-            "websocket pool URLs are no longer supported; use host:port or stratum+tcp://host:port"
+            "websocket pool URLs are no longer supported; use host:port, stratum+tcp://host:port or stratum+ssl://host:port"
         );
     }
 
-    let rest = trimmed.strip_prefix("stratum+tcp://").unwrap_or(trimmed);
+    let strip = |schemes: &[&str]| {
+        schemes
+            .iter()
+            .find_map(|scheme| trimmed.strip_prefix(scheme))
+    };
+    let (tls, rest) = if let Some(rest) = strip(TLS_POOL_SCHEMES) {
+        (true, rest)
+    } else if let Some(rest) = strip(PLAIN_POOL_SCHEMES) {
+        (false, rest)
+    } else {
+        (false, trimmed)
+    };
     let authority = rest.split('/').next().unwrap_or(rest).trim();
     if authority.is_empty() {
         bail!("pool URL authority is empty");
     }
     if authority.contains("://") {
-        bail!("unsupported pool URL scheme");
+        bail!("unsupported pool URL scheme in {trimmed}");
     }
     if rest != authority {
         bail!("pool URL paths are not supported");
     }
-    let url = format!("stratum+tcp://{authority}");
+    let (host, port) = parse_pool_host_port(authority)
+        .ok_or_else(|| anyhow!("pool URL must include a host and port: {trimmed}"))?;
+    let host_for_url = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.clone()
+    };
+    let authority = format!("{host_for_url}:{port}");
+    let scheme = if tls {
+        "stratum+ssl://"
+    } else {
+        "stratum+tcp://"
+    };
     Ok(PoolEndpoint {
-        authority: authority.to_string(),
-        url,
+        url: format!("{scheme}{authority}"),
+        authority,
+        host,
+        tls,
     })
+}
+
+/// Splits `host:port`, `[v6]:port` or a bare port (localhost).
+fn parse_pool_host_port(authority: &str) -> Option<(String, u16)> {
+    if authority.chars().all(|c| c.is_ascii_digit()) {
+        return Some(("127.0.0.1".to_string(), authority.parse().ok()?));
+    }
+    let (host, port) = if let Some(rest) = authority.strip_prefix('[') {
+        let (host, port) = rest.split_once(']')?;
+        (host, port.strip_prefix(':')?)
+    } else {
+        authority.rsplit_once(':')?
+    };
+    let host = host.trim();
+    if host.is_empty() {
+        return None;
+    }
+    Some((host.to_string(), port.parse().ok()?))
 }
 
 fn should_shutdown(process_shutdown: &AtomicBool, shutdown: &AtomicBool) -> bool {
@@ -2349,6 +2715,135 @@ mod tests {
         let wss = parse_pool_endpoint("stratum+wss://pool.example.com:443")
             .expect_err("wss endpoints should be rejected");
         assert!(wss.to_string().contains("no longer supported"));
+    }
+
+    #[test]
+    fn pool_urls_accept_tls_schemes_and_failover_lists() {
+        assert_eq!(
+            normalize_pool_urls(
+                "bntpool.com:3333, stratum+ssl://1.2.3.4:3443,stratum+tls://pool.example.com:443/,ssl://[::1]:9,tcp://h:1"
+            )
+            .unwrap(),
+            "stratum+tcp://bntpool.com:3333,stratum+ssl://1.2.3.4:3443,stratum+ssl://pool.example.com:443,stratum+ssl://[::1]:9,stratum+tcp://h:1"
+        );
+        let endpoints =
+            parse_pool_endpoints("stratum+ssl://[::1]:9,pool.example.com:3333").unwrap();
+        assert!(endpoints[0].tls);
+        assert_eq!(endpoints[0].host, "::1");
+        assert_eq!(endpoints[0].authority, "[::1]:9");
+        assert!(!endpoints[1].tls);
+        assert_eq!(
+            primary_pool_url("stratum+ssl://a:1,stratum+tcp://b:2"),
+            "stratum+ssl://a:1"
+        );
+        assert!(normalize_pool_urls(" , ").is_err());
+        assert!(normalize_pool_urls("pool.example.com").is_err());
+        assert!(normalize_pool_urls("http://pool.example.com:80").is_err());
+    }
+
+    #[test]
+    fn failover_moves_on_after_failed_attempts_and_stays_while_logged_in() {
+        let mut failover = PoolFailover::new(2);
+        assert!(!failover.session_ended(false));
+        assert_eq!(failover.active, 0);
+        assert!(failover.session_ended(false));
+        assert_eq!(failover.active, 1);
+        // A logged-in backup session that drops reconnects to the backup.
+        assert!(!failover.session_ended(true));
+        assert!(!failover.session_ended(false));
+        assert_eq!(failover.active, 1);
+        assert!(failover.session_ended(false));
+        assert_eq!(failover.active, 0);
+
+        let mut single = PoolFailover::new(1);
+        for _ in 0..5 {
+            assert!(!single.session_ended(false));
+        }
+        assert_eq!(single.active, 0);
+    }
+
+    #[test]
+    fn failover_backs_off_primary_checks_when_primary_will_not_log_in() {
+        let mut failover = PoolFailover::new(2);
+        failover.session_ended(false);
+        failover.session_ended(false);
+        assert_eq!(failover.active, 1);
+        failover.switch_to_primary();
+        failover.session_ended(false);
+        assert!(failover.session_ended(false));
+        assert_eq!(failover.active, 1);
+        assert_eq!(failover.primary_recheck, PRIMARY_RECHECK_INTERVAL * 2);
+
+        failover.switch_to_primary();
+        assert!(!failover.session_ended(true));
+        assert_eq!(failover.primary_recheck, PRIMARY_RECHECK_INTERVAL);
+    }
+
+    #[test]
+    fn tls_errors_get_actionable_messages() {
+        let endpoint = parse_pool_endpoint("stratum+ssl://pool.example.com:3443").unwrap();
+        let cert = friendly_pool_connect_error(
+            &endpoint,
+            "TLS handshake failed with pool at x: invalid peer certificate: UnknownIssuer",
+        );
+        assert!(cert.contains("certificate not trusted"));
+        let plain = friendly_pool_connect_error(
+            &endpoint,
+            "TLS handshake failed with pool at x: received corrupt message",
+        );
+        assert!(plain.contains("check that this port uses TLS"));
+    }
+
+    #[test]
+    fn pool_client_fails_over_to_backup_pool() {
+        let _test_lock = crate::diagnostics::TEST_LOCK.lock().unwrap();
+        let _guard = crate::diagnostics::install(crate::diagnostics::test_context());
+        let dead = TcpListener::bind("127.0.0.1:0").expect("bind dead port");
+        let dead_port = dead.local_addr().unwrap().port();
+        drop(dead);
+        let backup = TcpListener::bind("127.0.0.1:0").expect("bind backup");
+        let backup_port = backup.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = backup.accept().expect("accept backup");
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            std::io::BufRead::read_line(&mut reader, &mut line).unwrap();
+            let login: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(login["method"], "login");
+            stream
+                .write_all(b"{\"id\":1,\"status\":\"ok\",\"result\":{\"protocol_version\":2}}\n")
+                .unwrap();
+            // Hold the session until the client shuts down and closes it.
+            let mut rest = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut reader, &mut rest);
+        });
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let client = PoolClient::connect(
+            &format!("127.0.0.1:{dead_port},127.0.0.1:{backup_port}"),
+            "addr".into(),
+            "worker".into(),
+            Arc::clone(&shutdown),
+        )
+        .expect("client");
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut saw_failover = false;
+        let mut logged_in = false;
+        while Instant::now() < deadline && !logged_in {
+            match client.recv_event_timeout(Duration::from_millis(200)) {
+                Some(PoolEvent::Notification(note)) if note.kind == POOL_NOTIFICATION_FAILOVER => {
+                    assert!(note.message.contains(&backup_port.to_string()));
+                    saw_failover = true;
+                }
+                Some(PoolEvent::LoginAccepted(_)) => logged_in = true,
+                _ => {}
+            }
+        }
+        shutdown.store(true, Ordering::Relaxed);
+        drop(client);
+        server.join().unwrap();
+        assert!(saw_failover, "expected a failover notice");
+        assert!(logged_in, "expected login on the backup pool");
     }
 
     #[test]
