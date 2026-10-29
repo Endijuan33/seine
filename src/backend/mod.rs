@@ -86,6 +86,10 @@ pub mod metal {
                 _instance_id: AtomicU64::new(0),
             }
         }
+
+        pub fn blake2b_only(self) -> Self {
+            self
+        }
     }
 
     impl PowBackend for MetalBackend {

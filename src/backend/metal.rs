@@ -546,6 +546,9 @@ pub struct MetalBackend {
     max_lanes: AtomicU64,
     max_lanes_override: Option<usize>,
     hashes_per_launch_per_lane: u32,
+    /// Mines only BLAKE2b and never builds the Argon2 engine; set for the
+    /// Metal backend Seine adds by itself on macOS.
+    blake2b_only: bool,
 }
 
 // Safety: MetalBackend is Send+Sync because:
@@ -566,7 +569,14 @@ impl MetalBackend {
             max_lanes: AtomicU64::new(0),
             max_lanes_override: max_lanes,
             hashes_per_launch_per_lane: hashes_per_launch_per_lane.max(1),
+            blake2b_only: false,
         }
+    }
+
+    /// A Metal backend that waits idle on Argon2 work and mines BLAKE2b.
+    pub fn blake2b_only(mut self) -> Self {
+        self.blake2b_only = true;
+        self
     }
 
     fn signal_cancel(&self) {
@@ -605,8 +615,8 @@ impl PowBackend for MetalBackend {
         }
     }
 
-    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
-        true
+    fn supports_pow(&self, pow: crate::backend::PowAlgorithm) -> bool {
+        !self.blake2b_only || pow == crate::backend::PowAlgorithm::Blake2b512
     }
 
     fn lanes(&self) -> usize {
@@ -639,6 +649,7 @@ impl PowBackend for MetalBackend {
         let instance_id = self.instance_id.load(Ordering::Acquire);
         let max_lanes_override = self.max_lanes_override;
         let hashes_per_launch_per_lane = self.hashes_per_launch_per_lane;
+        let blake2b_only = self.blake2b_only;
         let max_lanes_atomic = {
             // Clone a handle so the worker can write back discovered lanes
             let ptr = &self.max_lanes as *const AtomicU64;
@@ -652,6 +663,7 @@ impl PowBackend for MetalBackend {
                     instance_id,
                     max_lanes_override,
                     hashes_per_launch_per_lane,
+                    blake2b_only,
                     max_lanes_atomic,
                     shared,
                     assignment_rx,
@@ -793,7 +805,13 @@ impl PowBackend for MetalBackend {
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
             max_inflight_assignments: 1,
-            deadline_support: DeadlineSupport::BestEffort,
+            // BLAKE2b launches last milliseconds; Argon2 launches cannot be
+            // stopped early.
+            deadline_support: if self.blake2b_only {
+                DeadlineSupport::Cooperative
+            } else {
+                DeadlineSupport::BestEffort
+            },
             assignment_semantics: AssignmentSemantics::Replace,
             execution_model: BackendExecutionModel::Blocking,
             preferred_iters_per_lane: Some(1 << 20),
@@ -838,34 +856,45 @@ fn metal_worker_loop(
     instance_id: BackendInstanceId,
     max_lanes_override: Option<usize>,
     hashes_per_launch_per_lane: u32,
+    blake2b_only: bool,
     max_lanes_atomic_ptr: u64,
     shared: Arc<MetalShared>,
     assignment_rx: Receiver<WorkerCommand>,
     control_rx: Receiver<WorkerCommand>,
 ) {
-    // Initialize engine on worker thread (Metal objects are !Send)
-    let engine = match MetalArgon2Engine::new(max_lanes_override, hashes_per_launch_per_lane) {
-        Ok(engine) => engine,
-        Err(e) => {
-            shared.emit_error(instance_id, format!("Metal init failed: {e:#}"));
-            return;
+    // Initialize engine on worker thread (Metal objects are !Send). A
+    // BLAKE2b-only backend allocates no Argon2 lanes.
+    let engine = if blake2b_only {
+        None
+    } else {
+        match MetalArgon2Engine::new(max_lanes_override, hashes_per_launch_per_lane) {
+            Ok(engine) => Some(engine),
+            Err(e) => {
+                shared.emit_error(instance_id, format!("Metal init failed: {e:#}"));
+                return;
+            }
         }
     };
 
     // Store cancel flag pointer for cross-thread cancel signaling
-    let cancel_ptr = engine.cancel_flag_ptr() as u64;
-    shared.cancel_flag_ptr.store(cancel_ptr, Ordering::Release);
+    if let Some(engine) = engine.as_ref() {
+        let cancel_ptr = engine.cancel_flag_ptr() as u64;
+        shared.cancel_flag_ptr.store(cancel_ptr, Ordering::Release);
+    }
 
     // Publish discovered lanes
-    let lanes = engine.lanes as u64;
+    let lanes = engine.as_ref().map_or(1, |engine| engine.lanes as u64);
     unsafe {
         let atomic = &*(max_lanes_atomic_ptr as *const AtomicU64);
         atomic.store(lanes, Ordering::Release);
     }
     shared.active_lanes.store(0, Ordering::Release);
-    shared
-        .active_hashes_per_launch_per_lane
-        .store(engine.hashes_per_launch_per_lane, Ordering::Release);
+    shared.active_hashes_per_launch_per_lane.store(
+        engine
+            .as_ref()
+            .map_or(1, |engine| engine.hashes_per_launch_per_lane),
+        Ordering::Release,
+    );
 
     let mut active: Option<ActiveAssignment> = None;
     let mut fence_waiters: Vec<Sender<()>> = Vec::new();
@@ -1006,6 +1035,15 @@ fn metal_worker_loop(
                 continue;
             }
             shared.blake2b_active.store(false, Ordering::Release);
+            let Some(engine) = engine.as_ref() else {
+                // The scheduler gives a BLAKE2b-only backend no Argon2 work.
+                active = None;
+                shared.pending_work.store(0, Ordering::Release);
+                for waiter in fence_waiters.drain(..) {
+                    let _ = waiter.send(());
+                }
+                continue;
+            };
 
             // Dispatch a batch
             let batch_size = remaining.min(engine.max_hashes_per_launch as u64) as usize;

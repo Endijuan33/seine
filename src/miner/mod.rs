@@ -713,10 +713,17 @@ fn run_with_thread_control_inner(
                         ..AmdBackendTuningOptions::default()
                     },
                 )) as Arc<dyn PowBackend>,
-                BackendKind::Metal => Arc::new(MetalBackend::new(
-                    cfg.metal_max_lanes,
-                    cfg.metal_hashes_per_launch_per_lane,
-                )) as Arc<dyn PowBackend>,
+                BackendKind::Metal => {
+                    let backend = MetalBackend::new(
+                        cfg.metal_max_lanes,
+                        cfg.metal_hashes_per_launch_per_lane,
+                    );
+                    Arc::new(if cfg.metal_blake2b_only {
+                        backend.blake2b_only()
+                    } else {
+                        backend
+                    }) as Arc<dyn PowBackend>
+                }
                 BackendKind::Nvidia => unreachable!(),
             };
             (backend_spec, backend)
@@ -2437,10 +2444,17 @@ fn build_backend_instances(cfg: &Config) -> Vec<(BackendSpec, Arc<dyn PowBackend
                         ..AmdBackendTuningOptions::default()
                     },
                 )) as Arc<dyn PowBackend>,
-                BackendKind::Metal => Arc::new(MetalBackend::new(
-                    cfg.metal_max_lanes,
-                    cfg.metal_hashes_per_launch_per_lane,
-                )) as Arc<dyn PowBackend>,
+                BackendKind::Metal => {
+                    let backend = MetalBackend::new(
+                        cfg.metal_max_lanes,
+                        cfg.metal_hashes_per_launch_per_lane,
+                    );
+                    Arc::new(if cfg.metal_blake2b_only {
+                        backend.blake2b_only()
+                    } else {
+                        backend
+                    }) as Arc<dyn PowBackend>
+                }
             };
             (backend_spec, backend)
         })
@@ -4024,6 +4038,7 @@ pub(crate) mod tests {
             amd_max_lanes: None,
             metal_max_lanes: None,
             metal_hashes_per_launch_per_lane: 2,
+            metal_blake2b_only: false,
             backend_assign_timeout: Duration::from_millis(1_000),
             backend_assign_timeout_strikes: 3,
             backend_control_timeout: Duration::from_millis(60_000),
