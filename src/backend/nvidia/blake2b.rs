@@ -136,6 +136,37 @@ impl CudaBlake2bEngine {
             target_limb0: u64::from_be_bytes(target[..8].try_into().expect("8 bytes")),
         };
 
+        // A launch that finds more candidates than the buffer holds is split
+        // and rerun on the GPU. Halves of at most CANDIDATE_CAPACITY nonces
+        // cannot overflow, so very easy targets stay exact without a CPU rescan.
+        let mut hits = Vec::new();
+        let mut ranges = vec![(start_nonce, count)];
+        while let Some((range_start, range_count)) = ranges.pop() {
+            match self.launch_range(&kernel, &params, range_start, range_count)? {
+                Some(candidates) => hits.extend(
+                    candidates
+                        .into_iter()
+                        .filter(|&nonce| midstate.target_bytes(nonce) <= *target),
+                ),
+                None => {
+                    let first = range_count / 2;
+                    ranges.push((range_start.wrapping_add(first), range_count - first));
+                    ranges.push((range_start, first));
+                }
+            }
+        }
+        hits.sort_unstable_by_key(|&nonce| nonce.wrapping_sub(start_nonce));
+        Ok(hits)
+    }
+
+    /// One kernel launch; `None` when its candidates overflowed the buffer.
+    fn launch_range(
+        &mut self,
+        kernel: &CudaFunction,
+        params: &KernelParams,
+        start_nonce: u64,
+        count: u64,
+    ) -> Result<Option<Vec<u64>>> {
         self.stream
             .memset_zeros(&mut self.candidate_count)
             .map_err(cuda_driver_err)?;
@@ -149,9 +180,9 @@ impl CudaBlake2bEngine {
         };
         let capacity = CANDIDATE_CAPACITY as u32;
         unsafe {
-            let mut launch = self.stream.launch_builder(&kernel);
+            let mut launch = self.stream.launch_builder(kernel);
             launch
-                .arg(&params)
+                .arg(params)
                 .arg(&start_nonce)
                 .arg(&count)
                 .arg(&mut self.candidates)
@@ -163,27 +194,18 @@ impl CudaBlake2bEngine {
             .stream
             .clone_dtoh(&self.candidate_count)
             .map_err(cuda_driver_err)?[0] as usize;
-
-        let mut hits = Vec::new();
         if found > CANDIDATE_CAPACITY {
-            // A target this easy is a test or a misconfiguration; stay exact.
-            midstate.scan(start_nonce, count, target, |nonce| hits.push(nonce));
-            return Ok(hits);
+            return Ok(None);
         }
-        if found > 0 {
-            let candidates = self
-                .stream
-                .clone_dtoh(&self.candidates)
-                .map_err(cuda_driver_err)?;
-            hits.extend(
-                candidates[..found]
-                    .iter()
-                    .copied()
-                    .filter(|&nonce| midstate.target_bytes(nonce) <= *target),
-            );
-            hits.sort_unstable_by_key(|&nonce| nonce.wrapping_sub(start_nonce));
+        if found == 0 {
+            return Ok(Some(Vec::new()));
         }
-        Ok(hits)
+        let mut candidates = self
+            .stream
+            .clone_dtoh(&self.candidates)
+            .map_err(cuda_driver_err)?;
+        candidates.truncate(found);
+        Ok(Some(candidates))
     }
 
     fn kernel(&mut self, shape: KernelShape) -> Result<CudaFunction> {
@@ -365,6 +387,8 @@ mod tests {
                         t
                     },
                     [0u8; 32],
+                    // Every nonce hits: overflowing launches split on the GPU.
+                    [0xffu8; 32],
                 ] {
                     let mut expected = Vec::new();
                     midstate.scan(start, count, &target, |nonce| expected.push(nonce));
