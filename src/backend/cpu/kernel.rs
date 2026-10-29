@@ -2201,10 +2201,8 @@ impl MmapArena {
         page_mode: CpuPageMode,
     ) -> Result<Self, String> {
         #[cfg(target_os = "linux")]
-        // Hint THP and let the first hash fault 2 MiB pages, like a writing prefault
-        // but overlapped with hashing, so many-worker hosts start hashing in
-        // under a second instead of waiting on a prefault. MAP_POPULATE and a synchronous
-        // collapse remain the fallback when the hint fails.
+        // Hint THP and let the first hash fault the pages. MAP_POPULATE and a
+        // synchronous collapse remain the fallback when the hint fails.
         let prefault_advice = (page_mode == CpuPageMode::Auto
             && byte_len == POW_MEMORY_KB as usize * 1024)
             .then_some(libc::MADV_HUGEPAGE);

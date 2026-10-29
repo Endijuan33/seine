@@ -1,7 +1,6 @@
 // Faraday BLAKE2b-512 PoW scan: one final-block compression per nonce from a
 // host-computed midstate. The host fixes the nonce position and the number of
-// nonzero message words at compile time so the message stays in registers and
-// zero words drop out of the rounds.
+// nonzero message words at compile time.
 //
 // Required defines: SEINE_B2_NONCE_WORD, SEINE_B2_NONCE_SHIFT, SEINE_B2_MSG_WORDS,
 // SEINE_B2_PRE_COLUMNS (round-0 column steps already applied to params.v, as a
@@ -60,7 +59,7 @@ __device__ __forceinline__ u64 seine_bswap64(u64 x) {
         b = seine_rotr63(b ^ c);             \
     } while (0)
 
-// Message word i, or a literal zero the compiler folds away.
+// Message word i, or zero.
 #define SEINE_B2_M(i) ((i) < SEINE_B2_MSG_WORDS ? m[(i) < SEINE_B2_MSG_WORDS ? (i) : 0] : 0ULL)
 
 #define SEINE_B2_ROUND(s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15) \
@@ -137,7 +136,7 @@ extern "C" __global__ void blake2b_pow_scan_kernel(
         SEINE_B2_ROUND(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
         SEINE_B2_ROUND(14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3);
 
-        // Only output word 0 decides a candidate; the compiler drops the rest.
+        // Only output word 0 decides a candidate.
         const u64 out0 = params.h0 ^ v0 ^ v8;
         if (seine_bswap64(out0) <= params.target_limb0) {
             const u32 slot = atomicAdd(candidate_count, 1U);

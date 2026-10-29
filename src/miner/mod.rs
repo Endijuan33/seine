@@ -1368,9 +1368,7 @@ fn maybe_autotune_cpu_threads(
             }
         }
     } else {
-        // Coarse descending grid, then the local refinement below. Climbing one
-        // count at a time and stopping on dips gets stuck far below capacity, and
-        // streaming kernels peak near capacity.
+        // Coarse descending grid, then the local refinement below.
         let mut coarse: Vec<usize> = [
             max_threads,
             max_threads * 3 / 4,
@@ -2208,8 +2206,7 @@ fn maybe_warn_linux_hugepages_setup(cfg: &Config, mode: RuntimeMode) {
         return;
     }
     // Auto mode backs arenas with transparent huge pages when the kernel allows
-    // them; explicit HugeTLB adds nothing over THP with the streaming kernels, so
-    // only nag when THP is off.
+    // them; only hint when THP is off.
     if cfg.cpu_page_mode == CpuPageMode::Auto && linux_thp_enabled() {
         return;
     }

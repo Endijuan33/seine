@@ -14,9 +14,8 @@ const MAX_DRIFT: f64 = 0.05;
 
 const CACHE_SCHEMA: u32 = 3;
 
-// Plain AVX-512/AVX2 are much slower than the cohort streaming kernel, and each
-// A/B/A trial delays count tuning. Keep them as a safety-net comparison, but out of
-// the first half hour when mining started on a streaming kernel.
+// Plain AVX-512/AVX2 stay a safety-net comparison, deferred for the first half hour
+// when mining started on a streaming kernel.
 const GENERIC_TRIAL_DEFER_SECS: u64 = 1800;
 
 fn defer_generic_trial(
@@ -157,8 +156,7 @@ fn cohort_stream_kernel(
         {
             Some(CpuKernel::Avx512Stream)
         }
-        // Zen 4 adds a far L2 prefetch (Zen 5 does not benefit from it), with
-        // full-width compression on top.
+        // Zen 4: far prefetch with full-width compression.
         Some(0x19) if supported.contains(&CpuKernel::Avx512StreamL2) => {
             Some(CpuKernel::Avx512StreamL2)
         }
@@ -221,8 +219,7 @@ pub(crate) fn fixed_count_trials_wanted() -> bool {
 
 /// Side-cache slots for this host (see `SideCacheSchedule` in the kernel crate),
 /// or 0. On for Zen 5 servers, Zen 5 desktops below the full thread count, and
-/// Intel Sapphire/Emerald Rapids at the full count; off elsewhere (Zen 4 shares
-/// one L2 between two workers with the far-L2 kernel).
+/// Intel Sapphire/Emerald Rapids at the full count; off elsewhere.
 pub(crate) fn cohort_side_cache_blocks(
     workers: usize,
     physical_cores: Option<usize>,
@@ -233,7 +230,7 @@ pub(crate) fn cohort_side_cache_blocks(
     }
     let identity = crate::runtime_identity::cpu_identity();
     match identity.vendor.as_deref() {
-        // Zen 5 server-class: two workers per L2 are fine here, unlike Zen 4.
+        // Zen 5 server-class models (00h-1Fh).
         Some("AuthenticAMD")
             if identity.family == Some(0x1a)
                 && identity.model.is_some_and(|model| model < 0x20) =>
@@ -241,8 +238,7 @@ pub(crate) fn cohort_side_cache_blocks(
             let _ = physical_cores;
             512
         }
-        // Zen 5 desktop: only below the full thread count (memory-capped hosts,
-        // WSL2).
+        // Zen 5 desktop, below the full thread count.
         Some("AuthenticAMD") if identity.family == Some(0x1a) && workers < logical_cpus => 512,
         Some("GenuineIntel")
             if identity.family == Some(6)
@@ -256,9 +252,8 @@ pub(crate) fn cohort_side_cache_blocks(
 }
 
 /// Skipped-store permille for this host (see `set_skip_store_permille` in the
-/// kernel crate), or 0. Rebuilding late odd blocks trades DRAM traffic for extra
-/// compressions, which only pays where the streaming kernels are bandwidth-bound:
-/// Zen 4 desktops with every thread in use and Zen 5 desktops. Servers stay off.
+/// kernel crate), or 0. On for Zen 4 desktops at 16 or more workers and Zen 5
+/// desktops at 8 or more; off elsewhere.
 pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
     if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
         return 0;

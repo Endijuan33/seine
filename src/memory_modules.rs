@@ -1,6 +1,6 @@
 //! Installed memory modules from the SMBIOS type 17 table, for startup hints about
-//! desktop memory setups that cap a bandwidth-bound miner: one module (single
-//! channel) or RAM running below its rated or EXPO/XMP speed. Windows reads the
+//! desktop memory setups: one module (single channel) or RAM running below its
+//! rated or EXPO/XMP speed. Windows reads the
 //! table without privileges; Linux only as root (`/sys/firmware/dmi/tables/DMI`).
 
 const TYPE_MEMORY_DEVICE: u8 = 17;

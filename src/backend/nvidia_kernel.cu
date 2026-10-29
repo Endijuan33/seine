@@ -467,8 +467,7 @@ __device__ __forceinline__ void compress_block_coop(
     unsigned long long *__restrict__ scratch_q,
     unsigned int tid
 ) {
-    // Issue all global loads into registers first to maximize
-    // memory-level parallelism (multiple loads in flight at once).
+    // Issue all global loads into registers first.
     const unsigned long long r0 = rhs[tid]       ^ lhs[tid];
     const unsigned long long r1 = rhs[tid + 32U]  ^ lhs[tid + 32U];
     const unsigned long long r2 = rhs[tid + 64U]  ^ lhs[tid + 64U];
@@ -481,8 +480,7 @@ __device__ __forceinline__ void compress_block_coop(
 
     // G-rounds with warp-shuffle fusion.
     // Fuse row-columns → row-diagonals and col-columns → col-diagonals
-    // by passing values between lanes via __shfl_sync instead of shared
-    // memory round-trips. Saves 2 coop_sync + 16 smem accesses.
+    // by passing values between lanes via __shfl_sync.
     const unsigned int state = tid >> 2;
     const unsigned int lane = tid & 3U;
     const unsigned int shfl_base = state * 4U; // absolute lane base for shuffles
@@ -541,7 +539,7 @@ __device__ __forceinline__ void compress_block_coop(
     coop_sync();
 
     // Unrolled final store: read all shared-memory values into registers
-    // first, then issue all global stores to maximize MLP.
+    // first, then issue all global stores.
     {
         const unsigned long long m0 = scratch_q[tid]       ^ scratch_r[tid];
         const unsigned long long m1 = scratch_q[tid + 32U] ^ scratch_r[tid + 32U];
@@ -800,11 +798,7 @@ __device__ __forceinline__ void argon2id_fill_kernel_impl(
                     const unsigned long long lhs_offset =
                         static_cast<unsigned long long>(ref_index) * 128ULL;
 
-                    // Codegen hint: the prefetch.global.L2 instruction is dropped
-                    // by PTXAS on sm_120+ (Blackwell), but the address-computation
-                    // arithmetic changes NVRTC's instruction scheduling for the
-                    // surrounding compression loop on top of the unrolled-load
-                    // optimization in compress_block_coop.
+                    // Prefetch hint for the next data-independent block.
                     if (data_independent && block + 1U < segment_length) {
                         const unsigned int next_addr_idx = (block + 1U) & 127U;
                         // Skip when the address_block boundary would require an

@@ -732,18 +732,14 @@ struct Cli {
     #[arg(long, action = ArgAction::SetTrue, conflicts_with = "auto_update")]
     no_auto_update: bool,
 
-    /// Experimental: side-buffer slots (1 KiB each) that serve scheduled
-    /// data-independent references in the AVX-512 streaming kernels; 0 disables,
-    /// unset uses the default for this CPU (512 on Linux Zen 5 EPYC
-    /// with one worker per core, otherwise off).
+    /// Experimental: side-buffer slots (1 KiB each) for the AVX-512 streaming
+    /// kernels; 0 disables, unset uses this CPU's default.
     #[arg(long, hide = true)]
     cpu_side_cache_blocks: Option<usize>,
 
-    /// Experimental: from this permille of the arena on (500-1000), odd blocks
-    /// skip their memory store and are rebuilt when referenced (AVX-512
-    /// streaming kernels); 0 disables, unset uses the default for this
-    /// CPU (600 on Linux Zen 4 desktops at 16 or more workers and Zen 5
-    /// desktops at 8 or more, otherwise off).
+    /// Experimental: arena fraction (permille, 500-1000) from which odd blocks
+    /// are not stored (AVX-512 streaming kernels); 0 disables, unset uses this
+    /// CPU's default.
     #[arg(long, hide = true)]
     cpu_skip_store_permille: Option<u16>,
 
@@ -1603,9 +1599,7 @@ fn resolve_backend_selection(
         return (requested_backends.to_vec(), None);
     }
 
-    // Metal is not auto-enabled: on Apple Silicon unified memory, Argon2id is
-    // memory-latency-bound and CPU lanes are much faster per lane than Metal.
-    // Running both degrades total throughput.  Users can opt in via --backend cpu,metal.
+    // Metal is not auto-enabled; users can opt in via --backend cpu,metal.
     let mut selected = vec![BackendKind::Cpu];
     if nvidia_available || !nvidia_devices.is_empty() {
         selected.push(BackendKind::Nvidia);

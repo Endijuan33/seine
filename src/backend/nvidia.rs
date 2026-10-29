@@ -228,9 +228,7 @@ const NVIDIA_AUTOTUNE_REGCAP_CANDIDATES_AMPERE_PLUS: &[u32] =
     &[240, 224, 208, 192, 176, 160, 144, 128];
 const NVIDIA_AUTOTUNE_REGCAP_CANDIDATES_LEGACY: &[u32] =
     &[224, 208, 192, 176, 160, 144, 128, 112, 96];
-// Repeated RTX 5090 sweeps put every competitive profile on this frontier.
-// Keep the exhaustive Ampere+ set for other Blackwell devices until they have
-// equivalent hardware evidence; this shortlist is intentionally device-scoped.
+// RTX 5090 shortlist; other Blackwell devices keep the full Ampere+ set.
 const NVIDIA_AUTOTUNE_REGCAP_CANDIDATES_RTX_5090: &[u32] = &[240, 224, 208];
 // Retained for reference; the staged autotune no longer iterates this axis.
 const _NVIDIA_AUTOTUNE_LOOP_UNROLL_CANDIDATES: &[bool] = &[false];

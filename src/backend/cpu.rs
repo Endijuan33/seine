@@ -1086,10 +1086,9 @@ fn resolve_affinity_core_ids(mode: CpuAffinityMode) -> Option<Vec<core_affinity:
     if mode == CpuAffinityMode::Os {
         return Some(core_ids);
     }
-    // Native Windows exposes reliable processor-core masks and benefits materially from
-    // spreading memory-hard workers across physical cores before SMT siblings.
-    // Linux spreads across NUMA nodes and L3 groups with complete, usable topology;
-    // a single node/cache or incomplete topology retains OS order.
+    // Native Windows places workers on physical cores before SMT siblings. Linux
+    // spreads across NUMA nodes and L3 groups when topology is complete; a single
+    // node/cache or incomplete topology retains OS order.
     #[cfg(target_os = "linux")]
     let core_ids = {
         let available = core_ids.iter().map(|cpu| cpu.id).collect();
@@ -1240,9 +1239,8 @@ fn order_core_ids_by_groups(
     ordered
 }
 
-/// Alternates physical cores across L3 domains (Zen CCDs), as Linux placement does:
-/// each CCD has its own link to memory, so packing low worker counts onto one CCD
-/// caps them at that link. Cores keep their order within a domain. Missing or
+/// Alternates physical cores across L3 domains (Zen CCDs), as Linux placement does.
+/// Cores keep their order within a domain. Missing or
 /// inconsistent cache data (a core outside exactly one domain) keeps core order.
 #[cfg(any(target_os = "windows", test))]
 fn interleave_cores_by_cache(

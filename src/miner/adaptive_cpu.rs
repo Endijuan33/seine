@@ -209,9 +209,8 @@ fn initial_threads(
 }
 
 // Cold start for CPUs whose cohort mines on a streaming kernel. Zen 4/5
-// (AVX-512 streaming) start at every allowed logical CPU that fits in RAM: SMT
-// hides memory latency on many-channel servers. Zen 2/3 (AVX2 streaming) plateau
-// by the physical core count, so they start there. Count trials still decide
+// (AVX-512 streaming) start at every allowed logical CPU that fits in RAM; Zen 2/3
+// (AVX2 streaming) start at the physical core count. Count trials still decide
 // afterwards.
 fn cohort_cold_start(cfg: &Config, host: &CpuAutotuneHostFingerprint, max: usize) -> Option<usize> {
     if cfg!(test) || cfg.cpu_profile == CpuPerformanceProfile::Efficiency {

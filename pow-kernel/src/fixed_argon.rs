@@ -166,18 +166,12 @@ pub struct FixedArgon2id {
 
 const NO_SLOT: u16 = u16::MAX;
 
-/// Static schedule for a small cache-resident side buffer in the streaming ring
-/// kernels. The first half of a fill uses data-independent references, which are
-/// known in advance and identical for every hash, and Argon2's index mapping skews
-/// them toward recent blocks: the share of references within `D` blocks of the
-/// current one is about `sqrt(D / area)`. Non-temporal arena stores leave those
-/// blocks uncached, so each costs a DRAM read. The schedule keeps a block in a
-/// side slot only when a reference to it falls within `max_distance`, and frees
-/// the slot after that block's last such reader, so a few hundred 1 KiB slots stay
-/// L2-resident and are overwritten in place rather than evicted dirty (the large
-/// rings rejected on 2026-10-27 kept every recent block and paid those evictions).
-/// Slots in excess of demand simply stay unused; blocks that find no free slot are
-/// read from the arena as before. Output is identical either way.
+/// Static schedule for a small side buffer in the streaming ring kernels. The
+/// first half of a fill uses data-independent references, known in advance and
+/// identical for every hash. The schedule keeps a block in a side slot only when a
+/// reference to it falls within `max_distance`, and frees the slot after that
+/// block's last such reader. Blocks that find no free slot are read from the
+/// arena. Output is identical either way.
 #[derive(Debug, Clone)]
 struct SideCacheSchedule {
     slots: usize,
@@ -323,9 +317,8 @@ impl FixedArgon2id {
 
     /// AVX-512 streaming ring kernels: from `permille` of the
     /// way through the arena, odd blocks are not written to memory and are
-    /// rebuilt from their stored predecessor whenever referenced. Late blocks
-    /// are referenced rarely, so this trades a little compute for less DRAM
-    /// traffic. 0 disables; values below 500 are raised to
+    /// rebuilt from their stored predecessor whenever referenced. 0 disables;
+    /// values below 500 are raised to
     /// 500 so skipped blocks always use data-dependent addressing.
     pub fn set_skip_store_permille(&mut self, permille: u16) {
         self.skip_from = match permille {
@@ -451,12 +444,10 @@ impl FixedArgon2id {
 
     // Fixed one-pass, one-lane Argon2id: retain recent blocks in a cached ring.
     // Periodic mode issues no fence before arena loads (same-core loads observe
-    // this core's NT stores) and an SFENCE every 32 blocks to bound
-    // write-combining occupancy. R8/D2 and R64/D3–6 use the
-    // reference-demand policy: fence before reading an uncommitted arena block.
-    // Recent references stay in the ring; finalization always fences.
-    // FAR > 0 also prefetches data-independent references into L2 FAR blocks
-    // ahead (used on Zen 4 only).
+    // this core's NT stores) and an SFENCE every 32 blocks. R8/D2 and R64/D3–6
+    // fence before reading an uncommitted arena block. Recent references stay in
+    // the ring; finalization always fences. FAR > 0 also prefetches
+    // data-independent references FAR blocks ahead.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,avx512f,avx512vl")]
     unsafe fn fill_streaming_ring<
@@ -575,8 +566,7 @@ impl FixedArgon2id {
                     if let Some(schedule) = side {
                         let slot = schedule.write_slot[cur];
                         if slot != NO_SLOT {
-                            // Ordinary stores: the slot stays cache-resident and is
-                            // overwritten in place by its next occupant.
+                            // Copy the block into its side slot.
                             std::ptr::copy_nonoverlapping(
                                 (*dst).0.as_ptr(),
                                 (*side_ptr.add(usize::from(slot))).0.as_mut_ptr(),
@@ -615,8 +605,8 @@ impl FixedArgon2id {
                         avx512_256::compress_into(prev, &*reference_ptr, &mut *dst);
                     }
                 }
-                // Contiguous stores fill each complete 64-byte cache line. The
-                // arena is never used as a pre-round backup in this candidate.
+                // Store the block to the arena. The arena is never used as a
+                // pre-round backup here.
                 if !store_skipped(cur, skip_from) || cur == last {
                     let src = (*dst).0.as_ptr();
                     let output = (*arena.add(cur)).0.as_mut_ptr();
@@ -634,12 +624,11 @@ impl FixedArgon2id {
         true
     }
 
-    // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512 (Zen 2/3):
+    // AVX2 counterpart of `fill_streaming_ring` for CPUs without AVX-512:
     // a 2-block cached ring, non-temporal arena stores and a three-block
     // whole-block prefetch while addresses are data independent. Same-core loads
     // observe this core's earlier NT stores to the same address, so arena reads
-    // need no fence; a periodic SFENCE only bounds write-combining buffer
-    // occupancy.
+    // need no fence.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn fill_streaming_ring_avx2<const RING: usize, const DEPTH: usize>(
@@ -712,7 +701,6 @@ impl FixedArgon2id {
                     _mm_stream_si128(output.add(vector * 2).cast::<__m128i>(), value);
                 }
                 if cur & 31 == 31 {
-                    // Bound write-combining buffer occupancy.
                     _mm_sfence();
                 }
             }
@@ -721,9 +709,8 @@ impl FixedArgon2id {
         true
     }
 
-    // Keep the x86 loop out of the dispatch function. The ARM target-feature
-    // wrapper needs an inline implementation, but inlining that loop into x86
-    // dispatch inflates its stack frame and changes hot-loop register allocation.
+    // Keep the x86 loop out of the dispatch function; the ARM target-feature
+    // wrapper needs an inline implementation.
     #[cfg_attr(target_arch = "x86_64", inline(never))]
     fn fill_blocks<
         const ISA: u8,
@@ -748,8 +735,7 @@ impl FixedArgon2id {
         stop: &dyn Fn() -> bool,
     ) -> bool {
         // Feature detection happens in with_kernel/set_kernel, once per selection.
-        // Inline the loop and its NEON helpers into this feature-enabled boundary
-        // so XAR is emitted directly, without a function call for every rotation.
+        // Inline the loop and its NEON helpers into this feature-enabled boundary.
         self.fill_blocks_impl::<ISA_NEON_SHA3, false, true>(memory_blocks, stop)
     }
 
@@ -815,10 +801,8 @@ impl FixedArgon2id {
                     debug_assert!(ref_index < self.block_count);
 
                     if block + 1 < self.segment_length {
-                        // Mid-compress prefetch: fire the prefetch for the NEXT
-                        // ref block INSIDE the compress function, after column
-                        // round 0 writes dst[0] to its final value. Remaining
-                        // column rounds overlap with the DRAM fetch.
+                        // Prefetch the next reference block inside the compress
+                        // function, once column round 0 has written dst[0].
                         #[cfg(target_arch = "aarch64")]
                         if USE_AARCH64_MID_PREFETCH {
                             let next_ref_area = slice_prefix + block + 1;
@@ -988,13 +972,9 @@ fn fill_block_from_refs<const ISA: u8>(
     }
 }
 
-/// Like [`fill_block_from_refs`] but uses the mid-compress prefetch variant.
-/// After column round 0 writes `dst[0]`, it computes the next iteration's
-/// ref_index and prefetches the target block, overlapping remaining column-round
-/// compute with the DRAM fetch.
-///
-/// On x86_64 AVX2 this gives ~35-40 ns of overlap (7 of 8 column rounds).
-/// On AArch64 NEON this gives ~150 ns of overlap.
+/// Like [`fill_block_from_refs`] but uses the mid-compress prefetch variant:
+/// after column round 0 writes `dst[0]`, it computes the next iteration's
+/// ref_index and prefetches that block.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
@@ -1083,10 +1063,10 @@ fn fill_block_from_refs_mid_prefetch<const ISA: u8>(
     }
 }
 
-/// Distance, in blocks, of the streaming kernels' data-independent L2 prefetch.
+/// Distance, in blocks, of the streaming kernels' far data-independent prefetch.
 const STREAM_FAR_PREFETCH: usize = 14;
 
-/// Prefetch a whole PowBlock into L2 (`prefetcht1`), ahead of the near L1 prefetch.
+/// Prefetch a whole PowBlock with `prefetcht1`.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 fn prefetch_pow_block_l2(block: &PowBlock) {
@@ -1099,8 +1079,7 @@ fn prefetch_pow_block_l2(block: &PowBlock) {
     }
 }
 
-/// Prefetch a PowBlock into cache.  Covers the full 1 KiB block so the
-/// hardware prefetcher doesn't have to ramp up from scratch.
+/// Prefetch a whole PowBlock.
 ///
 /// - x86_64: all 16 cache lines at 64-byte stride (full 1024-byte block).
 /// - AArch64 baseline: retain eight hints at the original 128-byte stride.
@@ -1135,9 +1114,8 @@ fn prefetch_pow_block<const ISA: u8>(block: &PowBlock) {
         unsafe {
             let ptr = block as *const PowBlock as *const u8;
             if ISA == ISA_NEON_SHA3 {
-                // Keep the historical Apple-oriented stride in the baseline.
-                // The candidate covers the 64-byte lines on tested Gravitons;
-                // automatic A/B selection can retain baseline on other CPUs.
+                // Baseline keeps the 128-byte stride; this path covers every
+                // 64-byte line.
                 std::arch::asm!(
                     "prfm pldl1keep, [{ptr}]",
                     "prfm pldl1keep, [{ptr}, #64]",
@@ -1406,9 +1384,8 @@ unsafe fn avx512_blamka(
 /// Full BLAMKA round on two independent 4-element groups packed into __m512i
 /// registers (one group per 256-bit half). Performs column step + diagonal step.
 ///
-/// Diagonal lane permutation uses `_mm512_permutexvar_epi64` (single VPERMQ),
-/// and rotations use `_mm512_ror_epi64` (single VPRORQ), both strictly better
-/// than the multi-instruction AVX2 equivalents.
+/// Diagonal lane permutation uses `_mm512_permutexvar_epi64` and rotations use
+/// `_mm512_ror_epi64`.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn avx512_round(
@@ -1495,7 +1472,7 @@ unsafe fn avx2_round(
     *d = _mm256_permute4x64_epi64::<0x39>(dd);
 }
 
-/// Interleave two independent BLAMKA rounds so their multiply/add chains can overlap.
+/// Two independent BLAMKA rounds, interleaved.
 /// Both groups remain in AVX2 registers; the caller selects the AVX2 kernel first.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
@@ -1822,11 +1799,9 @@ unsafe fn compress_avx2_into(rhs: &PowBlock, lhs: &PowBlock, dst: &mut PowBlock)
 }
 
 /// Like [`compress_avx2_into`] but performs a mid-compress prefetch for the
-/// data-dependent phase.  After column round 0 finalises `dst[0]`, this reads
+/// data-dependent phase: after column round 0 finalises `dst[0]`, this reads
 /// that value, computes the next iteration's ref_index, and prefetches the
-/// target block.  The remaining 7 column rounds (~35-40 ns of compute) overlap
-/// with the DRAM fetch, instead of the current zero-overlap post-compress
-/// prefetch.
+/// target block.
 ///
 /// # Safety
 /// * Requires AVX2.
@@ -1941,9 +1916,8 @@ unsafe fn compress_avx2_into_mid_prefetch(
     }
 
     // --- Mid-compress prefetch ---
-    // dst[0] now has its final value.  Compute the NEXT iteration's ref_index
-    // and prefetch it.  The remaining 7 column rounds (~35-40 ns of compute)
-    // overlap with the DRAM fetch.
+    // dst[0] now has its final value: compute the next iteration's ref_index
+    // and prefetch it.
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
@@ -2080,9 +2054,9 @@ unsafe fn compress_avx512(rhs: &PowBlock, lhs: &PowBlock) -> PowBlock {
 /// using 512-bit registers, each holding two independent 4-element groups.
 ///
 /// Column gather/scatter uses 256-bit contiguous loads because each column pair
-/// (base_i, base_i+2) is adjacent in memory.  A single `vshufi64x2` converts
+/// (base_i, base_i+2) is adjacent in memory. A single `vshufi64x2` converts
 /// between the contiguous memory layout and the round's per-column register
-/// layout, halving gather/scatter micro-ops vs the 4×128-bit insert path.
+/// layout.
 ///
 /// # Safety
 /// * Requires AVX-512F + AVX-512VL.
@@ -2232,10 +2206,9 @@ unsafe fn compress_avx512_into(rhs: &PowBlock, lhs: &PowBlock, dst: &mut PowBloc
 }
 
 /// Like [`compress_avx512_into`] but performs a mid-compress prefetch for the
-/// data-dependent phase.  After column pair 0 finalises `dst[0]`, this reads
+/// data-dependent phase: after column pair 0 finalises `dst[0]`, this reads
 /// that value, computes the next iteration's ref_index, and prefetches the
-/// target block.  The remaining 3 column pairs (~6 column rounds of compute)
-/// overlap with the DRAM fetch.
+/// target block.
 ///
 /// Uses the same 256-bit contiguous gather/scatter as `compress_avx512_into`.
 ///
@@ -2385,9 +2358,8 @@ unsafe fn compress_avx512_into_mid_prefetch(
     }
 
     // --- Mid-compress prefetch ---
-    // dst[0] now has its final value.  Compute the NEXT iteration's ref_index
-    // and prefetch it.  The remaining 3 column pairs (~6 column rounds of compute)
-    // overlap with the DRAM fetch.
+    // dst[0] now has its final value: compute the next iteration's ref_index
+    // and prefetch it.
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);
@@ -2426,10 +2398,7 @@ unsafe fn neon_blamka(
     b: std::arch::aarch64::uint64x2_t,
 ) -> std::arch::aarch64::uint64x2_t {
     // a + b + 2*(lo32(a)*lo32(b))  =  (a+b) + lo(a)*lo(b) + lo(a)*lo(b)
-    // Use inline asm to force UMLAL.2D (widening multiply-accumulate).
-    // LLVM decomposes vmlal_u32 intrinsics into UMULL+ADD, missing the fused
-    // instruction.  The double-UMLAL has fast accumulator forwarding on Apple
-    // Silicon, making it faster than the theoretically shorter UMULL+SHL+ADD.
+    // Inline asm emits UMLAL.2D (widening multiply-accumulate) twice.
     let out: std::arch::aarch64::uint64x2_t;
     std::arch::asm!(
         "xtn  {lo_a}.2s, {a:v}.2d",
@@ -2484,10 +2453,7 @@ unsafe fn neon_round<const SHA3: bool>(
 ) {
     use std::arch::aarch64::vextq_u64;
 
-    // Column step: explicitly interleave lo and hi half-rounds so the OOO
-    // core sees both independent chains early in the decode window, rather
-    // than serializing one chain then the other (as the compiler tends to do
-    // when two sequential neon_half_round calls are inlined).
+    // Column step: lo and hi half-rounds, interleaved.
     //
     // G step 1: a = a + b + 2*lo32(a)*lo32(b);  d = rotr32(d ^ a)
     *a_lo = neon_blamka(*a_lo, *b_lo);
@@ -2549,11 +2515,7 @@ unsafe fn neon_round<const SHA3: bool>(
     *d_hi = vextq_u64::<1>(dd_hi, dd_lo);
 }
 
-/// Two-column BLAMKA round: processes two independent columns simultaneously.
-///
-/// By interleaving instructions from both columns, the OOO core can fill
-/// multiply-port idle slots that occur during each column's serial BLAMKA
-/// dependency chain.
+/// Two-column BLAMKA round: two independent columns, instructions interleaved.
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 #[allow(clippy::too_many_arguments)] // Two independent rounds expose register-level ILP.
@@ -2720,8 +2682,7 @@ unsafe fn compress_neon_into<const SHA3: bool>(rhs: &PowBlock, lhs: &PowBlock, d
     let q_ptr = q.as_mut_ptr() as *mut u64;
 
     // Fused Phase 1+2: XOR rhs^lhs directly into registers, store backup to
-    // dst, row-round in registers, store result to q.  Process rows in pairs
-    // to expose two independent BLAMKA chains to the OOO scheduler.
+    // dst, row-round in registers, store result to q. Rows are processed in pairs.
     for pair in 0..4 {
         let base1 = pair * 32;
         let base2 = base1 + 16;
@@ -2835,8 +2796,7 @@ unsafe fn compress_neon_into<const SHA3: bool>(rhs: &PowBlock, lhs: &PowBlock, d
     }
 
     // Fused Phase 3+4: Column-round q, then XOR with dst backup and store
-    // directly to dst.  Process columns in pairs to give the OOO core two
-    // independent BLAMKA dependency chains to overlap on multiply ports.
+    // directly to dst. Columns are processed in pairs.
     for pair in 0..4 {
         let base1 = pair * 4;
         let base2 = pair * 4 + 2;
@@ -2938,10 +2898,8 @@ unsafe fn compress_neon_into<const SHA3: bool>(rhs: &PowBlock, lhs: &PowBlock, d
     }
 }
 
-/// Like [`compress_neon_into`] but issues a prefetch for the NEXT iteration's
-/// ref block after column round 0 completes.  At that point `dst[0]` has its
-/// final value, giving ~150 ns of DRAM lead time instead of the ~6 ns that
-/// the post-compress prefetch provides.
+/// Like [`compress_neon_into`] but issues a prefetch for the next iteration's
+/// ref block after column round 0 completes, when `dst[0]` has its final value.
 ///
 /// Used for data-dependent slices (2, 3) where the next ref_index depends on
 /// the current block's output.
@@ -3106,9 +3064,8 @@ unsafe fn compress_neon_into_mid_prefetch<const SHA3: bool>(
     }
 
     // --- Mid-compress prefetch ---
-    // dst[0] now has its final value.  Compute the NEXT iteration's ref_index
-    // and prefetch it.  The remaining 7 column iterations (~150 ns of compute)
-    // overlap with the DRAM fetch.
+    // dst[0] now has its final value: compute the next iteration's ref_index
+    // and prefetch it.
     {
         let rand = *dst_ptr;
         let next_ref = reference_index(next_ref_area_size, rand);

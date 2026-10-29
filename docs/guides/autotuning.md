@@ -25,35 +25,23 @@ repeatedly committing higher counts that are already known to be unnecessary.
 
 ## CPU kernels
 
-On CPUs supporting both AVX2 and AVX-512, automatic mining tuning also compares
-those paths at the current worker count. On AArch64 with runtime SHA3 support,
-it compares baseline NEON with `neon-sha3`, which combines XOR/rotate instructions
-and 64-byte prefetch coverage. Startup keeps the existing portable NEON path.
-Two baseline/candidate/baseline cycles
+Seine ships several kernels for each instruction set (AVX2, AVX-512, Arm NEON).
+Where more than one runs on your CPU, mining tuning compares them on real work at
+the current worker count. Two baseline/candidate/baseline cycles
 must confirm a gain above 2% plus the hash-count uncertainty before changing the
 path. Kernel and thread-count trials run in turn; memory-pressure handling remains
 active throughout. Kernel windows last 30–60 seconds and require 32 hashes, with
 a ten-minute limit for each trial. Interrupted or noisy trials retain the previous
 path. Workers switch between complete hashes without reallocating their arenas.
 
-On validated Zen 5 EPYC processors (AMD family 26, model 2), tuning also compares
-`avx512-256-stream`: a 256-bit AVX-512 kernel that keeps recent blocks cached and
-streams outputs into the normal 2 GiB arena. It requires AVX2 and AVX-512F/VL.
-Every eligible path is considered before caching the result; slower paths are
-rejected using the same repeated comparisons. No worker-count cutoff forces
-this kernel. A 24-worker EPYC 9R45 test improved 27.78% over AVX2, while the
-one-worker screen regressed 3.53%, so selection remains specific to the measured
-worker count and memory backing. Other CPU families retain their existing
-automatic candidates.
 
 ## Cached choices
 
 Confirmed kernel choices are cached alongside the thread cache in
 `seine.cpu-autotune.json.kernels.json`, keyed by worker counts, observed page
 backing, CPU/build identity, eligible kernels, placement and tuning settings. Known contexts reuse
-that choice; stable contexts are reconsidered after 30 minutes. Experimental
-`avx512-256` remains benchmark-only. AVX2-only CPUs and ARM hosts without SHA3
-keep their existing paths. No extra configuration is needed: `--disable-cpu-autotune-threads` disables
+that choice; stable contexts are reconsidered after 30 minutes. No extra
+configuration is needed: `--disable-cpu-autotune-threads` disables
 both automatic count and kernel tuning, and explicit fixed thread counts retain
 the default ISA unless autotuning is explicitly enabled.
 
