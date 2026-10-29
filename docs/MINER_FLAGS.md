@@ -38,7 +38,7 @@ See [collection fields and self-hosting](../telemetry/README.md).
 
 | Flag | Values / Default | What it does |
 |---|---|---|
-| `--backend` | `cpu`, `nvidia`, `metal`, `amd`; repeatable / comma-separated; default auto | Selects mining backends. Auto mode selects CPU plus all detected NVIDIA GPUs (one instance per device). `amd` (Linux release builds and `--features amd` source builds) is never auto-selected; see [AMD GPUs](guides/amd.md). |
+| `--backend` | `cpu`, `nvidia`, `metal`, `amd`; repeatable / comma-separated; default auto | Selects mining backends. Auto mode selects CPU plus all detected NVIDIA GPUs and discrete AMD GPUs (one instance per device). `amd` needs a Linux release build or a `--features amd` source build; integrated AMD GPUs are used only when `amd` is listed. See [AMD GPUs](guides/amd.md). |
 | `--nvidia-devices` | comma-separated GPU indices; default all detected devices | Creates one NVIDIA backend instance per listed device index; listing indices subsets/pins devices and disables auto-expansion. Requires NVIDIA backend selected. |
 | `--amd-devices` | comma-separated GPU indices; default all detected wave32 devices | Creates one AMD backend instance per listed device index; listing indices subsets/pins devices and disables auto-expansion. Requires AMD backend selected. |
 | `--threads` | integer `>=1`; alias: `--cpu-threads` | CPU threads per CPU backend instance. If omitted, auto-sized by CPU/RAM/profile. |

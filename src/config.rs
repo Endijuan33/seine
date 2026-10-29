@@ -20,7 +20,7 @@ pub enum BackendKind {
     Nvidia,
     Metal,
     /// AMD GPU backend (HIP/ROCm). Requires a build with `--features amd`;
-    /// never auto-selected, pass `--backend amd` explicitly.
+    /// discrete GPUs are auto-selected, integrated ones need `--backend amd`.
     Amd,
 }
 
@@ -1140,17 +1140,30 @@ impl Config {
             .as_ref()
             .map(|devices| !devices.is_empty())
             .unwrap_or(false);
-        let (backends, nvidia_hint) =
-            resolve_backend_selection(&cli.backends, &cli.nvidia_devices, nvidia_available);
         let mut startup_notices = Vec::new();
-        // HIP is only dlopen'd when an AMD instance without explicit devices is
-        // actually requested; explicit --amd-devices keeps startup free of
+        // HIP is dlopen'd when AMD is requested without explicit devices, or
+        // when no backend is requested so discrete AMD GPUs can be enabled
+        // automatically; explicit --amd-devices keeps startup free of
         // config-time ROCm probing.
-        let amd_detection = if backends.contains(&BackendKind::Amd) && cli.amd_devices.is_empty() {
-            Some(detect_amd_devices(&mut startup_notices))
-        } else {
-            None
-        };
+        let amd_requested = cli.backends.contains(&BackendKind::Amd);
+        let amd_detection =
+            if (amd_requested || cli.backends.is_empty()) && cli.amd_devices.is_empty() {
+                Some(detect_amd_devices(&mut startup_notices, amd_requested))
+            } else {
+                None
+            };
+        let amd_available = amd_detection
+            .as_ref()
+            .and_then(|detection| detection.as_ref().ok())
+            .map(|devices| !devices.is_empty())
+            .unwrap_or(false);
+        let (backends, nvidia_hint) = resolve_backend_selection(
+            &cli.backends,
+            &cli.nvidia_devices,
+            nvidia_available,
+            &cli.amd_devices,
+            amd_available,
+        );
         let auto_nvidia_devices: Vec<u32> =
             if cli.nvidia_devices.is_empty() && backends.contains(&BackendKind::Nvidia) {
                 nvidia_detection
@@ -1180,7 +1193,7 @@ impl Config {
                 "--amd-devices",
                 detection,
                 &cli.amd_devices,
-                true,
+                backends.contains(&BackendKind::Amd),
             ));
         }
         let gpu_memory_reservation = if backends.contains(&BackendKind::Metal) {
@@ -1611,19 +1624,26 @@ fn resolve_backend_selection(
     requested_backends: &[BackendKind],
     nvidia_devices: &[u32],
     nvidia_available: bool,
+    amd_devices: &[u32],
+    amd_available: bool,
 ) -> (Vec<BackendKind>, Option<&'static str>) {
     if !requested_backends.is_empty() {
         return (requested_backends.to_vec(), None);
     }
 
-    // Metal is not auto-enabled; users can opt in via --backend cpu,metal.
+    // Metal and integrated AMD GPUs are not auto-enabled; users can opt in via
+    // --backend cpu,metal or --backend cpu,amd.
     let mut selected = vec![BackendKind::Cpu];
     if nvidia_available || !nvidia_devices.is_empty() {
         selected.push(BackendKind::Nvidia);
     }
+    if amd_available || !amd_devices.is_empty() {
+        selected.push(BackendKind::Amd);
+    }
 
     #[cfg(all(feature = "nvidia", not(target_os = "macos")))]
-    let hint = if !selected.contains(&BackendKind::Nvidia) {
+    let hint = if !selected.contains(&BackendKind::Nvidia) && !selected.contains(&BackendKind::Amd)
+    {
         Some(
             "this build supports NVIDIA GPU mining but no GPU was detected; \
              install NVIDIA drivers + CUDA Toolkit to enable: \
@@ -1668,9 +1688,14 @@ pub(crate) fn detect_nvidia_devices() -> Result<Vec<DetectedGpu>> {
 /// Enumerates HIP devices, keeping only wave32 GPUs the AMD backend can run on.
 /// Skipped devices are reported through `notices` instead of spawning instances
 /// that are guaranteed to fail wavefront validation at start.
+/// Integrated GPUs are kept only when `include_integrated` is set.
 #[cfg(all(feature = "amd", unix))]
-pub(crate) fn detect_amd_devices(notices: &mut Vec<String>) -> Result<Vec<DetectedGpu>> {
-    let devices = crate::backend::amd::query_amd_devices()?;
+pub(crate) fn detect_amd_devices(
+    notices: &mut Vec<String>,
+    include_integrated: bool,
+) -> Result<Vec<DetectedGpu>> {
+    let mut devices = crate::backend::amd::query_amd_devices()?;
+    devices.retain(|device| include_integrated || !device.integrated);
     for device in &devices {
         if !crate::backend::amd::supports_wavefront_size(device.wavefront_size) {
             continue;
@@ -1689,7 +1714,10 @@ pub(crate) fn detect_amd_devices(notices: &mut Vec<String>) -> Result<Vec<Detect
 }
 
 #[cfg(not(all(feature = "amd", unix)))]
-pub(crate) fn detect_amd_devices(_notices: &mut Vec<String>) -> Result<Vec<DetectedGpu>> {
+pub(crate) fn detect_amd_devices(
+    _notices: &mut Vec<String>,
+    _include_integrated: bool,
+) -> Result<Vec<DetectedGpu>> {
     bail!("AMD support is not compiled into this build")
 }
 
@@ -4896,23 +4924,52 @@ HugePages_Rsvd:          0
 
     #[test]
     fn resolve_backend_selection_uses_requested_backends_verbatim() {
-        let (selected, hint) =
-            resolve_backend_selection(&[BackendKind::Nvidia, BackendKind::Cpu], &[], false);
+        let (selected, hint) = resolve_backend_selection(
+            &[BackendKind::Nvidia, BackendKind::Cpu],
+            &[],
+            false,
+            &[],
+            false,
+        );
         assert_eq!(selected, vec![BackendKind::Nvidia, BackendKind::Cpu]);
         assert!(hint.is_none());
     }
 
     #[test]
     fn resolve_backend_selection_defaults_to_cpu_only_when_nvidia_unavailable() {
-        let (selected, _hint) = resolve_backend_selection(&[], &[], false);
+        let (selected, _hint) = resolve_backend_selection(&[], &[], false, &[], false);
         assert_eq!(selected, vec![BackendKind::Cpu]);
     }
 
     #[test]
     fn resolve_backend_selection_defaults_to_cpu_and_nvidia_when_available() {
-        let (selected, hint) = resolve_backend_selection(&[], &[], true);
+        let (selected, hint) = resolve_backend_selection(&[], &[], true, &[], false);
         assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Nvidia]);
         assert!(hint.is_none());
+    }
+
+    #[test]
+    fn resolve_backend_selection_adds_amd_when_available() {
+        let (selected, hint) = resolve_backend_selection(&[], &[], false, &[], true);
+        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Amd]);
+        assert!(hint.is_none());
+        let (selected, _) = resolve_backend_selection(&[], &[], true, &[], true);
+        assert_eq!(
+            selected,
+            vec![BackendKind::Cpu, BackendKind::Nvidia, BackendKind::Amd]
+        );
+    }
+
+    #[test]
+    fn resolve_backend_selection_enables_amd_when_devices_are_explicit() {
+        let (selected, _) = resolve_backend_selection(&[], &[], false, &[0], false);
+        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Amd]);
+    }
+
+    #[test]
+    fn resolve_backend_selection_keeps_requested_backends_when_amd_available() {
+        let (selected, _) = resolve_backend_selection(&[BackendKind::Cpu], &[], false, &[], true);
+        assert_eq!(selected, vec![BackendKind::Cpu]);
     }
 
     #[test]
@@ -4932,7 +4989,7 @@ HugePages_Rsvd:          0
 
     #[test]
     fn resolve_backend_selection_enables_nvidia_when_devices_are_explicit() {
-        let (selected, hint) = resolve_backend_selection(&[], &[0, 1], false);
+        let (selected, hint) = resolve_backend_selection(&[], &[0, 1], false, &[], false);
         assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Nvidia]);
         assert!(hint.is_none());
     }
@@ -4940,14 +4997,14 @@ HugePages_Rsvd:          0
     #[cfg(all(feature = "nvidia", not(target_os = "macos")))]
     #[test]
     fn resolve_backend_selection_emits_cuda_hint_when_nvidia_unavailable() {
-        let (_, hint) = resolve_backend_selection(&[], &[], false);
+        let (_, hint) = resolve_backend_selection(&[], &[], false, &[], false);
         assert!(hint.is_some());
     }
 
     #[cfg(all(feature = "nvidia", target_os = "macos"))]
     #[test]
     fn resolve_backend_selection_skips_cuda_hint_on_macos() {
-        let (_, hint) = resolve_backend_selection(&[], &[], false);
+        let (_, hint) = resolve_backend_selection(&[], &[], false, &[], false);
         assert!(hint.is_none());
     }
 }

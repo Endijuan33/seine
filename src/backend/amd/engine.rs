@@ -62,6 +62,8 @@ pub(crate) struct AmdDeviceInfo {
     pub memory_free_mib: Option<u64>,
     /// PCI address (`0000:c1:00.0`), the key for the device's amdgpu sysfs entries.
     pub pci_address: String,
+    /// The GPU shares system memory (APU).
+    pub integrated: bool,
 }
 
 /// Query all visible HIP devices. Fails with the graceful "ROCm runtime not
@@ -95,6 +97,7 @@ pub(crate) fn query_amd_devices() -> Result<Vec<AmdDeviceInfo>> {
                 props.pci_bus_id.max(0),
                 props.pci_device_id.max(0)
             ),
+            integrated: props.integrated != 0,
         });
     }
     Ok(devices)
@@ -1382,6 +1385,10 @@ mod tests {
                 device.gcn_arch_name
             );
             assert!(device.memory_total_mib > 0);
+            eprintln!(
+                "device {} {} {} integrated={}",
+                device.index, device.name, device.gcn_arch_name, device.integrated
+            );
         }
     }
 
