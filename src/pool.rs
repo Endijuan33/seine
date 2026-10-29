@@ -39,6 +39,10 @@ const STRATUM_CAPABILITY_DIFFICULTY_HINT: &str = "difficulty_hint";
 const STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1: &str = "same_template_rebind_v1";
 /// The pool accepts miner-side timing fields on submits.
 const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
+/// This miner hashes Faraday BLAKE2b work. The pool refuses fork-height work to
+/// sessions without it, so older miners get an upgrade message instead of
+/// mining the old hash and having every share rejected.
+const STRATUM_CAPABILITY_POW_BLAKE2B_V1: &str = "pow_blake2b_v1";
 const STRATUM_METHOD_NOTIFICATION: &str = "notification";
 const SUBMIT_REJECT_REASON_DISCONNECTED: &str = "pool disconnected";
 const SUBMIT_REJECT_REASON_LOGIN_REJECTED: &str = "pool login rejected";
@@ -56,6 +60,35 @@ const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
 ];
+
+const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
+    STRATUM_CAPABILITY_LOGIN_NEGOTIATION,
+    STRATUM_CAPABILITY_VALIDATION_STATUS,
+    STRATUM_CAPABILITY_SUBMIT_CLAIMED_HASH,
+    STRATUM_CAPABILITY_DIFFICULTY_HINT,
+    STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
+    STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
+    STRATUM_CAPABILITY_POW_BLAKE2B_V1,
+];
+
+/// Advertises BLAKE2b only when this build will mine fork-height work: final
+/// parameters, or the provisional opt-in for Faraday testnet testing.
+fn client_capabilities() -> &'static [&'static str] {
+    let mines_blake2b = blocknet_pow_spec::ensure_supported_pow(
+        blocknet_pow_spec::FARADAY_ACTIVATION_HEIGHT,
+        crate::miner::provisional_faraday_pow_allowed(),
+    )
+    .is_ok();
+    client_capabilities_for(mines_blake2b)
+}
+
+fn client_capabilities_for(mines_blake2b: bool) -> &'static [&'static str] {
+    if mines_blake2b {
+        CLIENT_CAPABILITIES_WITH_BLAKE2B
+    } else {
+        CLIENT_CAPABILITIES
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PoolJob {
@@ -1038,7 +1071,7 @@ fn login_payload(address: &str, worker: &str, difficulty_hint: Option<u64>) -> R
             address,
             worker,
             protocol_version: STRATUM_PROTOCOL_VERSION,
-            capabilities: CLIENT_CAPABILITIES,
+            capabilities: client_capabilities(),
             difficulty_hint,
         },
     };
@@ -1328,7 +1361,7 @@ fn should_send_claimed_hash(ack: &PoolLoginAck) -> bool {
 
 fn evaluate_login_ack(ack: &PoolLoginAck) -> std::result::Result<bool, String> {
     for capability in &ack.required_capabilities {
-        if !CLIENT_CAPABILITIES
+        if !client_capabilities()
             .iter()
             .any(|supported| supported == capability)
         {
@@ -1651,6 +1684,20 @@ mod tests {
                 .is_none(),
             "difficulty hint should be omitted when unknown"
         );
+    }
+
+    #[test]
+    fn blake2b_capability_is_advertised_only_when_fork_work_is_mined() {
+        assert!(!client_capabilities_for(false).contains(&STRATUM_CAPABILITY_POW_BLAKE2B_V1));
+        let with = client_capabilities_for(true);
+        assert!(with.contains(&STRATUM_CAPABILITY_POW_BLAKE2B_V1));
+        assert_eq!(&with[..with.len() - 1], CLIENT_CAPABILITIES);
+        // Until the parameters are final this build needs the opt-in.
+        if !blocknet_pow_spec::BLAKE2B_POW_PARAMS_FINAL
+            && !crate::miner::provisional_faraday_pow_allowed()
+        {
+            assert_eq!(client_capabilities(), CLIENT_CAPABILITIES);
+        }
     }
 
     #[test]

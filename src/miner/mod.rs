@@ -114,7 +114,7 @@ struct ActivatedBackend {
 /// (`blocknet_pow_spec::BLAKE2B_POW_PARAMS_FINAL`), e.g. on a Faraday testnet.
 pub(super) const PROVISIONAL_FARADAY_POW_ENV: &str = "SEINE_FARADAY_PROVISIONAL_POW";
 
-pub(super) fn provisional_faraday_pow_allowed() -> bool {
+pub(crate) fn provisional_faraday_pow_allowed() -> bool {
     std::env::var_os(PROVISIONAL_FARADAY_POW_ENV).is_some_and(|value| value == "1")
 }
 
