@@ -41,7 +41,7 @@
 | Platform | Archive | GPU |
 |---|---|---|
 | Windows x86_64 | `seine-windows-x86_64.zip` | NVIDIA (drivers only, CUDA runtime bundled) |
-| Linux x86_64 | `seine-linux-x86_64.tar.gz` | NVIDIA (driver + NVRTC), AMD Radeon RDNA (ROCm HIP runtime, `--backend amd`) |
+| Linux x86_64 | `seine-linux-x86_64.tar.gz` | NVIDIA (driver + NVRTC), AMD Radeon RDNA (ROCm HIP runtime) |
 | Linux ARM64 | `seine-linux-aarch64.tar.gz` | CPU only (glibc 2.39+) |
 | macOS Apple Silicon | `seine-macos-aarch64.tar.gz` | CPU (Metal experimental) |
 | macOS Intel | `seine-macos-x86_64.tar.gz` | CPU only |

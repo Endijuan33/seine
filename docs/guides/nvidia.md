@@ -46,4 +46,4 @@ WSL's job-boundary latency.
 ## AMD GPUs
 
 Radeon RDNA GPUs mine through the HIP backend on Linux: see
-[AMD GPUs](amd.md). It is never auto-selected; pass `--backend amd`.
+[AMD GPUs](amd.md). Discrete AMD GPUs are used automatically.

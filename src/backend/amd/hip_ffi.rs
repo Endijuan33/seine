@@ -45,7 +45,7 @@ pub const HIPRTC_NOT_FOUND: &str = "ROCm hipRTC compiler not found (libhiprtc.so
 /// keeps exporting plain `hipGetDeviceProperties` with this legacy struct
 /// layout for binary compatibility, so resolving the unsuffixed symbol gives
 /// a stable ABI across ROCm 5.x and 6.x. Only fields up to and including
-/// `gcn_arch_name` are consumed; the generous `_tail` padding absorbs the
+/// `integrated` are consumed; the generous `_tail` padding absorbs the
 /// remaining legacy fields (and any accidental over-write) without this
 /// declaration having to track them exactly.
 ///
@@ -83,8 +83,10 @@ pub struct HipDevicePropR0000 {
     pub can_map_host_memory: c_int,
     pub gcn_arch: c_int,
     pub gcn_arch_name: [c_char; 256],
+    /// Nonzero for a GPU that shares system memory (APU).
+    pub integrated: c_int,
     /// Padding for the remaining legacy fields the runtime writes
-    /// (integrated/cooperative/texture limits/etc. — roughly 300 bytes).
+    /// (cooperative/texture limits/etc. — roughly 300 bytes).
     pub _tail: [u8; 2048],
 }
 
@@ -452,6 +454,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(HipDevicePropR0000, warp_size), 276);
         assert_eq!(std::mem::offset_of!(HipDevicePropR0000, major), 328);
         assert_eq!(std::mem::offset_of!(HipDevicePropR0000, gcn_arch_name), 396);
+        assert_eq!(std::mem::offset_of!(HipDevicePropR0000, integrated), 652);
         // Struct must be at least as large as anything the legacy runtime
         // writes; the R0000 struct is well under 1 KiB.
         assert!(std::mem::size_of::<HipDevicePropR0000>() >= 1024);

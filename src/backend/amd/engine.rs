@@ -62,6 +62,8 @@ pub(crate) struct AmdDeviceInfo {
     pub memory_free_mib: Option<u64>,
     /// PCI address (`0000:c1:00.0`), the key for the device's amdgpu sysfs entries.
     pub pci_address: String,
+    /// The GPU shares system memory (APU).
+    pub integrated: bool,
 }
 
 /// Query all visible HIP devices. Fails with the graceful "ROCm runtime not
@@ -95,6 +97,7 @@ pub(crate) fn query_amd_devices() -> Result<Vec<AmdDeviceInfo>> {
                 props.pci_bus_id.max(0),
                 props.pci_device_id.max(0)
             ),
+            integrated: props.integrated != 0,
         });
     }
     Ok(devices)
@@ -406,6 +409,8 @@ pub(crate) struct FillBatchResult {
     pub hashes_done: usize,
     pub solved_nonce: Option<u64>,
     pub solved_hash: Option<[u8; 32]>,
+    /// Further nonces in the batch that meet the share target.
+    pub extra_solutions: Vec<(u64, [u8; 32])>,
 }
 
 pub(crate) struct HipArgon2Engine {
@@ -750,6 +755,7 @@ impl HipArgon2Engine {
                 hashes_done: 0,
                 solved_nonce: None,
                 solved_hash: None,
+                extra_solutions: Vec::new(),
             });
         }
 
@@ -896,12 +902,14 @@ impl HipArgon2Engine {
                 hashes_done: 0,
                 solved_nonce: None,
                 solved_hash: None,
+                extra_solutions: Vec::new(),
             });
         }
 
         let mut solved_nonce = None;
         let mut solved_hash = None;
-        if target.is_some() {
+        let mut extra_solutions = Vec::new();
+        if let Some(share_target) = target {
             let evaluated_hashes_u32 =
                 u32::try_from(hashes_done).map_err(|_| anyhow!("active hash count overflow"))?;
             self.htod(&self.found_index, 0, &u32::MAX.to_le_bytes())?;
@@ -930,28 +938,37 @@ impl HipArgon2Engine {
             let mut found_bytes = [0u8; 4];
             self.dtoh(&self.found_index, 0, &mut found_bytes)?;
             let found_index = u32::from_le_bytes(found_bytes);
-            if found_index != u32::MAX && found_index > 0 {
-                let idx = (found_index - 1) as usize;
-                if idx < hashes_done {
-                    solved_nonce = Some(nonces[idx]);
-                    solved_hash = Some(self.read_last_block_hash(idx)?);
-                }
-            }
-        }
-
-        // Pool mining: when a share was found, rescan the batch for a nonce
-        // meeting the (harder) network target so block candidates are never
-        // discarded in favor of an earlier share-only nonce.
-        if solved_nonce.is_some() {
-            if let Some(network_target) = network_target {
-                for (idx, nonce) in nonces.iter().take(hashes_done).enumerate() {
-                    let hash = self.read_last_block_hash(idx)?;
-                    if hash_meets_target(&hash, network_target) {
-                        solved_nonce = Some(*nonce);
-                        solved_hash = Some(hash);
-                        break;
+            if found_index != u32::MAX && found_index > 0 && (found_index as usize) <= hashes_done {
+                // The kernel reports the lowest hit; every later hash in the batch
+                // is checked here so no share is dropped. A nonce meeting the
+                // (harder) network target goes first so block candidates are
+                // never displaced by a share-only nonce.
+                let first = (found_index - 1) as usize;
+                let mut hits = Vec::new();
+                for (offset, hash) in self
+                    .read_last_block_hashes(first, hashes_done)?
+                    .into_iter()
+                    .enumerate()
+                {
+                    if offset == 0 || hash_meets_target(&hash, share_target) {
+                        hits.push((nonces[first + offset], hash));
                     }
                 }
+                if let Some(network_target) = network_target {
+                    if let Some(pos) = hits
+                        .iter()
+                        .position(|(_, hash)| hash_meets_target(hash, network_target))
+                    {
+                        let candidate = hits.remove(pos);
+                        hits.insert(0, candidate);
+                    }
+                }
+                let mut hits = hits.into_iter();
+                if let Some((nonce, hash)) = hits.next() {
+                    solved_nonce = Some(nonce);
+                    solved_hash = Some(hash);
+                }
+                extra_solutions.extend(hits);
             }
         }
 
@@ -959,23 +976,30 @@ impl HipArgon2Engine {
             hashes_done,
             solved_nonce,
             solved_hash,
+            extra_solutions,
         })
     }
 
-    fn read_last_block_hash(&self, hash_idx: usize) -> Result<[u8; 32]> {
-        let offset = hash_idx
-            .checked_mul(128 * 8)
-            .ok_or_else(|| anyhow!("hash index overflow while reading HIP last block"))?;
-        let mut block_bytes = [0u8; 1024];
-        self.dtoh(&self.last_blocks, offset, &mut block_bytes)?;
-        let mut words = [0u64; 128];
-        for (idx, word) in words.iter_mut().enumerate() {
-            let start = idx * 8;
-            let mut le = [0u8; 8];
-            le.copy_from_slice(&block_bytes[start..start + 8]);
-            *word = u64::from_le_bytes(le);
+    /// Pow hashes of last blocks `start..end` of the current batch, read in one copy.
+    fn read_last_block_hashes(&self, start: usize, end: usize) -> Result<Vec<[u8; 32]>> {
+        let count = end.saturating_sub(start);
+        let mut bytes = vec![0u8; count * 128 * 8];
+        if count > 0 {
+            let offset = start
+                .checked_mul(128 * 8)
+                .ok_or_else(|| anyhow!("hash index overflow while reading HIP last blocks"))?;
+            self.dtoh(&self.last_blocks, offset, &mut bytes)?;
         }
-        Ok(pow_hash_from_last_block_words(&words))
+        Ok(bytes
+            .chunks_exact(128 * 8)
+            .map(|block| {
+                let mut words = [0u64; 128];
+                for (word, le) in words.iter_mut().zip(block.chunks_exact(8)) {
+                    *word = u64::from_le_bytes(le.try_into().expect("8-byte chunk"));
+                }
+                pow_hash_from_last_block_words(&words)
+            })
+            .collect())
     }
 }
 
@@ -1382,6 +1406,10 @@ mod tests {
                 device.gcn_arch_name
             );
             assert!(device.memory_total_mib > 0);
+            eprintln!(
+                "device {} {} {} integrated={}",
+                device.index, device.name, device.gcn_arch_name, device.integrated
+            );
         }
     }
 

@@ -1,15 +1,16 @@
 # AMD GPUs
 
 Seine mines on AMD Radeon RDNA GPUs (RX 6000, RX 7000, RX 9000 and the Radeon PRO
-parts built on the same chips) through its HIP backend. It is never auto-selected:
-pass `--backend amd`, and the CPU keeps mining alongside when you list both.
+parts built on the same chips) through its HIP backend. With no `--backend` flag it
+mines on every discrete AMD GPU it finds, alongside the CPU. Integrated Radeon
+graphics stay off unless you list `amd` yourself.
 
 ```bash
-# GPU-only: one backend instance per detected wave32 device
-./seine --backend amd --address YOUR_ADDRESS
+# Default: CPU plus every discrete AMD GPU
+./seine --address YOUR_ADDRESS
 
-# CPU and AMD GPU together
-./seine --backend cpu,amd --address YOUR_ADDRESS
+# GPU-only: one backend instance per detected device
+./seine --backend amd --address YOUR_ADDRESS
 
 # Select specific devices, or cap the VRAM lanes on a shared card
 ./seine --backend amd --amd-devices 0 --amd-max-lanes 4
@@ -30,8 +31,8 @@ pass `--backend amd`, and the CPU keeps mining alongside when you list both.
 - One **2 GiB VRAM lane per concurrent hash**: a 16 GB card runs 7 lanes, a 24 GB
   card 11, a 32 GB card 15. Seine sizes this automatically from free VRAM.
 
-If the runtime is missing Seine says so at startup and keeps mining on the CPU
-when the CPU backend is also selected.
+If the runtime is missing, Seine mines on the CPU only; with `--backend amd` it says
+so at startup.
 
 ## Performance level
 
