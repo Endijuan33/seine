@@ -589,6 +589,11 @@ impl PowBackend for CpuBackend {
                 }
                 .into(),
             ),
+            pow: self
+                .shared
+                .blake2b_workers
+                .load(Ordering::Acquire)
+                .then(|| "blake2b".to_string()),
         }
     }
 

@@ -32,6 +32,24 @@ pub enum BenchKind {
     EndToEnd,
 }
 
+/// Proof of work a benchmark hashes.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, ValueEnum)]
+pub enum BenchPow {
+    #[default]
+    Argon2id,
+    /// Faraday BLAKE2b-512 on the 156-byte fork header; worker benchmarks only.
+    Blake2b,
+}
+
+impl BenchPow {
+    pub fn algorithm(self) -> crate::backend::PowAlgorithm {
+        match self {
+            Self::Argon2id => crate::backend::PowAlgorithm::Argon2id,
+            Self::Blake2b => crate::backend::PowAlgorithm::Blake2b512,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 pub enum BenchBaselinePolicy {
     Strict,
@@ -735,6 +753,11 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = BenchKind::Backend)]
     bench_kind: BenchKind,
 
+    /// Proof of work to benchmark: argon2id (default) or blake2b (the Faraday fork
+    /// hash; `backend` and `end-to-end` kinds only).
+    #[arg(long, value_enum, default_value_t = BenchPow::Argon2id)]
+    bench_pow: BenchPow,
+
     /// Force a supported CPU kernel for offline benchmarks (scalar, avx2, avx512, avx512-256, avx512-256-stream, avx512-256-stream-r8d2, avx512-256-stream-r64d3, avx512-256-stream-r64d4, avx512-256-stream-r64d6, avx2-stream, avx512-stream, avx512-256-stream-l2, avx512-stream-l2, neon, neon-sha3).
     /// Requires --bench, CPU-only backends, fixed --threads, and no CPU autotuning.
     #[arg(long, requires_all = ["bench", "threads"])]
@@ -871,6 +894,7 @@ pub struct Config {
     pub allow_wallet_prompt: bool,
     pub bench: bool,
     pub bench_kind: BenchKind,
+    pub bench_pow: BenchPow,
     pub bench_cpu_kernel: Option<blocknet_pow_kernel::CpuKernel>,
     pub bench_secs: u64,
     pub bench_rounds: u32,
@@ -1451,6 +1475,7 @@ impl Config {
             allow_wallet_prompt: true,
             bench: cli.bench,
             bench_kind: cli.bench_kind,
+            bench_pow: cli.bench_pow,
             bench_cpu_kernel: cli.bench_cpu_kernel,
             bench_secs: cli.bench_secs.max(1),
             bench_rounds: cli.bench_rounds.max(1),
@@ -3677,6 +3702,7 @@ mod tests {
             cpu_side_cache_blocks: None,
             cpu_skip_store_permille: None,
             bench_kind: BenchKind::Backend,
+            bench_pow: BenchPow::Argon2id,
             bench_cpu_kernel: None,
             bench_secs: 20,
             bench_rounds: 3,

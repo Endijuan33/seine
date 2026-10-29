@@ -4,6 +4,14 @@ Seine hardware and performance reporting, with a separate Rust/Axum
 collector and PostgreSQL database. Pool Stratum, wallet and daemon contracts are
 unchanged. A collector outage drops reports without stopping mining.
 
+Schema 11 adds `backends[].settings.pow`: `blake2b` while a backend mines
+Faraday BLAKE2b work, absent for Argon2id (so Argon2 samples are unchanged).
+BLAKE2b samples may report up to 10^18 hashes per window; Argon2 keeps the
+10^15 bound. Performance views group by the whole `settings` object, so the two
+algorithms never share a cohort. Deploy the schema-11 collector before
+releasing schema-11 miners; schemas 1-10 remain accepted, with no SQL storage
+migration.
+
 Schema 10 adds `hardware.memory_setup`: the populated memory module count, DDR
 type, whether the modules are registered, and the lowest rated and configured
 speed in MT/s, read from SMBIOS (Windows always, Linux only as root; absent

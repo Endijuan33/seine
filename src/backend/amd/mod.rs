@@ -379,6 +379,7 @@ impl PowBackend for AmdBackend {
             ),
             cpu_backing_mib: None,
             cpu_affinity: None,
+            pow: None,
         }
     }
 

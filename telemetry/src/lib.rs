@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 pub mod tuning;
 
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 pub const MAX_BODY_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -464,6 +464,10 @@ pub struct BackendSettings {
     pub cpu_backing_mib: Option<[u64; 5]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_affinity: Option<String>,
+    /// `blake2b` while the backend mines Faraday BLAKE2b work; absent for
+    /// Argon2id (schema 11). Rates are not comparable across the two.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pow: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -619,12 +623,20 @@ impl Report {
                     && (b.settings.backend == "cpu"
                         || (b.settings.cpu_backing_mib.is_none()
                             && b.settings.cpu_affinity.is_none()))
+                    && b.settings.pow.as_deref().is_none_or(|v| v == "blake2b")
+                    && (self.schema_version >= 11 || b.settings.pow.is_none())
                     && b.settings.lanes <= 65536
                     && b.settings.memory_mib.is_none_or(|v| v <= 1073741824)
                     && b.observed_secs.is_finite()
                     && b.observed_secs > 0.0
                     && b.observed_secs <= self.window_secs as f64 + 1.0
-                    && b.hashes <= 1_000_000_000_000_000
+                    // BLAKE2b runs at GH/s per GPU, so a day can exceed the Argon2 bound.
+                    && b.hashes
+                        <= if b.settings.pow.is_some() {
+                            1_000_000_000_000_000_000
+                        } else {
+                            1_000_000_000_000_000
+                        }
             })
     }
 }
@@ -1084,6 +1096,26 @@ mod tests {
             .unwrap()
             .configured_mts = Some(0);
         assert!(!report.validate(), "speeds are positive when present");
+    }
+
+    #[test]
+    fn blake2b_backend_pow_requires_schema_11() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../fixture.json")).unwrap();
+        value["schema_version"] = 11.into();
+        value["backends"][0]["settings"]["pow"] = "blake2b".into();
+        value["backends"][0]["hashes"] = 5_000_000_000_000_000u64.into();
+        let mut report: Report = serde_json::from_value(value).unwrap();
+        assert!(report.validate(), "GH/s-scale BLAKE2b samples are valid");
+        report.schema_version = 10;
+        assert!(!report.validate(), "pow must advertise schema 11");
+        report.schema_version = 11;
+        report.backends[0].settings.pow = None;
+        assert!(!report.validate(), "Argon2 samples keep the Argon2 bound");
+        report.backends[0].hashes = 1_000;
+        assert!(report.validate());
+        report.backends[0].settings.pow = Some("argon2id".into());
+        assert!(!report.validate(), "Argon2id is reported by omission");
     }
 
     #[test]

@@ -4040,6 +4040,7 @@ pub(crate) mod tests {
             allow_wallet_prompt: true,
             bench: false,
             bench_kind: crate::config::BenchKind::Backend,
+            bench_pow: crate::config::BenchPow::Argon2id,
             bench_cpu_kernel: None,
             bench_secs: 20,
             bench_rounds: 3,

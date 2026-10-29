@@ -399,6 +399,8 @@ struct NvidiaShared {
     active_hashes_per_launch_per_lane: AtomicU32,
     cancel_requested: AtomicBool,
     error_emitted: AtomicBool,
+    /// The worker's last batch was BLAKE2b (reported in telemetry).
+    blake2b_active: AtomicBool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -448,6 +450,7 @@ impl NvidiaShared {
             active_hashes_per_launch_per_lane: AtomicU32::new(DEFAULT_HASHES_PER_LAUNCH_PER_LANE),
             cancel_requested: AtomicBool::new(false),
             error_emitted: AtomicBool::new(false),
+            blake2b_active: AtomicBool::new(false),
         }
     }
 }
@@ -1538,6 +1541,11 @@ impl PowBackend for NvidiaBackend {
             gpu_launch_depth: tuning.map(|t| t.hashes_per_launch_per_lane),
             cpu_backing_mib: None,
             cpu_affinity: None,
+            pow: self
+                .shared
+                .blake2b_active
+                .load(Ordering::Acquire)
+                .then(|| "blake2b".to_string()),
         }
     }
 
@@ -2348,6 +2356,7 @@ fn worker_loop(
             let stop_at = enforce_template_stop.then_some(current.work.template.stop_at);
             // Free the Argon2 lane memory; BLAKE2b needs none.
             argon2.release();
+            shared.blake2b_active.store(true, Ordering::Release);
             shared
                 .active_lanes
                 .store(argon2_lanes as u64, Ordering::Release);
@@ -2403,6 +2412,7 @@ fn worker_loop(
             continue;
         }
 
+        shared.blake2b_active.store(false, Ordering::Release);
         let engine = match argon2.ensure() {
             Ok(engine) => engine,
             Err(err) => {
@@ -4692,6 +4702,7 @@ mod tests {
             active_hashes_per_launch_per_lane: AtomicU32::new(0),
             cancel_requested: AtomicBool::new(false),
             error_emitted: AtomicBool::new(false),
+            blake2b_active: AtomicBool::new(false),
         };
         let (event_tx, _event_rx) = crossbeam_channel::bounded(1);
         if let Ok(mut slot) = shared.event_sink.write() {
