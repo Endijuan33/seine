@@ -2544,6 +2544,7 @@ mod tests {
             family: Some(0x19),
             model: Some(0x11),
             stepping: Some(1),
+            l3_cores: None,
         };
         assert!(full_count_cold_start(&cfg, &host, &identity, 32, 32));
         let mut windows = host.clone();
@@ -2611,6 +2612,7 @@ mod tests {
             family: Some(6),
             model: Some(0x8f),
             stepping: Some(1),
+            l3_cores: None,
         };
         assert!(sapphire_full_count_cold_start(
             &cfg, &host, &identity, 32, 32
@@ -2696,6 +2698,7 @@ mod tests {
             family: Some(0x1a),
             model: Some(0x02),
             stepping: Some(1),
+            l3_cores: None,
         };
         assert!(turin_full_count_cold_start(&cfg, &host, &identity, 32, 32));
         let mut windows = host.clone();

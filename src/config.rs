@@ -1210,7 +1210,7 @@ impl Config {
         ) && crate::miner::fixed_count_trials_wanted();
         if pinned_kernel_trials {
             startup_notices.push(format!(
-                "--threads {resolved_threads} is kept; the CPU kernel is still compared while mining because this CPU has no validated default"
+                "--threads {resolved_threads} is kept; the CPU kernel is still compared while mining on this CPU"
             ));
         }
         let cpu_autotune_threads = cpu_autotune_threads || pinned_kernel_trials;

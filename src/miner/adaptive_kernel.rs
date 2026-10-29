@@ -93,7 +93,11 @@ fn candidates_for(
     // ISA/OS support check remains mandatory, and repeated-win trials can still
     // replace it.
     if let Some(stream) = cohort_stream_kernel(identity, supported) {
-        if stream == CpuKernel::Avx512256Stream && identity.model == Some(0x02) {
+        if stream == CpuKernel::Avx512StreamSkip {
+            // The plain path stays a challenger so the tuner can turn skipping off.
+            paths.push(stream);
+            paths.push(CpuKernel::Avx512Stream);
+        } else if stream == CpuKernel::Avx512256Stream && identity.model == Some(0x02) {
             // Turin: test the high-concurrency challenger before AVX2.
             // Ordering changes discovery cost, never the repeated-win gate.
             let before_avx2 = paths
@@ -150,6 +154,15 @@ fn cohort_stream_kernel(
     match identity.family {
         // Zen 5 server-class models (00h-1Fh: Turin, Turin Dense, masked cloud
         // CPUIDs) use full-width compression. Client Zen 5 (20h+) stays 256-bit.
+        // Zen 5c (16 cores per L3) starts with skipped stores; the plain path is
+        // compared against it while mining.
+        Some(0x1a)
+            if identity.model.is_some_and(|m| m < 0x20)
+                && identity.l3_cores.is_some_and(|cores| cores >= 16)
+                && supported.contains(&CpuKernel::Avx512StreamSkip) =>
+        {
+            Some(CpuKernel::Avx512StreamSkip)
+        }
         Some(0x1a)
             if identity.model.is_some_and(|m| m < 0x20)
                 && supported.contains(&CpuKernel::Avx512Stream) =>
@@ -205,16 +218,29 @@ pub(super) fn cohort_kernel() -> Option<CpuKernel> {
 }
 
 /// Whether a fixed `--threads` count on this host should still run the kernel
-/// comparisons at that count. True only where no cohort default exists but a
-/// streaming kernel is supported, so hosts run with explicit counts can still
-/// find the streaming kernel. Hosts with a cohort default keep running no trials.
+/// comparisons at that count: where no cohort default exists but a streaming
+/// kernel is supported, and where the default is the skipped-store path. Other
+/// hosts with a cohort default run no trials at an explicit count.
 pub(crate) fn fixed_count_trials_wanted() -> bool {
-    let identity = crate::runtime_identity::cpu_identity();
-    let supported = supported_kernels();
-    cohort_stream_kernel(&identity, &supported).is_none()
-        && candidates_for(&identity, &supported)
+    fixed_count_trials_wanted_for(
+        &crate::runtime_identity::cpu_identity(),
+        &supported_kernels(),
+    )
+}
+
+/// Also true where the cohort default is the skipped-store path, which is always
+/// compared with the plain path, including at an explicit `--threads` count.
+fn fixed_count_trials_wanted_for(
+    identity: &crate::runtime_identity::CpuIdentity,
+    supported: &[CpuKernel],
+) -> bool {
+    match cohort_stream_kernel(identity, supported) {
+        Some(CpuKernel::Avx512StreamSkip) => true,
+        Some(_) => false,
+        None => candidates_for(identity, supported)
             .iter()
-            .any(|kernel| matches!(kernel, CpuKernel::Avx512256Stream | CpuKernel::Avx2Stream))
+            .any(|kernel| matches!(kernel, CpuKernel::Avx512256Stream | CpuKernel::Avx2Stream)),
+    }
 }
 
 /// Side-cache slots for this host (see `SideCacheSchedule` in the kernel crate),
@@ -1598,6 +1624,70 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dense_zen5_starts_on_skip_kernel_with_plain_challenger_and_fixed_count_trials() {
+        use crate::runtime_identity::CpuIdentity;
+        let all: Vec<CpuKernel> = CpuKernel::ALL.to_vec();
+        let dense = CpuIdentity {
+            vendor: Some("AuthenticAMD".into()),
+            family: Some(0x1a),
+            model: Some(0x11),
+            l3_cores: Some(16),
+            ..CpuIdentity::default()
+        };
+        let candidates = candidates_for(&dense, &all);
+        assert_eq!(
+            startup_kernel_for(&dense, &candidates),
+            Some(CpuKernel::Avx512StreamSkip)
+        );
+        assert!(candidates.contains(&CpuKernel::Avx512Stream));
+        assert!(fixed_count_trials_wanted_for(&dense, &all));
+        assert_eq!(
+            static_kernel_for_identity(&dense, &all, 192),
+            Some(CpuKernel::Avx512StreamSkip)
+        );
+
+        // Regular Zen 5 EPYC (8 cores per L3), Zen 5 desktops and unknown L3 keep
+        // the plain path and no fixed-count trials.
+        for other in [
+            CpuIdentity {
+                l3_cores: Some(8),
+                ..dense.clone()
+            },
+            CpuIdentity {
+                l3_cores: None,
+                ..dense.clone()
+            },
+            CpuIdentity {
+                model: Some(0x44),
+                ..dense.clone()
+            },
+        ] {
+            let candidates = candidates_for(&other, &all);
+            assert_ne!(
+                startup_kernel_for(&other, &candidates),
+                Some(CpuKernel::Avx512StreamSkip)
+            );
+            assert!(!candidates.contains(&CpuKernel::Avx512StreamSkip));
+        }
+        let regular = CpuIdentity {
+            l3_cores: Some(8),
+            ..dense.clone()
+        };
+        assert!(!fixed_count_trials_wanted_for(&regular, &all));
+
+        // Without AVX-512 the skip path is never chosen.
+        let no_avx512: Vec<CpuKernel> = all
+            .iter()
+            .copied()
+            .filter(|k| !k.as_str().starts_with("avx512"))
+            .collect();
+        assert_ne!(
+            startup_kernel_for(&dense, &candidates_for(&dense, &no_avx512)),
+            Some(CpuKernel::Avx512StreamSkip)
+        );
+    }
+
+    #[test]
     fn short_trial_policy_is_limited_to_turin_default_timing_and_supported_path() {
         use crate::runtime_identity::CpuIdentity;
         let turin = CpuIdentity {
@@ -2582,6 +2672,7 @@ mod tests {
             family: Some(26),
             model: Some(2),
             stepping: Some(1),
+            l3_cores: None,
         };
         assert_eq!(
             candidates_for(&turin, &supported),
@@ -2716,6 +2807,7 @@ mod tests {
             family: Some(0x1a),
             model: Some(0),
             stepping: None,
+            l3_cores: None,
         };
         let raphael = CpuIdentity {
             family: Some(0x19),
@@ -2871,6 +2963,7 @@ mod tests {
                 family: Some(0x1a),
                 model: Some(0x02),
                 stepping: Some(1),
+                l3_cores: None,
             },
             &t.candidates,
         );
@@ -3427,6 +3520,7 @@ mod tests {
             family: Some(0x19),
             model: Some(0x11),
             stepping: Some(1),
+            l3_cores: None,
         };
         let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
         // A cached starting count need not be 32; context eligibility is checked
@@ -3534,6 +3628,7 @@ mod tests {
             family: Some(0x19),
             model: Some(0x11),
             stepping: Some(1),
+            l3_cores: None,
         };
         let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
         assert!(genoa_stream_startup(&cfg, &host, &identity, &paths));
@@ -3569,6 +3664,7 @@ mod tests {
             family: Some(6),
             model: Some(0x8f),
             stepping: Some(1),
+            l3_cores: None,
         };
         let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
         assert!(sapphire_stream_startup(&cfg, &host, &identity, &paths));
@@ -3800,6 +3896,7 @@ mod tests {
             family: Some(0x1a),
             model: Some(0x02),
             stepping: Some(1),
+            l3_cores: None,
         };
         let paths = [CpuKernel::Avx512, CpuKernel::Avx512256Stream];
         assert!(turin_stream_startup(&cfg, &host, &identity, &paths));

@@ -115,6 +115,7 @@ const fn kernel_isa(kernel: CpuKernel) -> u8 {
         CpuKernel::Avx512Stream => ISA_AVX512_STREAM,
         CpuKernel::Avx512256StreamL2 => ISA_AVX512_256_STREAM_L2,
         CpuKernel::Avx512StreamL2 => ISA_AVX512_STREAM_L2,
+        CpuKernel::Avx512StreamSkip => ISA_AVX512_STREAM,
     }
 }
 
@@ -162,7 +163,12 @@ pub struct FixedArgon2id {
     /// First block whose odd-indexed successors skip the arena store
     /// (`usize::MAX` = store everything). See `set_skip_store_permille`.
     skip_from: usize,
+    /// `CpuKernel::Avx512StreamSkip` is active: skip from `KERNEL_SKIP_PERMILLE`.
+    kernel_skip: bool,
 }
+
+/// Skip boundary used by `CpuKernel::Avx512StreamSkip`.
+const KERNEL_SKIP_PERMILLE: usize = 600;
 
 const NO_SLOT: u16 = u16::MAX;
 
@@ -265,7 +271,9 @@ impl FixedArgon2id {
         if !kernel.is_supported() {
             return Err(Error::UnsupportedKernel);
         }
-        Ok(Self::new_for_isa(requested_memory_kib, kernel_isa(kernel)))
+        let mut fixed = Self::new_for_isa(requested_memory_kib, kernel_isa(kernel));
+        fixed.kernel_skip = kernel == CpuKernel::Avx512StreamSkip;
+        Ok(fixed)
     }
 
     /// Change compression paths between hashes, retaining address precomputation.
@@ -275,6 +283,7 @@ impl FixedArgon2id {
             return Err(Error::UnsupportedKernel);
         }
         self.isa = kernel_isa(kernel);
+        self.kernel_skip = kernel == CpuKernel::Avx512StreamSkip;
         Ok(())
     }
 
@@ -294,6 +303,7 @@ impl FixedArgon2id {
             isa,
             side_cache: None,
             skip_from: usize::MAX,
+            kernel_skip: false,
         }
     }
 
@@ -340,7 +350,11 @@ impl FixedArgon2id {
     }
 
     pub const fn isa_label(&self) -> &'static str {
-        isa_label(self.isa)
+        if self.kernel_skip {
+            CpuKernel::Avx512StreamSkip.as_str()
+        } else {
+            isa_label(self.isa)
+        }
     }
 
     pub fn hash_password_into_with_memory(
@@ -479,7 +493,11 @@ impl FixedArgon2id {
             None => Box::default(),
         };
         let side_ptr = side_buffer.as_mut_ptr();
-        let skip_from = self.skip_from;
+        let skip_from = if self.kernel_skip {
+            self.block_count * KERNEL_SKIP_PERMILLE / 1000
+        } else {
+            self.skip_from
+        };
         let last = memory.len() - 1;
         let mut rebuilt = std::mem::MaybeUninit::<PowBlock>::uninit();
         for slice in 0..SYNC_POINTS {
@@ -3419,7 +3437,7 @@ mod tests {
         for (nonce, kernel) in crate::CpuKernel::ALL
             .into_iter()
             .cycle()
-            .take(15)
+            .take(crate::CpuKernel::ALL.len())
             .enumerate()
         {
             let previous = fixed.isa_label();
@@ -3617,6 +3635,49 @@ mod tests {
                     "ring distance is never scheduled"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn skip_kernel_matches_reference_with_and_without_side_cache() {
+        if !super::CpuKernel::Avx512StreamSkip.is_supported() {
+            return;
+        }
+        let memory_kib = 4096u32;
+        let params = Params::new(memory_kib, 1, 1, Some(32)).unwrap();
+        let reference = Argon2::new(Algorithm::Argon2id, Version::V0x13, params.clone());
+        let mut reference_memory = vec![argon2::Block::default(); params.block_count()];
+        for side_cache in [0usize, 512] {
+            let mut fixed =
+                FixedArgon2id::with_kernel(memory_kib, super::CpuKernel::Avx512StreamSkip).unwrap();
+            fixed.set_side_cache_blocks(side_cache);
+            assert!(fixed.kernel_skip);
+            let mut fixed_memory =
+                vec![PowBlock([0x5a5a_5a5a_5a5a_5a5a; 128]); fixed.block_count()];
+            for nonce in [1u64, 9, 2_000_011] {
+                let nonce_bytes = nonce.to_le_bytes();
+                let (mut expected, mut actual) = ([0u8; 32], [0u8; 32]);
+                reference
+                    .hash_password_into_with_memory(
+                        &nonce_bytes,
+                        b"skip-kernel",
+                        &mut expected,
+                        &mut reference_memory,
+                    )
+                    .unwrap();
+                fixed
+                    .hash_password_into_with_memory(
+                        &nonce_bytes,
+                        b"skip-kernel",
+                        &mut actual,
+                        &mut fixed_memory,
+                    )
+                    .unwrap();
+                assert_eq!(actual, expected, "side cache {side_cache} nonce {nonce}");
+            }
+            // Switching back to the plain path stops skipping.
+            fixed.set_kernel(super::CpuKernel::Avx512Stream).unwrap();
+            assert!(!fixed.kernel_skip);
         }
     }
 
