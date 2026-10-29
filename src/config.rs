@@ -3915,6 +3915,39 @@ mod tests {
         assert_eq!(cli.threads, Some(2));
     }
 
+    /// The mmpOS package (packaging/mmpos) writes these argument lists; its
+    /// shell tests check mmp-launch.sh still produces them.
+    #[test]
+    fn mmpos_package_arguments_parse() {
+        let parse = |fixture: &str| {
+            let args = std::iter::once("seine").chain(fixture.lines());
+            let mut cli = Cli::try_parse_from(args).expect("mmpOS arguments should parse");
+            cli.apply_miner_style_args();
+            cli
+        };
+
+        let cli = parse(include_str!("../packaging/mmpos/testdata/gpu-rig.args"));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig01"));
+        assert_eq!(
+            cli.pool_url
+                .as_deref()
+                .and_then(normalize_pool_url)
+                .as_deref(),
+            Some("stratum+ssl://pool.example.com:3443")
+        );
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia, BackendKind::Amd]);
+        assert_eq!(cli.ui, UiMode::Plain);
+        assert!(cli.api_server && cli.no_auto_update);
+        assert_eq!(cli.api_bind, "127.0.0.1:4044");
+        assert_eq!(cli.data_dir, PathBuf::from("/opt/mmp/miners/seine-data"));
+
+        let cli = parse(include_str!("../packaging/mmpos/testdata/extra-args.args"));
+        assert_eq!(cli.mining_address.as_deref(), Some("@miner.one"));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig02"));
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia, BackendKind::Cpu]);
+        assert_eq!(cli.threads, Some(2));
+    }
+
     #[test]
     fn shortname_logins_are_not_split_on_dots() {
         let mut cli = Cli::try_parse_from(["seine", "-u", "@miner.one"]).unwrap();

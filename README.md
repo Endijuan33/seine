@@ -46,6 +46,7 @@
 | macOS Apple Silicon | `seine-macos-aarch64.tar.gz` | CPU; Metal GPU for BLAKE2b blocks |
 | macOS Intel | `seine-macos-x86_64.tar.gz` | CPU only |
 | HiveOS rigs | `seine-hiveos-<version>.tar.gz` | NVIDIA (NVRTC bundled), AMD; see the [HiveOS guide](docs/guides/hiveos.md) |
+| mmpOS rigs | `seine-mmpos-<version>.tar.gz` | NVIDIA (NVRTC bundled), AMD; see the [mmpOS guide](docs/guides/mmpos.md) |
 
 The Linux builds run on glibc 2.31 or newer: Ubuntu 20.04, Debian 11 and later.
 
@@ -93,6 +94,7 @@ Seine is fast out of the box. These guides cover the last few percent:
 - [How automatic tuning works](docs/guides/autotuning.md): thread counts, CPU kernels, memory recovery
 - [Solo mining](docs/guides/solo-mining.md): mine against your own Blocknet node
 - [HiveOS](docs/guides/hiveos.md): add seine to a flight sheet with one installation URL
+- [mmpOS](docs/guides/mmpos.md): add seine to a miner profile with one download URL
 - [Farm proxy](docs/guides/farm-proxy.md): many rigs, one pool connection
 - [Control API](docs/API.md): REST, live events and metrics for dashboards ([OpenAPI](docs/openapi/seine-api-v1.yaml))
 - [Flag reference](docs/MINER_FLAGS.md): every command-line option

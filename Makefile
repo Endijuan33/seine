@@ -1,4 +1,4 @@
-.PHONY: all clean build build-native build-cpu test test-hiveos run release tag-release
+.PHONY: all clean build build-native build-cpu test test-hiveos test-mmpos run release tag-release
 
 VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -38,6 +38,10 @@ test:
 # Test the HiveOS package scripts (no mining)
 test-hiveos:
 	scripts/test_hiveos_package.sh
+
+# Test the mmpOS package scripts (no mining)
+test-mmpos:
+	scripts/test_mmpos_package.sh
 
 # Run after building
 run: build

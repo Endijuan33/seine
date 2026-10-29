@@ -2459,8 +2459,8 @@ mod tests {
         assert!(value.get("mining").is_some(), "mining is always present");
     }
 
-    /// The HiveOS package tests serve this fixture from a fake control API, so
-    /// it must stay in the exact shape seine serializes.
+    /// The HiveOS and mmpOS package tests serve this fixture from a fake
+    /// control API, so it must stay in the exact shape seine serializes.
     #[test]
     fn miner_stats_fixture_matches_serialized_shape() {
         use crate::miner::live_stats::{LiveDeviceStats, LiveMiningStats};
