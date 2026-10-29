@@ -1450,7 +1450,7 @@ pub(super) fn run_mining_loop(
 
         epoch = epoch.wrapping_add(1).max(1);
         let work_id = next_work_id(&mut work_id_cursor);
-        let reservation = nonce_scheduler.reserve(total_lanes(backends));
+        let reservation = nonce_scheduler.reserve_for(total_lanes(backends), pow);
         let round_start = Instant::now();
         let stop_at = round_start + round_duration_for_deferred_backend(cfg, deferred_remaining);
 

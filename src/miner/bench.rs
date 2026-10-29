@@ -883,7 +883,7 @@ fn run_worker_benchmark_inner(
         let round_start = Instant::now();
         let stop_at = round_start + Duration::from_secs(cfg.bench_secs);
         let header_base = benchmark_header_base(round, cfg.bench_pow);
-        let reservation = scheduler.reserve(total_lanes(backends));
+        let reservation = scheduler.reserve_for(total_lanes(backends), cfg.bench_pow.algorithm());
 
         let distribution = distribute_work(
             backends,
