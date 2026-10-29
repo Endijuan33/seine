@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # A manual run builds and checks every platform; packaging and publishing
+  # only run for version tags.
+  workflow_dispatch:
 
 jobs:
   build:
