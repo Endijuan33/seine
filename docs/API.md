@@ -45,7 +45,7 @@ Behavior:
 
 ## Mode-Specific Start Requirements
 
-- Pool mode (`mode=pool`) requires `mining_address`, `pool_url`, and `pool_worker`.
+- Pool mode (`mode=pool`) requires `mining_address`, `pool_url`, and `pool_worker`. `pool_url` takes the same forms as `--pool-url`, including `stratum+ssl://` and a comma-separated failover list.
 - Daemon mode (`mode=daemon`) requires daemon auth token.
 - Pool mode may also include daemon auth to enable local daemon wallet balance alongside pool stats when a local daemon is available.
 

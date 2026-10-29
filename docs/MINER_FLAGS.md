@@ -13,13 +13,14 @@ For the raw CLI output, run:
 | Flag | Values / Default | What it does |
 |---|---|---|
 | `--mode` | `pool` or `daemon`, default `pool` | Selects mining mode. |
-| `--pool-url` | `host:port` or `stratum+tcp://host:port` | Stratum pool endpoint used in pool mode. |
-| `--pool-worker` | string | Worker name sent during pool login. |
+| `--pool-url` (`-o`, `--url`) | `host:port`, `stratum+tcp://host:port` or `stratum+ssl://host:port` | Stratum pool endpoint used in pool mode. `stratum+ssl://` (also `stratum+tls://`) connects over TLS. Repeat the flag or separate URLs with commas to add backup pools in failover order. See [pool connections](guides/configuration.md#pool-connections). |
+| `--pool-worker` (`--worker`) | string | Worker name sent during pool login. |
+| `--pass` (`-p`) | string | Accepted so launch templates that always pass a pool password keep working. Blocknet pools do not use passwords; the value is ignored. |
 | `--api-url` | URL, default auto-detected then `http://127.0.0.1:8332` | Blocknet daemon API base URL. Seine prefers Blocknet wrapper config/pidfiles/processes before falling back to loopback. Optional in daemon mode for standard wrapper-managed installs; optional in pool mode for local daemon wallet balance. |
 | `--token` | string | Explicit daemon API bearer token. Optional override in daemon mode; optional in pool mode for local daemon wallet balance. |
 | `--wallet-password` | string | Wallet password for automatic wallet load when needed. |
 | `--wallet-password-file` | path | File containing the wallet password. |
-| `--address` | string | Full payout address or Blocknet ID shortname (`@name` or `$name`) for pool login or daemon templates. Shortnames are verified and resolved once per mining run; quote them in shell commands, e.g. `--address '$name'`. In daemon mode, if the resolved address matches the daemon wallet, TUI wallet stats remain available; otherwise pending/unlocked display as `---`. |
+| `--address` (`-u`, `--user`) | string | `ADDRESS.WORKER` also sets the worker name when `--pool-worker` is not given. Full payout address or Blocknet ID shortname (`@name` or `$name`) for pool login or daemon templates. Shortnames are verified and resolved once per mining run; quote them in shell commands, e.g. `--address '$name'`. In daemon mode, if the resolved address matches the daemon wallet, TUI wallet stats remain available; otherwise pending/unlocked display as `---`. |
 | `--cookie` | path | Explicit `api.cookie` path used to read daemon API token. Optional override in daemon mode; optional in pool mode for local daemon wallet balance. |
 | `--daemon-dir` | path, default wrapper-managed `~/.config/bnt/data/mainnet` | Daemon data dir used to find `api.cookie` when `--cookie` is not set. Also used by pool mode when probing for a local daemon wallet. |
 | `--data-dir` | path, default `./seine-data` | Seine data dir for persisted state (`seine.config.json`, autotune caches, etc). |

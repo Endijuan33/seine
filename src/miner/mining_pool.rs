@@ -2912,7 +2912,7 @@ fn div_ceil_u64(value: u64, divisor: u64) -> u64 {
 }
 
 fn pool_api_base_urls_from_pool_url(pool_url: &str) -> Vec<String> {
-    let trimmed = pool_url.trim();
+    let trimmed = crate::pool::primary_pool_url(pool_url);
     if trimmed.is_empty() {
         return Vec::new();
     }

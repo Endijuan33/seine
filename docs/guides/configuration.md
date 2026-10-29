@@ -50,6 +50,36 @@ All flags are documented in the [flag reference](../MINER_FLAGS.md).
 ./seine --ui plain
 ```
 
+## Pool connections
+
+Seine works with any Blocknet pool that speaks the Blocknet Stratum protocol,
+which is what Blocknet pools run.
+
+```bash
+# Encrypted connection, when the pool offers a TLS port
+./seine --pool-url stratum+ssl://pool.example.com:3443
+
+# Backup pools, tried in order
+./seine --pool-url stratum+tcp://pool.example.com:3333 \
+        --pool-url stratum+tcp://backup.example.com:3333
+
+# The short form many mining OS templates use
+./seine -o pool.example.com:3333 -u YOUR_ADDRESS.rig-01 -p x
+```
+
+- **TLS.** `stratum+ssl://` and `stratum+tls://` encrypt the connection. When you
+  name the pool by hostname, Seine checks its certificate like a browser does. When
+  you name it by IP address, the connection is encrypted without the name check,
+  which also suits pools whose certificate does not match the address you use.
+- **Failover.** List several pools with repeated `--pool-url` flags or commas
+  (`a:3333,b:3333`). If Seine cannot connect to or log in to a pool after two
+  tries, it moves to the next one. While on a backup it checks the first pool
+  every few minutes and switches back between shares once that pool answers.
+  The saved config keeps the whole list.
+- **Login.** `-u ADDRESS.WORKER` sets the payout address and worker name together;
+  `--pool-worker` overrides the worker part. `-p` is accepted and ignored, because
+  Blocknet pools do not use passwords.
+
 ## Dashboard controls
 
 Press `+` or `-` directly in the mining dashboard to add or remove one thread

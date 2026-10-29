@@ -1183,7 +1183,17 @@ fn build_tui_state(cfg: &Config, backends: &[BackendSlot]) -> TuiState {
         s.wallet_visible = cfg.mode == MiningMode::Daemon;
         s.api_url = match cfg.mode {
             MiningMode::Daemon => cfg.api_url.clone(),
-            MiningMode::Pool => cfg.pool_url.clone().unwrap_or_else(|| "---".to_string()),
+            MiningMode::Pool => cfg.pool_url.as_deref().map_or_else(
+                || "---".to_string(),
+                |urls| match urls.split(',').count() - 1 {
+                    0 => urls.to_string(),
+                    1 => format!("{} (+1 backup)", crate::pool::primary_pool_url(urls)),
+                    backups => format!(
+                        "{} (+{backups} backups)",
+                        crate::pool::primary_pool_url(urls)
+                    ),
+                },
+            ),
         };
         s.pool_worker = cfg.pool_worker.clone().unwrap_or_else(|| "---".to_string());
         s.threads = cpu_lane_count(backends) as usize;
