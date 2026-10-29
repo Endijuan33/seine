@@ -104,3 +104,19 @@ fn scan_reports_exactly_the_reference_hits() {
     // Two uncached blocks take the general path.
     scan_matches_reference(124);
 }
+
+#[test]
+fn single_block_layout_describes_the_faraday_header() {
+    let base = header(FARADAY_HEADER_BASE_LEN, 3);
+    let midstate = Blake2bPowMidstate::new(&BLAKE2B_POW_PERSONAL_MAINNET, &base).unwrap();
+    let layout = midstate.single_block_layout().unwrap();
+    // 28 header bytes then the nonce: word 3 high half and word 4 low half.
+    assert_eq!(
+        (layout.nonce_word, layout.nonce_shift, layout.message_words),
+        (3, 32, 5)
+    );
+    assert_eq!(layout.counter, 164);
+    assert!(layout.message[5..].iter().all(|&word| word == 0));
+    let straddle = Blake2bPowMidstate::new(&BLAKE2B_POW_PERSONAL_MAINNET, &header(124, 3)).unwrap();
+    assert!(straddle.single_block_layout().is_none());
+}

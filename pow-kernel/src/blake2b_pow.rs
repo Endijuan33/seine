@@ -52,6 +52,21 @@ impl std::fmt::Display for Blake2bPowError {
 
 impl std::error::Error for Blake2bPowError {}
 
+/// One-compression layout: hash `message` (with the nonce OR-ed in at
+/// `nonce_word`/`nonce_shift`) from chain value `h` as the final block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Blake2bPowSingleBlock {
+    pub h: [u64; 8],
+    /// Message words with the nonce bytes zeroed.
+    pub message: [u64; BLOCK_WORDS],
+    pub counter: u128,
+    pub nonce_word: usize,
+    /// Bit shift of the nonce inside `nonce_word`; a multiple of 8.
+    pub nonce_shift: u32,
+    /// Words from `message_words` onward are zero for every nonce.
+    pub message_words: usize,
+}
+
 /// Per-template BLAKE2b state; cheap to clone into each worker.
 #[derive(Debug, Clone)]
 pub struct Blake2bPowMidstate {
@@ -116,6 +131,23 @@ impl Blake2bPowMidstate {
     /// Number of compressions per nonce (1 for the Faraday header).
     pub fn compressions_per_nonce(&self) -> usize {
         self.tail_blocks
+    }
+
+    /// Inputs for an accelerator that hashes the single final block itself;
+    /// `None` when the nonce leaves two uncached blocks.
+    pub fn single_block_layout(&self) -> Option<Blake2bPowSingleBlock> {
+        if self.tail_blocks != 1 {
+            return None;
+        }
+        let nonce_end = self.nonce_word * 8 + (self.nonce_shift / 8) as usize + NONCE_BYTES;
+        Some(Blake2bPowSingleBlock {
+            h: self.h,
+            message: self.tail[..BLOCK_WORDS].try_into().expect("16 words"),
+            counter: self.total_len,
+            nonce_word: self.nonce_word,
+            nonce_shift: self.nonce_shift,
+            message_words: nonce_end.div_ceil(8),
+        })
     }
 
     /// Full 64-byte digest for one nonce.

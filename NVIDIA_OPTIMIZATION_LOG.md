@@ -22,6 +22,25 @@ cargo run --release -- --bench --bench-kind backend --backend nvidia --nvidia-de
 - Keep only changes that improve multi-round counted H/s without increasing correctness/runtime risk (OOM, crashes, unstable cancel/fence behavior).
 - Variance is expected from clocks and thermals; prioritize repeated 3-round results over single samples.
 
+## Faraday BLAKE2b-512 kernel
+
+Separate from the Argon2id engine (`src/backend/nvidia/blake2b.rs`, `blake2b_kernel.cu`); not wired into
+mining yet. The host compresses the template prefix, so each nonce is one final-block compression. NVRTC
+defines fix the nonce word/shift and the nonzero message words per header layout, so the message stays
+in registers and the zero padding words fold away. The device reports nonces whose first big-endian
+output limb passes the target; the host re-checks each candidate with the CPU kernel.
+
+Run on a GPU host (on the dev box, through `gpuq run --runner wsl ... --profile generic-exclusive`):
+
+```bash
+cargo +1.93.0 test --release --locked blake2b -- --ignored --nocapture --test-threads 1
+```
+
+- 2026-10-28, RTX 5090 (dev box, WSL), 156-byte header, 256 threads x 16 blocks/SM, 256 waves per launch:
+  `14.98 GH/s` over 5 s. A rough 32-bit integer estimate (~2,800 instructions per compression) puts the
+  ceiling near 18-19 GH/s. Untried: launch-shape sweep, precomputing round-0 columns that skip the
+  nonce words, SASS review.
+
 ## Baseline
 
 - Initial native CUDA backend baseline (`2b5ed78`): `0.065 H/s`.

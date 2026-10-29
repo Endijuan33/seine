@@ -210,6 +210,8 @@ mod library_tests {
     }
 }
 
+mod blake2b;
+
 const CUDA_KERNEL_SRC: &str = include_str!("nvidia_kernel.cu");
 const MAX_LANES_HARD_LIMIT: usize = 1024;
 const ASSIGN_CHANNEL_CAPACITY: usize = 256;
