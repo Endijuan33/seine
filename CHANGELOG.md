@@ -18,7 +18,7 @@ supported hardware only.
 - Seine accepts the `-o URL -u ADDRESS.WORKER -p x` launch flags that mining OS templates use, so it drops into existing rig setups without custom scripts.
 - **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
 - Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
-- Seine waits a few seconds before reconnecting when a pool closes a new connection, and follows a full pool's suggested wait, instead of reconnecting immediately in a loop. Self-hosted telemetry collectors need the schema 12 update before this release.
+- Seine backs off when a pool connection keeps failing (2 seconds, doubling to a minute) and follows a full pool's suggested wait, instead of reconnecting in a tight loop. Self-hosted telemetry collectors need the schema 12 update before this release.
 
 ## v0.2.45
 
