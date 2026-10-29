@@ -279,18 +279,20 @@ pub(crate) fn cohort_side_cache_blocks(
 
 /// Skipped-store permille for this host (see `set_skip_store_permille` in the
 /// kernel crate), or 0. On for Zen 5 desktops at 8 or more workers on Linux and
-/// Windows, and on Linux for Zen 4 desktops at 16 or more and Zen 4c EPYC at 128
-/// or more; off elsewhere.
+/// Windows, and on Linux for Zen 4 desktops at 16 or more, Zen 4c EPYC at 128 or
+/// more and Zen 3 EPYC at 24 or more; off elsewhere.
 pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
     let linux = cfg!(target_os = "linux");
-    if !(linux || cfg!(windows)) || !CpuKernel::Avx512Stream.is_supported() {
+    if !(linux || cfg!(windows)) {
         return 0;
     }
+    let avx512 = CpuKernel::Avx512Stream.is_supported();
     let identity = crate::runtime_identity::cpu_identity();
     match identity.vendor.as_deref() {
         // Raphael and Dragon Range (Ryzen 7000 desktop and HX laptop), Linux.
         Some("AuthenticAMD")
             if linux
+                && avx512
                 && identity.family == Some(0x19)
                 && identity.model == Some(0x61)
                 && workers >= 16 =>
@@ -299,18 +301,32 @@ pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
         }
         // Granite Ridge and Fire Range (Ryzen 9000 desktop and HX laptop), Linux and Windows.
         Some("AuthenticAMD")
-            if identity.family == Some(0x1a) && identity.model == Some(0x44) && workers >= 8 =>
+            if avx512
+                && identity.family == Some(0x1a)
+                && identity.model == Some(0x44)
+                && workers >= 8 =>
         {
             600
         }
         // Bergamo and Siena (Zen 4c EPYC), Linux.
         Some("AuthenticAMD")
             if linux
+                && avx512
                 && identity.family == Some(0x19)
                 && identity
                     .model
                     .is_some_and(|model| (0xa0..=0xaf).contains(&model))
                 && workers >= 128 =>
+        {
+            600
+        }
+        // Milan and Milan-X (Zen 3 EPYC), Linux.
+        Some("AuthenticAMD")
+            if linux
+                && CpuKernel::Avx2Stream.is_supported()
+                && identity.family == Some(0x19)
+                && identity.model == Some(0x01)
+                && workers >= 24 =>
         {
             600
         }

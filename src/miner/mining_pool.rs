@@ -2072,8 +2072,12 @@ fn assign_pool_job(
     let handled_at = Instant::now();
     // Returning an error exits the mining loop through normal backend teardown.
     // Merely ignoring this job would leave workers hashing the previous template.
-    blocknet_pow_spec::ensure_supported_pow(job.height, super::provisional_faraday_pow_allowed())
-        .map_err(|reason| anyhow::anyhow!(reason))?;
+    let pow = blocknet_pow_spec::ensure_supported_pow(
+        job.height,
+        super::provisional_faraday_pow_allowed(),
+    )
+    .map_err(|reason| anyhow::anyhow!(reason))?;
+    crate::backend::note_network_pow(pow);
     let nonce_count = job.nonce_count();
     if nonce_count == 0 {
         if mode.is_user() {

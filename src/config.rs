@@ -738,7 +738,7 @@ struct Cli {
     cpu_side_cache_blocks: Option<usize>,
 
     /// Experimental: arena fraction (permille, 500-1000) from which odd blocks
-    /// are not stored (AVX-512 streaming kernels); 0 disables, unset uses this
+    /// are not stored (AVX2 and AVX-512 streaming kernels); 0 disables, unset uses this
     /// CPU's default.
     #[arg(long, hide = true)]
     cpu_skip_store_permille: Option<u16>,

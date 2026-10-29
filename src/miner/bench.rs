@@ -399,6 +399,7 @@ pub(super) fn run_benchmark(cfg: &Config, shutdown: &AtomicBool) -> Result<()> {
     let cfg = &runtime_cfg;
     let instances = super::build_backend_instances(cfg);
     let backend_executor = super::backend_executor::BackendExecutor::new();
+    crate::backend::note_network_pow(cfg.bench_pow.algorithm());
 
     if cfg.bench_pow == BenchPow::Blake2b
         && matches!(

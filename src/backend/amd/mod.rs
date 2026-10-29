@@ -163,6 +163,9 @@ struct PendingControlAck {
 #[derive(Default)]
 struct NonblockingControlState {
     pending: Option<PendingControlAck>,
+    /// An acknowledgement received while waiting, kept until the caller
+    /// polls for that control again; cleared when new work is assigned.
+    completed: Option<(PendingControlKind, Result<()>)>,
 }
 
 pub struct AmdBackend {
@@ -279,6 +282,7 @@ impl AmdBackend {
     fn clear_nonblocking_control_state(&self) {
         if let Ok(mut state) = self.nonblocking_control.lock() {
             state.pending = None;
+            state.completed = None;
         }
     }
 
@@ -297,6 +301,13 @@ impl AmdBackend {
         Ok(())
     }
 
+    /// A completed cancel or fence predates work assigned after it.
+    fn forget_completed_control(&self) {
+        if let Ok(mut state) = self.nonblocking_control.lock() {
+            state.completed = None;
+        }
+    }
+
     fn control_nonblocking(&self, kind: PendingControlKind) -> Result<BackendCallStatus> {
         let tx = self.worker_control_tx()?;
         let mut state = self
@@ -304,11 +315,21 @@ impl AmdBackend {
             .lock()
             .map_err(|_| anyhow!("amd nonblocking control lock poisoned"))?;
 
+        if let Some((completed_kind, result)) = state.completed.take() {
+            result?;
+            if completed_kind == kind {
+                return Ok(BackendCallStatus::Complete);
+            }
+        }
         if let Some(pending) = state.pending.as_mut() {
             match pending.ack_rx.try_recv() {
                 Ok(result) => {
+                    let pending_kind = pending.kind;
                     state.pending = None;
                     result?;
+                    if pending_kind == kind {
+                        return Ok(BackendCallStatus::Complete);
+                    }
                 }
                 Err(TryRecvError::Empty) => {
                     return Ok(BackendCallStatus::Pending);
@@ -523,12 +544,14 @@ impl PowBackend for AmdBackend {
     }
 
     fn assign_work(&self, work: WorkAssignment) -> Result<()> {
+        self.forget_completed_control();
         self.worker_assignment_tx()?
             .send(WorkerCommand::Assign(work))
             .map_err(|_| anyhow!("amd worker channel closed while assigning work"))
     }
 
     fn assign_work_batch(&self, work: &[WorkAssignment]) -> Result<()> {
+        self.forget_completed_control();
         let mut batch = normalize_assignment_batch(work)?;
         match batch.len() {
             0 => Ok(()),
@@ -545,6 +568,7 @@ impl PowBackend for AmdBackend {
         work: &[WorkAssignment],
         deadline: Instant,
     ) -> Result<()> {
+        self.forget_completed_control();
         self.assign_work_batch(work)?;
         if Instant::now() > deadline {
             return Err(anyhow!(
@@ -566,6 +590,7 @@ impl PowBackend for AmdBackend {
     }
 
     fn assign_work_batch_nonblocking(&self, work: &[WorkAssignment]) -> Result<BackendCallStatus> {
+        self.forget_completed_control();
         let mut batch = normalize_assignment_batch(work)?;
         if batch.is_empty() {
             return Ok(BackendCallStatus::Complete);
@@ -600,8 +625,9 @@ impl PowBackend for AmdBackend {
 
         match pending.ack_rx.recv_timeout(wait_for) {
             Ok(result) => {
+                let pending_kind = pending.kind;
                 state.pending = None;
-                result?;
+                state.completed = Some((pending_kind, result));
                 Ok(())
             }
             Err(RecvTimeoutError::Timeout) => Ok(()),
@@ -1452,6 +1478,62 @@ fn ensure_compatible_template(first: &Arc<WorkTemplate>, second: &Arc<WorkTempla
 mod tests {
     use super::*;
     use crate::backend::NonceChunk;
+
+    /// Installs a worker that acknowledges every cancel and fence at once and
+    /// counts the controls it receives.
+    fn install_acking_worker(backend: &AmdBackend) -> Arc<std::sync::atomic::AtomicUsize> {
+        let received = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (assignment_tx, _assignment_rx) = bounded::<WorkerCommand>(4);
+        let (control_tx, control_rx) = bounded::<WorkerCommand>(4);
+        let seen = Arc::clone(&received);
+        let handle = thread::spawn(move || {
+            while let Ok(cmd) = control_rx.recv() {
+                match cmd {
+                    WorkerCommand::Cancel(ack) | WorkerCommand::Fence(ack) => {
+                        seen.fetch_add(1, Ordering::SeqCst);
+                        let _ = ack.send(Ok(()));
+                    }
+                    WorkerCommand::Stop => break,
+                    _ => {}
+                }
+            }
+        });
+        *backend.worker.lock().unwrap() = Some(AmdWorker {
+            assignment_tx,
+            control_tx,
+            handle,
+        });
+        received
+    }
+
+    #[test]
+    fn nonblocking_cancel_completes_on_the_acknowledgement_it_waited_for() {
+        let backend = AmdBackend::new(None, AmdBackendTuningOptions::default());
+        let received = install_acking_worker(&backend);
+        let mut status = backend.cancel_work_nonblocking().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while status == BackendCallStatus::Pending && Instant::now() < deadline {
+            backend
+                .wait_for_nonblocking_progress(Duration::from_millis(20))
+                .unwrap();
+            status = backend.cancel_work_nonblocking().unwrap();
+        }
+        assert_eq!(status, BackendCallStatus::Complete);
+        assert_eq!(received.load(Ordering::SeqCst), 1, "one cancel per request");
+
+        // A new request after new work is a fresh cancel, not the old ack.
+        backend.forget_completed_control();
+        let mut status = backend.cancel_work_nonblocking().unwrap();
+        while status == BackendCallStatus::Pending && Instant::now() < deadline {
+            backend
+                .wait_for_nonblocking_progress(Duration::from_millis(20))
+                .unwrap();
+            status = backend.cancel_work_nonblocking().unwrap();
+        }
+        assert_eq!(status, BackendCallStatus::Complete);
+        assert_eq!(received.load(Ordering::SeqCst), 2);
+        backend.stop();
+    }
     use blocknet_pow_spec::pow_params;
 
     fn test_template(work_id: u64) -> Arc<WorkTemplate> {

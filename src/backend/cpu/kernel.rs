@@ -196,6 +196,10 @@ fn worker_loop_with_allocator<const MEMORY_KB: u32>(
             continue;
         }
         // BLAKE2b work needs no arena; one is allocated again when Argon2 work returns.
+        if arena.is_none() && shared.blake2b_workers.load(Ordering::Acquire) && !ready {
+            mark_worker_ready(&shared);
+            ready = true;
+        }
         if arena.is_none() && !shared.blake2b_workers.load(Ordering::Acquire) {
             // Account for first-touch memory before allocation completes. A
             // concurrent budget refresh must not treat our own new arena as
@@ -1752,6 +1756,11 @@ mod tests {
             },
         );
         backend.shared.started.store(true, Ordering::Release);
+        // BLAKE2b-only workers skip the Argon2 arenas they would allocate at start.
+        backend
+            .shared
+            .blake2b_workers
+            .store(true, Ordering::Release);
         let (tx, rx) = unbounded();
         *backend.shared.event_dispatch_tx.write().unwrap() = Some(tx);
         let handles: Vec<_> = (0..LANES)
@@ -1806,8 +1815,14 @@ mod tests {
                 assert!(Instant::now() < until, "BLAKE2b assignment did not finish");
                 std::thread::sleep(Duration::from_millis(2));
             }
+            // A lane can still be sending its last solutions when the
+            // assignment's pending count reaches zero.
             let mut found = BTreeMap::new();
-            for event in rx.try_iter() {
+            while found.len() < expected.len() {
+                let Ok(event) = rx.recv_timeout(until.saturating_duration_since(Instant::now()))
+                else {
+                    break;
+                };
                 if let BackendEvent::Solution(solution) = event {
                     assert_eq!(solution.epoch, 1);
                     let hash = solution.hash.expect("CPU solutions carry their hash");
@@ -1816,6 +1831,12 @@ mod tests {
                         "duplicate nonce {}",
                         solution.nonce
                     );
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            for event in rx.try_iter() {
+                if let BackendEvent::Solution(solution) = event {
+                    panic!("unexpected extra solution for nonce {}", solution.nonce);
                 }
             }
             assert!(!expected.is_empty());
