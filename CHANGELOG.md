@@ -16,7 +16,7 @@ supported hardware only.
 - **CPU threads start on a new block about 0.3 s sooner.** When the pool moves to a new block, Seine now drops hashes that can no longer win instead of finishing them first (job switch measured at 240 ms → 7 ms on a Zen 4 EPYC). Job refreshes within the same block still finish their hashes, so those shares still count.
 - **Ryzen 9000 and 7000 desktops mine faster:** about 16% on Zen 5 (Ryzen 7 9700X) on Linux and 14% on Windows, and 7% on Zen 4 (Ryzen 7 7700X) on Linux, with every thread in use.
 - **About 7% faster on AMD Zen 4c EPYC on Linux** (measured on an EPYC 9754).
-- **About 7% faster on AMD Zen 3 EPYC on Linux** (EPYC 7003 series, measured on a dual-socket EPYC 7443).
+- **About 7% faster on AMD Zen 3 EPYC and 5% faster on Zen 2 EPYC on Linux** (measured on a dual-socket EPYC 7443 and an AWS instance with AMD Zen 2 EPYC).
 - **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
 - Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
 - Seine waits a few seconds before reconnecting when a pool closes a new connection, and follows a full pool's suggested wait, instead of reconnecting immediately in a loop. Self-hosted telemetry collectors need the schema 12 update before this release.
