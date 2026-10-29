@@ -278,29 +278,35 @@ pub(crate) fn cohort_side_cache_blocks(
 }
 
 /// Skipped-store permille for this host (see `set_skip_store_permille` in the
-/// kernel crate), or 0. On for Zen 4 desktops at 16 or more workers, Zen 5
-/// desktops at 8 or more and Zen 4c EPYC at 128 or more; off elsewhere.
+/// kernel crate), or 0. On for Zen 5 desktops at 8 or more workers on Linux and
+/// Windows, and on Linux for Zen 4 desktops at 16 or more and Zen 4c EPYC at 128
+/// or more; off elsewhere.
 pub(crate) fn cohort_skip_store_permille(workers: usize) -> u16 {
-    if !cfg!(target_os = "linux") || !CpuKernel::Avx512Stream.is_supported() {
+    let linux = cfg!(target_os = "linux");
+    if !(linux || cfg!(windows)) || !CpuKernel::Avx512Stream.is_supported() {
         return 0;
     }
     let identity = crate::runtime_identity::cpu_identity();
     match identity.vendor.as_deref() {
-        // Raphael and Dragon Range (Ryzen 7000 desktop and HX laptop).
+        // Raphael and Dragon Range (Ryzen 7000 desktop and HX laptop), Linux.
         Some("AuthenticAMD")
-            if identity.family == Some(0x19) && identity.model == Some(0x61) && workers >= 16 =>
+            if linux
+                && identity.family == Some(0x19)
+                && identity.model == Some(0x61)
+                && workers >= 16 =>
         {
             600
         }
-        // Granite Ridge and Fire Range (Ryzen 9000 desktop and HX laptop).
+        // Granite Ridge and Fire Range (Ryzen 9000 desktop and HX laptop), Linux and Windows.
         Some("AuthenticAMD")
             if identity.family == Some(0x1a) && identity.model == Some(0x44) && workers >= 8 =>
         {
             600
         }
-        // Bergamo and Siena (Zen 4c EPYC).
+        // Bergamo and Siena (Zen 4c EPYC), Linux.
         Some("AuthenticAMD")
-            if identity.family == Some(0x19)
+            if linux
+                && identity.family == Some(0x19)
                 && identity
                     .model
                     .is_some_and(|model| (0xa0..=0xaf).contains(&model))
