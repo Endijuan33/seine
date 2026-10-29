@@ -27,7 +27,9 @@ first-hardware iteration checklist.
   scope plus `__builtin_amdgcn_wave_barrier()`), with `SEINE_AMD_BLOCK_SYNC=1`
   restoring `__syncthreads()`. Lane memory is allocated in 32-lane chunks
   (`LANE_CHUNK_LANES`) addressed through a device-side pointer table. Both
-  passed the differential on an MI325X on 2026-10-28.
+  passed the differential on an MI325X on 2026-10-28, and the wave32 path passed
+  it on two RDNA cards (R9700, V710) the same evening; the V620 is blocked on
+  its Azure driver.
 - Autotune: stub. Lanes derive from free VRAM with allocation/probe backoff
   (11 × 2 GiB lanes expected on 24 GB); launch depth fixed at 1. Regcap/depth
   sweeps and any AMD-specific scheduling work come after this checklist
@@ -107,11 +109,59 @@ uses (`hipcc --offload-arch=<arch> -mno-wavefrontsize64 -DSEINE_WAVE_SYNC=1
 gfx1102, gfx1151 (Strix Halo) and gfx1200/gfx1201 all build cleanly (2026-10-28,
 static check only; no RDNA device has executed it).
 
-Follow-ups, in order of expected value: a run on an RDNA wave32 card, which is
-the fleet target and has not executed the kernel or the wave-scoped barrier yet;
+Follow-ups, in order of expected value (RDNA results are in the next section):
 a wave64-native kernel (one lane per 64-thread wavefront, or four lanes per wave
-with 16-wide shuffles) and launch depth > 1 for CDNA. Do not quote these numbers as AMD GPU
-performance for the README until an RDNA card has been measured.
+with 16-wide shuffles) and launch depth > 1 for CDNA.
+
+## RDNA results (2026-10-28, wave32: R9700, V710; V620 blocked)
+
+All three ran seine master 5fa2b02 (`--features amd`, rust 1.93) through the
+same gates as the MI325X: (a) unit tests incl. device props and hipRTC compile,
+(b) the CPU differential, then `scripts/cohort/remote_amd_bench.sh` lane sweeps
+(20 s x 3 rounds) and a 60 s x 2 confirmation at the best lane count, and a
+4 min pool smoke test on bntpool.com:3333. Evidence:
+`benchmark-evidence/hashrate-20261026/amd-r9700`, `amd-v710`, `amd-v620`.
+
+| Card (arch) | Host | VRAM seen | Lanes | 60 s x 2 | Peak pkg power | Pool test |
+|---|---|---|---|---|---|---|
+| Radeon AI PRO R9700 (RDNA4 gfx1201, 64 CU, 2350 MHz) | Hostkey NL bare metal, Ubuntu 24.04, kernel 6.8, amdgpu-dkms 7.1.9 + ROCm 10.1 | 32 624 MiB | 15 (max) | **6.66 H/s** (6.59-6.73); 12 lanes 4.61 | 103 W of 300 W | 9/9 shares, 0 stale, 6.6 H/s |
+| Radeon PRO V710 MxGPU (RDNA3 gfx1101, 54 CU, 2585 MHz) | Azure NV24ads_V710_v5 VF, Ubuntu 24.04, kernel 7.0-azure, amdgpu-dkms 7.1.9 + ROCm 10.1 | 25 712 MiB | 12 (max) | **5.31 H/s** (5.27-5.35) | 65 W | 8/8 shares, 0 stale, 5.2 H/s |
+| Radeon PRO V620 MxGPU (RDNA2 gfx1030, 72 CU, 2570 MHz) | Azure NG32ads_V620_v1 VF, Ubuntu 24.04 | 30 288 MiB | blocked: vendor driver does not build on kernels 7.0/6.8-azure; in-tree amdgpu computes nothing | - | - | - |
+
+Sweep shape on both measured cards: linear in lanes (R9700 1/2/4/8/12 lanes =
+0.21/0.80/1.26/3.67/4.73 H/s; V710 1/2/4/8/10/12 = 0.29/0.60/1.56/3.56/4.46/5.26)
+up to the VRAM ceiling of 2 GiB per lane, with 20 s rounds too short to be
+stable above 12 lanes (3 s hashes; use 60 s rounds there). Both cards sit at a
+third or less of their power budget, so like the MI325X the kernel is
+occupancy-bound rather than memory- or power-bound: the lane count is pinned by
+VRAM/2 GiB while most CUs idle. The tuning surface is the same as on CDNA
+(per-lane memory below 2 GiB, more lanes per wavefront, launch depth), now
+measurable on the fleet's wave32 cards.
+
+V620: the Microsoft-published amdgpu-dkms 6.12.12 (the only driver Microsoft
+supports for NGads V620) does not build against the kernel the Canonical
+24.04 image now boots (7.0.0-azure; `kcl_fence.h __dma_fence_is_later` and
+`dma_map_ops.map_resource` errors). The in-tree amdgpu binds the VF and
+`rocminfo` lists gfx1030, but HIP hangs under it (`Fence fallback timer expired
+on ring sdma1/sdma2`), so the unit tests never return. Ubuntu's `linux-image-azure-lts-24.04` (6.8.0-1071-azure)
+does not help: the dkms build fails there too (`pci_resize_resource` signature)
+and its in-tree amdgpu initialises HIP (hipRTC compile, hipMemGetInfo 30 288 MiB)
+but computes nothing (0 hashes in a 10 s round, then a segfault at teardown, with
+`Fence fallback timer` messages piling up). The V620 therefore stays unmeasured
+until Microsoft's driver builds on a current Azure kernel; the next attempt should
+start from the image Microsoft's guide targets (Ubuntu 22.04 or a pinned older
+24.04 kernel) rather than the current `ubuntu-24_04-lts` image. Logs:
+`amd-v620/results/` (rocm-install.log, dkms-make-6.8.log, dmesg-6.8.txt, v620-probe.log).
+
+Rental notes: Hostkey bills hourly from a prepaid 48 h reserve (an invoice for
+the shortfall when the balance is low) and cancels from the server page (More >
+Cancel service > Terminate now); Azure needs a pay-as-you-go subscription
+before any GPU quota (`az quota update` on a free trial returns
+`ResourceNotAvailableForOffer`; after the upgrade both families were approved
+within seconds), Secure Boot off, and `az.py` handles root's forced-command key
+line. ROCm 10 ships `amd-smi` only, so the bench scripts' `rocm-smi --showpower`
+needs a shim (`SOCKET_POWER` from `amd-smi metric -p`), and the amdgpu module
+may need `/etc/modules-load.d/amdgpu.conf` after the first install reboot.
 
 Hourly RDNA sources (verified 2026-10-28): Hostkey Netherlands bare metal
 `gpu.v2-R9700` (1x Radeon AI PRO R9700 32 GB, RDNA4 gfx1201, $0.705/h, Ubuntu
@@ -130,8 +180,9 @@ needs the Microsoft-published 6.4.2.2 build via `MODE=azure-v620`), then
 
 The first native HIP result exists as of 2026-10-28 (see "First hardware
 results" below): an AMD Instinct MI325X (CDNA3, gfx942, wave64) on DigitalOcean
-passed every gate in (a) and (b) and benchmarked 18.5 H/s at 64 lanes. No RDNA
-(wave32) card has run yet; the RX 7900 XTX target below is still unmeasured.
+passed every gate in (a) and (b) and benchmarked 18.5 H/s at 64 lanes. Two RDNA
+(wave32) cards followed on 2026-10-28 (see "RDNA results"); the RX 7900 XTX
+itself is still unmeasured.
 Confirm the exact GPU, native device access and complete OS/kernel/driver/HIP
 combination before reserving a machine. A provider's "AMD" label or installed
 shared libraries do not prove the device is usable by this backend.
