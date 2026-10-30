@@ -11,6 +11,7 @@ mod bench;
 pub(crate) mod block_latency;
 mod hash_poll;
 mod hashrate_tracker;
+pub(crate) mod live_stats;
 mod mining;
 mod mining_pool;
 mod mining_tui;
@@ -712,10 +713,17 @@ fn run_with_thread_control_inner(
                         ..AmdBackendTuningOptions::default()
                     },
                 )) as Arc<dyn PowBackend>,
-                BackendKind::Metal => Arc::new(MetalBackend::new(
-                    cfg.metal_max_lanes,
-                    cfg.metal_hashes_per_launch_per_lane,
-                )) as Arc<dyn PowBackend>,
+                BackendKind::Metal => {
+                    let backend = MetalBackend::new(
+                        cfg.metal_max_lanes,
+                        cfg.metal_hashes_per_launch_per_lane,
+                    );
+                    Arc::new(if cfg.metal_blake2b_only {
+                        backend.blake2b_only()
+                    } else {
+                        backend
+                    }) as Arc<dyn PowBackend>
+                }
                 BackendKind::Nvidia => unreachable!(),
             };
             (backend_spec, backend)
@@ -1271,6 +1279,14 @@ fn maybe_autotune_cpu_threads(
     }
 
     let tag = runtime_mode_tag(mode);
+    // BLAKE2b work runs every CPU worker; the thread search measures Argon2.
+    if cfg.bench_pow == crate::config::BenchPow::Blake2b {
+        info(
+            tag,
+            "cpu-autotune | skipped for BLAKE2b; every CPU worker runs",
+        );
+        return Ok(());
+    }
     let cpu_instance_count = cfg
         .backend_specs
         .iter()
@@ -2436,10 +2452,17 @@ fn build_backend_instances(cfg: &Config) -> Vec<(BackendSpec, Arc<dyn PowBackend
                         ..AmdBackendTuningOptions::default()
                     },
                 )) as Arc<dyn PowBackend>,
-                BackendKind::Metal => Arc::new(MetalBackend::new(
-                    cfg.metal_max_lanes,
-                    cfg.metal_hashes_per_launch_per_lane,
-                )) as Arc<dyn PowBackend>,
+                BackendKind::Metal => {
+                    let backend = MetalBackend::new(
+                        cfg.metal_max_lanes,
+                        cfg.metal_hashes_per_launch_per_lane,
+                    );
+                    Arc::new(if cfg.metal_blake2b_only {
+                        backend.blake2b_only()
+                    } else {
+                        backend
+                    }) as Arc<dyn PowBackend>
+                }
             };
             (backend_spec, backend)
         })
@@ -3955,6 +3978,8 @@ pub(crate) mod tests {
             mode: MiningMode::Daemon,
             pool_url: None,
             pool_worker: None,
+            pool_proxy: None,
+            proxy_listen: None,
             dev_fee_pool_worker: "seine-devfee-test".to_string(),
             api_url: "http://127.0.0.1:8332".to_string(),
             token: Some("test-token".to_string()),
@@ -4021,6 +4046,7 @@ pub(crate) mod tests {
             amd_max_lanes: None,
             metal_max_lanes: None,
             metal_hashes_per_launch_per_lane: 2,
+            metal_blake2b_only: false,
             backend_assign_timeout: Duration::from_millis(1_000),
             backend_assign_timeout_strikes: 3,
             backend_control_timeout: Duration::from_millis(60_000),
@@ -4430,7 +4456,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn blake2b_work_quarantines_backends_without_support() {
+    fn blake2b_work_skips_backends_without_support() {
         let backend_executor = backend_executor::BackendExecutor::new();
         let supported = Arc::new(MockState::default());
         let unsupported = Arc::new(MockState::default());
@@ -4469,14 +4495,21 @@ pub(crate) mod tests {
             &backend_executor,
         )
         .expect("the BLAKE2b backend keeps mining");
-        assert_eq!(backends.len(), 1);
-        assert_eq!(backends[0].id, 1);
+        // The other backend waits for work it can hash instead of being quarantined.
+        assert_eq!(backends.len(), 2);
         assert_eq!(supported.assign_calls.load(Ordering::Relaxed), 1);
         assert_eq!(unsupported.assign_calls.load(Ordering::Relaxed), 0);
         assert!(
-            wait_for_stop_call(&unsupported, Duration::from_millis(250)),
-            "the backend without BLAKE2b must stop"
+            !wait_for_stop_call(&unsupported, Duration::from_millis(100)),
+            "the idle backend must keep running"
         );
+        distribute_work(
+            &mut backends,
+            options(crate::backend::PowAlgorithm::Argon2id),
+            &backend_executor,
+        )
+        .expect("both backends hash Argon2");
+        assert_eq!(unsupported.assign_calls.load(Ordering::Relaxed), 1);
 
         let only_unsupported = Arc::new(MockState::default());
         let mut backends = vec![slot(

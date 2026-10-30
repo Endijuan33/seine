@@ -19,11 +19,15 @@ use cudarc::nvrtc::Ptx;
 
 use super::{
     build_cubin_cache_key, compile_cuda_module_with_nvrtc_fallback, cubin_cache_file_path,
-    cuda_driver_err, load_cached_cubin, nvrtc_compiler_identity, persist_cached_cubin,
-    require_cuda_libraries, NvrtcModuleArtifact,
+    cuda_driver_err, load_cached_cubin, nvrtc_available, nvrtc_compiler_identity,
+    persist_cached_cubin, require_cuda_driver, NvrtcModuleArtifact,
 };
 
 const KERNEL_SRC: &str = include_str!("blake2b_kernel.cu");
+/// `KERNEL_SRC` built for `FARADAY_SHAPE` as PTX, loaded through the driver
+/// when NVRTC is not installed. Regenerate with `scripts/gen_blake2b_ptx.py`
+/// whenever the kernel changes.
+const FARADAY_PTX: &str = include_str!("blake2b_faraday.ptx");
 const KERNEL_NAME: &str = "blake2b_pow_scan_kernel";
 const PROGRAM_NAME: &str = "seine_blake2b_pow.cu";
 const THREADS_PER_BLOCK: u32 = 256;
@@ -56,6 +60,14 @@ struct KernelShape {
     pre_columns: u8,
 }
 
+/// Layout of the Faraday header base (156 bytes) that `FARADAY_PTX` is built for.
+const FARADAY_SHAPE: KernelShape = KernelShape {
+    nonce_word: 3,
+    nonce_shift: 32,
+    message_words: 5,
+    pre_columns: 0b1001,
+};
+
 impl KernelShape {
     fn of(layout: &Blake2bPowSingleBlock) -> Self {
         Self {
@@ -85,11 +97,13 @@ pub(super) struct CudaBlake2bEngine {
     /// Read by the benchmark launch-shape override.
     #[cfg_attr(not(test), allow(dead_code))]
     sm_count: u32,
+    /// Tests: load `FARADAY_PTX` even when NVRTC is available.
+    force_prebuilt: bool,
 }
 
 impl CudaBlake2bEngine {
     pub(super) fn new(device_index: u32, cubin_cache_dir: &Path) -> Result<Self> {
-        require_cuda_libraries()?;
+        require_cuda_driver()?;
         let ctx = CudaContext::new(device_index as usize).map_err(|err| {
             anyhow!("failed to open CUDA context on device {device_index}: {err:?}")
         })?;
@@ -115,6 +129,7 @@ impl CudaBlake2bEngine {
             grid_blocks: u32::try_from(sm_count.max(1)).unwrap_or(1) * BLOCKS_PER_SM,
             threads_per_block: THREADS_PER_BLOCK,
             sm_count: u32::try_from(sm_count.max(1)).unwrap_or(1),
+            force_prebuilt: false,
         })
     }
 
@@ -230,6 +245,22 @@ impl CudaBlake2bEngine {
     fn kernel(&mut self, shape: KernelShape) -> Result<CudaFunction> {
         if let Some((_, kernel)) = self.kernels.iter().find(|(known, _)| *known == shape) {
             return Ok(kernel.clone());
+        }
+        if !nvrtc_available() || self.force_prebuilt {
+            if shape != FARADAY_SHAPE {
+                return Err(anyhow!(
+                    "CUDA NVRTC library is unavailable; only Faraday block headers have a prebuilt BLAKE2b kernel"
+                ));
+            }
+            let module = self
+                .ctx
+                .load_module(Ptx::from_src(FARADAY_PTX))
+                .map_err(|err| anyhow!("failed to load the prebuilt BLAKE2b kernel: {err:?}"))?;
+            let kernel = module
+                .load_function(KERNEL_NAME)
+                .map_err(|err| anyhow!("failed to load {KERNEL_NAME}: {err:?}"))?;
+            self.kernels.push((shape, kernel.clone()));
+            return Ok(kernel);
         }
         let common = vec![
             "--std=c++14".to_string(),
@@ -377,6 +408,27 @@ mod tests {
         CudaBlake2bEngine::new(0, &dir).expect("CUDA BLAKE2b engine on device 0")
     }
 
+    #[test]
+    fn prebuilt_ptx_matches_the_kernel_source_and_faraday_layout() {
+        use sha2::{Digest, Sha256};
+        let digest = hex::encode(Sha256::digest(KERNEL_SRC.as_bytes()));
+        assert!(
+            FARADAY_PTX.contains(&format!("// kernel-sha256: {digest}\n")),
+            "blake2b_faraday.ptx is stale: run scripts/gen_blake2b_ptx.py"
+        );
+        let layout = midstate(FARADAY_HEADER_BASE_LEN)
+            .single_block_layout()
+            .expect("the Faraday header fits one final block");
+        assert_eq!(KernelShape::of(&layout), FARADAY_SHAPE);
+        assert!(FARADAY_PTX.contains(&format!(
+            "-DSEINE_B2_NONCE_WORD={} -DSEINE_B2_NONCE_SHIFT={} -DSEINE_B2_MSG_WORDS={} -DSEINE_B2_PRE_COLUMNS={}",
+            FARADAY_SHAPE.nonce_word,
+            FARADAY_SHAPE.nonce_shift,
+            FARADAY_SHAPE.message_words,
+            FARADAY_SHAPE.pre_columns
+        )));
+    }
+
     fn midstate(len: usize) -> Blake2bPowMidstate {
         let header: Vec<u8> = (0..len).map(|i| (i * 37 + 11) as u8).collect();
         Blake2bPowMidstate::new(&BLAKE2B_POW_PERSONAL_MAINNET, &header).unwrap()
@@ -421,10 +473,29 @@ mod tests {
 
     #[test]
     #[ignore = "requires NVIDIA GPU + CUDA runtime; run manually under gpuq"]
+    fn gpu_blake2b_prebuilt_ptx_matches_cpu_kernel() {
+        let mut engine = engine("prebuilt");
+        engine.force_prebuilt = true;
+        let midstate = midstate(FARADAY_HEADER_BASE_LEN);
+        let count = 1u64 << 22;
+        for start in [0u64, u64::MAX - (count / 2)] {
+            for target in [target_with_limb0(u64::MAX >> 16), [0u8; 32]] {
+                let gpu = engine.scan(&midstate, start, count, &target).unwrap();
+                let mut cpu = Vec::new();
+                midstate.scan(start, count, &target, |nonce| cpu.push(nonce));
+                assert_eq!(gpu, cpu, "start={start}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires NVIDIA GPU + CUDA runtime; run manually under gpuq"]
     fn gpu_blake2b_rate() {
         // SEINE_B2_SHAPES="256x16,128x32" sweeps threads-per-block x blocks-per-SM;
         // SEINE_B2_RUNS repeats each shape (default 1).
         let mut engine = engine("rate");
+        // SEINE_B2_PREBUILT=1 times the prebuilt PTX instead of NVRTC's build.
+        engine.force_prebuilt = std::env::var_os("SEINE_B2_PREBUILT").is_some();
         let midstate = midstate(FARADAY_HEADER_BASE_LEN);
         let target = target_with_limb0(0);
         let shapes: Vec<(u32, u32)> = std::env::var("SEINE_B2_SHAPES")

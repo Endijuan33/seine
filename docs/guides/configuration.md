@@ -76,6 +76,11 @@ which is what Blocknet pools run.
   tries, it moves to the next one. While on a backup it checks the first pool
   every few minutes and switches back between shares once that pool answers.
   The saved config keeps the whole list.
+- **Proxy.** `--pool-proxy socks5://host:port` reaches every pool through a
+  SOCKS5 proxy, for networks that block mining ports. Add `user:pass@` before the
+  host if the proxy needs a login. Tor (`socks5://127.0.0.1:9050`) and an SSH tunnel
+  (`ssh -D 1080 yourserver`, then `socks5://127.0.0.1:1080`) both work. Only pool
+  connections use the proxy; pool stats and update checks connect directly.
 - **Login.** `-u ADDRESS.WORKER` sets the payout address and worker name together;
   `--pool-worker` overrides the worker part. `-p` is accepted and ignored, because
   Blocknet pools do not use passwords.
@@ -121,6 +126,8 @@ startup. Full addresses work without contacting the resolver.
 
 Seine's dev fee is a flat **2% of mining time**, on every pool and in solo mode.
 It funds continued miner development. The first 10 minutes of each run are fee-free.
+Dev-fee rounds mine on bntpool.com; if your network cannot reach it, they mine on
+your own pool instead, so the miner never sits idle.
 
 ## Control API
 

@@ -21,7 +21,7 @@ bs58 = "0.5"
 clap = { version = "4.5", features = ["derive"] }
 curve25519-dalek = "4.1"
 crossterm = "0.28"
-ctrlc = "3.4"
+ctrlc = { version = "3.4", features = ["termination"] }
 crossbeam-channel = "0.5"
 core_affinity = "0.8"
 getrandom = "0.2"

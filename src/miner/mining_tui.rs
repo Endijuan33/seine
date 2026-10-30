@@ -186,7 +186,7 @@ impl TuiDisplay {
     }
 }
 
-fn should_zero_current_hashrate(state_label: &str) -> bool {
+pub(super) fn should_zero_current_hashrate(state_label: &str) -> bool {
     matches!(
         state_label,
         "wallet-required"
@@ -197,7 +197,7 @@ fn should_zero_current_hashrate(state_label: &str) -> bool {
     )
 }
 
-fn current_hashrate_window_overrides(backends: &[BackendSlot]) -> BTreeMap<u64, f64> {
+pub(super) fn current_hashrate_window_overrides(backends: &[BackendSlot]) -> BTreeMap<u64, f64> {
     let mut overrides = BTreeMap::new();
     for slot in backends {
         if let Some(window_secs) = current_hashrate_window_secs_for_backend(slot.backend.name()) {
@@ -259,6 +259,7 @@ pub(super) fn init_tui_display(
 }
 
 pub(super) fn update_tui(tui: &mut Option<TuiDisplay>, stats: &Stats, view: RoundUiView<'_>) {
+    super::live_stats::record(stats, &view);
     if let Some(display) = tui.as_mut() {
         display.update(stats, view);
     }
@@ -280,6 +281,7 @@ pub(super) fn set_tui_dev_fee_active(tui: &mut Option<TuiDisplay>, active: bool)
 }
 
 pub(super) fn set_tui_state_label(tui: &mut Option<TuiDisplay>, state_label: &str) {
+    super::live_stats::set_state(state_label);
     if let Some(display) = tui.as_mut() {
         display.set_state_and_render(state_label);
     }

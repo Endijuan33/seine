@@ -108,7 +108,7 @@ pub(crate) fn info(tag: &str, message: impl AsRef<str>) {
     log(Level::Info, tag, message.as_ref());
 }
 
-pub(super) fn success(tag: &str, message: impl AsRef<str>) {
+pub(crate) fn success(tag: &str, message: impl AsRef<str>) {
     log(Level::Success, tag, message.as_ref());
 }
 

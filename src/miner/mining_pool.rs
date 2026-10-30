@@ -95,6 +95,7 @@ fn should_apply_submit_ack_difficulty_immediately(_mode: PoolConnectionMode) -> 
 struct PoolConnectionConfig {
     mode: PoolConnectionMode,
     pool_url: String,
+    proxy: Option<crate::pool::SocksProxy>,
     address: String,
     worker: String,
 }
@@ -679,6 +680,18 @@ fn log_pool_issue_timing(
     warn("POOL", parts.join(" "));
 }
 
+/// Dev-fee rounds mine on the dev pool, then fall back to the user's own
+/// pools when it cannot be reached, so they never leave the miner idle.
+fn dev_pool_urls(user_pool_urls: &str) -> String {
+    let mut urls = vec![DEV_POOL_URL.to_string()];
+    for url in user_pool_urls.split(',').map(str::trim) {
+        if !url.is_empty() && !urls.iter().any(|existing| existing == url) {
+            urls.push(url.to_string());
+        }
+    }
+    urls.join(",")
+}
+
 fn build_pool_connection_configs(
     cfg: &Config,
 ) -> Result<(PoolConnectionConfig, PoolConnectionConfig)> {
@@ -698,12 +711,14 @@ fn build_pool_connection_configs(
     let user = PoolConnectionConfig {
         mode: PoolConnectionMode::User,
         pool_url: user_pool_url,
+        proxy: cfg.pool_proxy.clone(),
         address: user_address,
         worker: user_worker,
     };
     let dev = PoolConnectionConfig {
         mode: PoolConnectionMode::Dev,
-        pool_url: DEV_POOL_URL.to_string(),
+        pool_url: dev_pool_urls(&user.pool_url),
+        proxy: cfg.pool_proxy.clone(),
         address: DEV_ADDRESS.to_string(),
         worker: cfg.dev_fee_pool_worker.clone(),
     };
@@ -721,8 +736,9 @@ fn connect_pool_session(
         render_tui_now(tui);
     }
 
-    let pool_client = PoolClient::connect(
+    let pool_client = PoolClient::connect_via(
         &connection.pool_url,
+        connection.proxy.as_ref(),
         connection.address.clone(),
         connection.worker.clone(),
         shutdown,
@@ -732,11 +748,16 @@ fn connect_pool_session(
         info(
             "CONN",
             format!(
-                "connecting ({}) to {} as {}.{}",
+                "connecting ({}) to {} as {}.{}{}",
                 connection.mode.as_str(),
                 connection.pool_url,
                 compact_address,
-                connection.worker
+                connection.worker,
+                connection
+                    .proxy
+                    .as_ref()
+                    .map(|proxy| format!(" via {}", proxy.display()))
+                    .unwrap_or_default()
             ),
         );
     }
@@ -3039,6 +3060,18 @@ fn compact_pool_address_for_log(address: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dev_fee_rounds_fall_back_to_the_users_pools() {
+        assert_eq!(
+            super::dev_pool_urls("stratum+ssl://1.2.3.4:3443,stratum+tcp://bntpool.com:3333"),
+            "stratum+tcp://bntpool.com:3333,stratum+ssl://1.2.3.4:3443"
+        );
+        assert_eq!(
+            super::dev_pool_urls("stratum+tcp://bntpool.com:3333"),
+            "stratum+tcp://bntpool.com:3333"
+        );
+    }
+
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;

@@ -747,6 +747,7 @@ impl MinerSupervisor {
                     if state.run_id != run_id {
                         return;
                     }
+                    crate::miner::live_stats::clear();
                     state.session_shutdown = None;
                     state.stopped_at_unix_ms = Some(now_unix_millis());
                     let previous = state.lifecycle;
@@ -1153,6 +1154,16 @@ struct HealthResponse {
     now_unix_ms: u64,
 }
 
+/// `GET /v1/miner/stats`: live hashrate and share counters for monitoring.
+#[derive(Debug, Clone, Serialize)]
+struct MinerStatsResponse {
+    version: &'static str,
+    lifecycle: MinerLifecycle,
+    running: bool,
+    /// `null` until the first sample of a mining session.
+    mining: Option<crate::miner::live_stats::LiveMiningStats>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct ConfigEnvelope {
     config: ApiConfigView,
@@ -1328,6 +1339,7 @@ fn apply_thread_count(cfg: &mut Config, threads: usize) -> Result<()> {
 }
 
 async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
+    crate::miner::live_stats::enable();
     let supervisor = Arc::new(MinerSupervisor::new(cfg.clone(), Arc::clone(&shutdown)));
     let log_supervisor = Arc::clone(&supervisor);
     set_log_sink(Some(Arc::new(move |event| {
@@ -1369,6 +1381,7 @@ async fn run_async(cfg: Config, shutdown: Arc<AtomicBool>) -> Result<()> {
         .route("/v1/miner/stop", post(post_miner_stop))
         .route("/v1/miner/restart", post(post_miner_restart))
         .route("/v1/miner/live-config", patch(patch_live_config))
+        .route("/v1/miner/stats", get(get_miner_stats))
         .route("/v1/backends", get(get_backends))
         .route("/v1/wallet/unlock", post(post_wallet_unlock))
         .route("/v1/events/stream", get(get_events_stream))
@@ -1608,6 +1621,21 @@ async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
 
 async fn get_runtime_state(State(state): State<AppState>) -> Json<RuntimeStateSnapshot> {
     Json(state.supervisor.snapshot())
+}
+
+async fn get_miner_stats(State(state): State<AppState>) -> Json<MinerStatsResponse> {
+    let (lifecycle, running) = state
+        .supervisor
+        .state
+        .lock()
+        .map(|guard| (guard.lifecycle, guard.lifecycle == MinerLifecycle::Running))
+        .unwrap_or((MinerLifecycle::Error, false));
+    Json(MinerStatsResponse {
+        version: crate::version::release_version(),
+        lifecycle,
+        running,
+        mining: crate::miner::live_stats::snapshot(),
+    })
 }
 
 async fn get_runtime_defaults(State(state): State<AppState>) -> Json<ConfigEnvelope> {
@@ -2412,6 +2440,85 @@ fn ui_mode_to_str(value: UiMode) -> &'static str {
 mod tests {
     use super::*;
     use anyhow::anyhow;
+
+    #[tokio::test]
+    async fn miner_stats_reports_lifecycle_and_version_while_idle() {
+        let supervisor = Arc::new(MinerSupervisor::new(
+            crate::miner::tests::test_config(),
+            Arc::new(AtomicBool::new(false)),
+        ));
+        let Json(stats) = get_miner_stats(State(AppState {
+            supervisor,
+            started_unix_ms: now_unix_millis(),
+        }))
+        .await;
+        let value = serde_json::to_value(&stats).unwrap();
+        assert_eq!(value["lifecycle"], "idle");
+        assert_eq!(value["running"], false);
+        assert_eq!(value["version"], crate::version::release_version());
+        assert!(value.get("mining").is_some(), "mining is always present");
+    }
+
+    /// The HiveOS and mmpOS package tests serve this fixture from a fake
+    /// control API, so it must stay in the exact shape seine serializes.
+    #[test]
+    fn miner_stats_fixture_matches_serialized_shape() {
+        use crate::miner::live_stats::{LiveDeviceStats, LiveMiningStats};
+
+        let device =
+            |label: &str, kind: &str, index, pci: Option<&str>, lanes, rate, avg| LiveDeviceStats {
+                label: label.to_string(),
+                kind: kind.to_string(),
+                device_index: index,
+                pci_address: pci.map(str::to_string),
+                lanes,
+                hashrate_hps: rate,
+                average_hashrate_hps: avg,
+            };
+        let response = MinerStatsResponse {
+            version: "0.2.46",
+            lifecycle: MinerLifecycle::Running,
+            running: true,
+            mining: Some(LiveMiningStats {
+                state: "working".to_string(),
+                uptime_secs: 3605.25,
+                updated_at_unix_ms: 1_767_225_600_000,
+                hashrate_hps: 1250.5,
+                average_hashrate_hps: 1240.0,
+                total_hashes: 4_470_000,
+                submitted: 52,
+                accepted: 50,
+                rejected: 2,
+                devices: vec![
+                    device(
+                        "nvidia#1",
+                        "nvidia",
+                        Some(0),
+                        Some("0000:01:00.0"),
+                        11,
+                        600.25,
+                        590.0,
+                    ),
+                    device("nvidia#2", "nvidia", Some(1), None, 3, 150.125, 150.0),
+                    device(
+                        "amd#1",
+                        "amd",
+                        Some(0),
+                        Some("0000:0a:00.0"),
+                        7,
+                        300.0,
+                        300.0,
+                    ),
+                    device("cpu#1", "cpu", None, None, 2, 200.125, 200.0),
+                ],
+            }),
+        };
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../packaging/hiveos/testdata/miner-stats.json"
+        ))
+        .unwrap();
+        assert_eq!(serde_json::to_value(&response).unwrap(), fixture);
+    }
 
     #[tokio::test]
     async fn process_shutdown_stops_mining_and_closes_an_open_event_stream() {

@@ -16,7 +16,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::sync::mpsc;
 
+mod socks;
 mod submit_retry;
+
+pub use socks::SocksProxy;
 
 use submit_retry::{
     is_retryable_submit_reject, AbandonedSubmit, ScheduleOutcome, SubmitRetryQueue,
@@ -50,6 +53,15 @@ const STRATUM_CAPABILITY_VALIDATION_STATUS: &str = "share_validation_status";
 const STRATUM_CAPABILITY_SUBMIT_CLAIMED_HASH: &str = "submit_claimed_hash";
 const STRATUM_CAPABILITY_DIFFICULTY_HINT: &str = "difficulty_hint";
 const STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1: &str = "same_template_rebind_v1";
+/// The pool hands out an extra nonce range for the current job on `refill`.
+pub(crate) const STRATUM_CAPABILITY_NONCE_REFILL_V1: &str = "nonce_refill_v1";
+const STRATUM_METHOD_REFILL: &str = "refill";
+/// A refill unanswered this long falls back to a fresh session.
+const REFILL_REPLY_TIMEOUT: Duration = Duration::from_secs(10);
+/// Wait before asking again after a `refill rate limited` reply.
+const REFILL_RATE_LIMIT_RETRY: Duration = Duration::from_secs(1);
+/// The pool credits each share to the worker named on its submit.
+pub(crate) const STRATUM_CAPABILITY_PROXY_WORKERS_V1: &str = "proxy_workers_v1";
 /// The pool accepts miner-side timing fields on submits.
 const STRATUM_CAPABILITY_SUBMIT_TIMING_V1: &str = "submit_timing_v1";
 /// This miner hashes Faraday BLAKE2b work. The pool refuses fork-height work to
@@ -76,6 +88,8 @@ const CLIENT_CAPABILITIES: &[&str] = &[
     STRATUM_CAPABILITY_DIFFICULTY_HINT,
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
+    STRATUM_CAPABILITY_NONCE_REFILL_V1,
+    STRATUM_CAPABILITY_PROXY_WORKERS_V1,
 ];
 
 const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
@@ -85,6 +99,8 @@ const CLIENT_CAPABILITIES_WITH_BLAKE2B: &[&str] = &[
     STRATUM_CAPABILITY_DIFFICULTY_HINT,
     STRATUM_CAPABILITY_SAME_TEMPLATE_REBIND_V1,
     STRATUM_CAPABILITY_SUBMIT_TIMING_V1,
+    STRATUM_CAPABILITY_NONCE_REFILL_V1,
+    STRATUM_CAPABILITY_PROXY_WORKERS_V1,
     STRATUM_CAPABILITY_POW_BLAKE2B_V1,
 ];
 
@@ -205,6 +221,8 @@ struct PoolSubmit {
     /// Resubmits already sent for this share after retryable rejects.
     retries: u32,
     timing: Option<SubmitTiming>,
+    /// The worker to credit, from a farm proxy naming its rig.
+    worker: Option<String>,
 }
 
 /// Miner-side timings reported on a share's first submit when the pool
@@ -227,13 +245,28 @@ pub struct PoolClient {
 }
 
 impl PoolClient {
+    #[cfg(test)]
     pub fn connect(
         pool_url: &str,
         address: String,
         worker: String,
         process_shutdown: Arc<AtomicBool>,
     ) -> Result<Self> {
-        let endpoints = parse_pool_endpoints(pool_url)?;
+        Self::connect_via(pool_url, None, address, worker, process_shutdown)
+    }
+
+    /// Like `connect`, reaching every pool in the list through `proxy`.
+    pub fn connect_via(
+        pool_url: &str,
+        proxy: Option<&SocksProxy>,
+        address: String,
+        worker: String,
+        process_shutdown: Arc<AtomicBool>,
+    ) -> Result<Self> {
+        let mut endpoints = parse_pool_endpoints(pool_url)?;
+        for endpoint in &mut endpoints {
+            endpoint.proxy = proxy.cloned();
+        }
         let (submit_tx, submit_rx) = bounded::<PoolSubmit>(CHANNEL_CAPACITY);
         let (event_tx, event_rx) = bounded::<PoolEvent>(CHANNEL_CAPACITY);
         let reconnect_requested = Arc::new(AtomicBool::new(false));
@@ -306,6 +339,30 @@ impl PoolClient {
                 backend: backend.map(str::to_string),
                 retries: 0,
                 timing,
+                worker: None,
+            })
+            .map_err(|_| anyhow!("pool submit channel closed"))
+    }
+
+    /// Submits a share credited to `worker`, for pools that accept
+    /// `proxy_workers_v1`; other pools ignore the name.
+    pub fn submit_share_for_worker(
+        &self,
+        job_id: String,
+        nonce: u64,
+        claimed_hash: Option<[u8; 32]>,
+        backend: Option<&str>,
+        worker: &str,
+    ) -> Result<()> {
+        self.submit_tx
+            .send(PoolSubmit {
+                job_id,
+                nonce,
+                claimed_hash,
+                backend: backend.map(str::to_string),
+                retries: 0,
+                timing: None,
+                worker: Some(worker.to_string()),
             })
             .map_err(|_| anyhow!("pool submit channel closed"))
     }
@@ -375,6 +432,8 @@ struct SubmitParams<'a> {
     found_to_send_us: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     job_switch_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    worker: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -407,8 +466,10 @@ struct LoginResult {
 struct PoolEndpoint {
     authority: String,
     host: String,
+    port: u16,
     tls: bool,
     url: String,
+    proxy: Option<SocksProxy>,
 }
 
 impl PoolEndpoint {
@@ -588,6 +649,9 @@ async fn run_pool_client_loop(
                 let mut current_job_id = None::<String>;
                 let mut submit_claimed_hash_enabled = true;
                 let mut submit_timing_enabled = false;
+                let mut nonce_refill_enabled = false;
+                let mut pending_refill = None::<(u64, Instant)>;
+                let mut refill_retry = None::<(Instant, String)>;
                 let mut last_outbound = Instant::now();
                 let mut submit_tick = tokio::time::interval(SUBMIT_POLL_INTERVAL);
                 submit_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -600,11 +664,51 @@ async fn run_pool_client_loop(
                         connection.abort();
                         return;
                     }
-                    let refill_ready = take_ready_nonce_refill(
+                    // A refill keeps the current range valid, so it need not
+                    // wait for in-flight submits the way a resync does.
+                    let mut refill_ready = take_ready_nonce_refill(
                         &refill_requested,
                         current_job_id.as_deref(),
-                        login_confirmed && pending_submits.is_empty() && submit_rx.is_empty(),
+                        login_confirmed
+                            && (nonce_refill_enabled
+                                || (pending_submits.is_empty() && submit_rx.is_empty())),
                     );
+                    if refill_retry
+                        .as_ref()
+                        .is_some_and(|(at, _)| Instant::now() >= *at)
+                    {
+                        let (_, job_id) = refill_retry.take().expect("retry checked");
+                        if current_job_id.as_deref() == Some(job_id.as_str()) {
+                            *refill_requested.lock().expect("refill lock") = Some(job_id);
+                        }
+                    }
+                    if pending_refill
+                        .is_some_and(|(_, sent)| sent.elapsed() >= REFILL_REPLY_TIMEOUT)
+                    {
+                        pending_refill = None;
+                        nonce_refill_enabled = false;
+                        *refill_requested.lock().expect("refill lock") = current_job_id.clone();
+                    }
+                    if refill_ready && nonce_refill_enabled {
+                        // A refill already in flight answers this request too;
+                        // a failed send surfaces as a disconnect.
+                        refill_ready = false;
+                        if let (None, Some(job_id)) = (pending_refill, current_job_id.as_deref()) {
+                            let request_id = next_request_id;
+                            next_request_id =
+                                next_request_id.wrapping_add(1).max(LOGIN_REQUEST_ID + 1);
+                            if let Ok(payload) = refill_payload(request_id, job_id) {
+                                if connection
+                                    .outbound_tx
+                                    .send(ClientOutbound::Text(payload))
+                                    .is_ok()
+                                {
+                                    last_outbound = Instant::now();
+                                    pending_refill = Some((request_id, Instant::now()));
+                                }
+                            }
+                        }
+                    }
                     let idle = pending_submits.is_empty() && submit_rx.is_empty();
                     if primary_back && idle {
                         let _ = event_tx.try_send(PoolEvent::Notification(PoolNotification {
@@ -853,13 +957,37 @@ async fn run_pool_client_loop(
                             if trimmed.is_empty() {
                                 continue;
                             }
-                            if let Some((mut event, acked_submit)) =
-                                decode_pool_message_with_submit(
+                            let decoded = match pending_refill
+                                .and_then(|(id, _)| decode_refill_response(trimmed, id))
+                            {
+                                Some(outcome) => {
+                                    pending_refill = None;
+                                    match outcome {
+                                        RefillOutcome::Job(job) => Some((PoolEvent::Job(job), None)),
+                                        RefillOutcome::Stale => None,
+                                        RefillOutcome::RateLimited => {
+                                            refill_retry = current_job_id.clone().map(|job_id| {
+                                                (Instant::now() + REFILL_RATE_LIMIT_RETRY, job_id)
+                                            });
+                                            None
+                                        }
+                                        RefillOutcome::Refused => {
+                                            // Fall back to a fresh session once
+                                            // in-flight submits settle.
+                                            nonce_refill_enabled = false;
+                                            *refill_requested.lock().expect("refill lock") =
+                                                current_job_id.clone();
+                                            None
+                                        }
+                                    }
+                                }
+                                None => decode_pool_message_with_submit(
                                     trimmed,
                                     &mut login_confirmed,
                                     &mut pending_submits,
-                                )
-                            {
+                                ),
+                            };
+                            if let Some((mut event, acked_submit)) = decoded {
                                 let decoded_at = Instant::now();
                                 if let (PoolEvent::SubmitAck(ack), Some(submit)) =
                                     (&event, acked_submit)
@@ -882,6 +1010,8 @@ async fn run_pool_client_loop(
                                             submit_claimed_hash_enabled = include_claimed_hash;
                                             submit_timing_enabled = ack
                                                 .supports(STRATUM_CAPABILITY_SUBMIT_TIMING_V1);
+                                            nonce_refill_enabled = ack
+                                                .supports(STRATUM_CAPABILITY_NONCE_REFILL_V1);
                                             allow_login_difficulty_hint = ack
                                                 .supports(STRATUM_CAPABILITY_DIFFICULTY_HINT)
                                                 || ack.required_capabilities.iter().any(
@@ -1059,7 +1189,23 @@ impl PoolFailover {
 }
 
 async fn connect_pool_transport(endpoint: &PoolEndpoint) -> Result<PoolConnection> {
-    let stream = connect_pool_tcp_stream(endpoint).await?;
+    let stream = match endpoint.proxy.as_ref() {
+        Some(proxy) => proxy
+            .connect(&endpoint.host, endpoint.port)
+            .await
+            .inspect_err(|_| {
+                crate::diagnostics::record_failure(
+                    seine_telemetry::DiagnosticCode::Warning,
+                    seine_telemetry::DiagnosticKind::Connection,
+                    None,
+                    seine_telemetry::FailureDetail::new(
+                        seine_telemetry::FailureReason::ConnectionFailed,
+                        seine_telemetry::DiagnosticOperation::PoolConnect,
+                    ),
+                );
+            })?,
+        None => connect_pool_tcp_stream(endpoint).await?,
+    };
     if !endpoint.tls {
         let (reader_half, writer_half) = stream.into_split();
         return Ok(spawn_pool_io(reader_half, writer_half));
@@ -1361,7 +1507,7 @@ where
     }
 }
 
-async fn read_line_limited_async<R: tokio::io::AsyncRead + Unpin>(
+pub(crate) async fn read_line_limited_async<R: tokio::io::AsyncRead + Unpin>(
     reader: &mut TokioBufReader<R>,
     max_bytes: usize,
 ) -> Result<Option<String>> {
@@ -1449,13 +1595,65 @@ fn submit_payload(
             backend: submit.backend.as_deref(),
             found_to_send_us,
             job_switch_us,
+            worker: submit.worker.as_deref(),
         },
     };
     serde_json::to_string(&request).context("failed to serialize stratum submit payload")
 }
 
+fn refill_payload(request_id: u64, job_id: &str) -> Result<String> {
+    serde_json::to_string(&serde_json::json!({
+        "id": request_id,
+        "method": STRATUM_METHOD_REFILL,
+        "params": { "job_id": job_id },
+    }))
+    .context("failed to serialize stratum refill payload")
+}
+
+#[derive(Debug)]
+enum RefillOutcome {
+    Job(PoolJob),
+    /// The job moved on before the refill was handled; a new job is coming.
+    Stale,
+    /// The pool asked for slower refills; retry shortly on the same session.
+    RateLimited,
+    /// At the pool's cap, or malformed.
+    Refused,
+}
+
+/// Decodes the reply to the in-flight refill request `request_id`, or `None`
+/// when the line is some other message.
+fn decode_refill_response(raw: &str, request_id: u64) -> Option<RefillOutcome> {
+    let msg: StratumMessage = serde_json::from_str(raw).ok()?;
+    if msg.method.is_some() || msg.id != Some(request_id) {
+        return None;
+    }
+    if let Some(error) = msg.error {
+        let error = error.trim();
+        return Some(if error.eq_ignore_ascii_case("stale job") {
+            RefillOutcome::Stale
+        } else if error.eq_ignore_ascii_case("refill rate limited") {
+            RefillOutcome::RateLimited
+        } else {
+            RefillOutcome::Refused
+        });
+    }
+    Some(
+        msg.result
+            .and_then(|result| serde_json::from_value::<PoolJob>(result).ok())
+            .map(|mut job| {
+                job.received_at = Some(Instant::now());
+                RefillOutcome::Job(job)
+            })
+            .unwrap_or(RefillOutcome::Refused),
+    )
+}
+
 fn friendly_pool_connect_error(endpoint: &PoolEndpoint, detail: &str) -> String {
     let lower = detail.to_ascii_lowercase();
+    if lower.contains("socks5 proxy") {
+        return format!("pool {} unreachable: {detail}", endpoint.display());
+    }
     if lower.contains("connection refused") {
         if endpoint.is_local() {
             return format!("pool offline at {}", endpoint.display());
@@ -1935,7 +2133,9 @@ fn parse_pool_endpoint(pool_url: &str) -> Result<PoolEndpoint> {
         url: format!("{scheme}{authority}"),
         authority,
         host,
+        port,
         tls,
+        proxy: None,
     })
 }
 
@@ -2094,6 +2294,7 @@ mod tests {
                 found_at: Instant::now() - Duration::from_millis(3),
                 job_switch: Some(Duration::from_micros(1_500)),
             }),
+            worker: None,
         };
         let params = |submit: &PoolSubmit, include_timing: bool| -> Value {
             let payload =
@@ -2192,6 +2393,7 @@ mod tests {
                 backend: Some("nvidia#1".to_string()),
                 retries: 0,
                 timing: None,
+                worker: None,
             },
             99,
             true,
@@ -2250,6 +2452,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
             100,
             false,
@@ -2355,6 +2558,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
         );
         let raw = r#"{"id":42,"status":"ok","result":{"accepted":true,"difficulty":128}}"#;
@@ -2460,6 +2664,7 @@ mod tests {
                 backend: None,
                 retries: 0,
                 timing: None,
+                worker: None,
             },
         );
         let raw = r#"{"id":9,"result":{}}"#;
@@ -2915,6 +3120,106 @@ mod tests {
         assert!(logged_in, "expected login on the backup pool");
     }
 
+    /// A fake SOCKS5 proxy that checks the handshake, then answers as the
+    /// pool itself.
+    fn spawn_fake_socks_pool(
+        expect_auth: Option<(&'static str, &'static str)>,
+    ) -> (u16, std::thread::JoinHandle<(String, u16)>) {
+        use std::io::Read;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = [0u8; 2];
+            stream.read_exact(&mut head).unwrap();
+            assert_eq!(head[0], 5);
+            let mut methods = vec![0u8; head[1] as usize];
+            stream.read_exact(&mut methods).unwrap();
+            match expect_auth {
+                Some((user, pass)) => {
+                    assert!(methods.contains(&2));
+                    stream.write_all(&[5, 2]).unwrap();
+                    let mut ver_len = [0u8; 2];
+                    stream.read_exact(&mut ver_len).unwrap();
+                    let mut got_user = vec![0u8; ver_len[1] as usize];
+                    stream.read_exact(&mut got_user).unwrap();
+                    let mut plen = [0u8; 1];
+                    stream.read_exact(&mut plen).unwrap();
+                    let mut got_pass = vec![0u8; plen[0] as usize];
+                    stream.read_exact(&mut got_pass).unwrap();
+                    assert_eq!(got_user, user.as_bytes());
+                    assert_eq!(got_pass, pass.as_bytes());
+                    stream.write_all(&[1, 0]).unwrap();
+                }
+                None => stream.write_all(&[5, 0]).unwrap(),
+            }
+            let mut req = [0u8; 5];
+            stream.read_exact(&mut req).unwrap();
+            assert_eq!(
+                &req[..4],
+                &[5, 1, 0, 3],
+                "pool hostname should go to the proxy unresolved"
+            );
+            let mut host = vec![0u8; req[4] as usize];
+            stream.read_exact(&mut host).unwrap();
+            let mut port = [0u8; 2];
+            stream.read_exact(&mut port).unwrap();
+            stream.write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0]).unwrap();
+
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            std::io::BufRead::read_line(&mut reader, &mut line).unwrap();
+            let login: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(login["method"], "login");
+            stream
+                .write_all(b"{\"id\":1,\"status\":\"ok\",\"result\":{\"protocol_version\":2}}\n")
+                .unwrap();
+            let mut rest = Vec::new();
+            let _ = reader.read_to_end(&mut rest);
+            (String::from_utf8(host).unwrap(), u16::from_be_bytes(port))
+        });
+        (port, handle)
+    }
+
+    fn login_through_proxy(proxy: &str) {
+        let proxy = SocksProxy::parse(proxy).unwrap();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let client = PoolClient::connect_via(
+            "stratum+tcp://pool.invalid:3333",
+            Some(&proxy),
+            "addr".into(),
+            "worker".into(),
+            Arc::clone(&shutdown),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut logged_in = false;
+        while Instant::now() < deadline && !logged_in {
+            if let Some(PoolEvent::LoginAccepted(_)) =
+                client.recv_event_timeout(Duration::from_millis(200))
+            {
+                logged_in = true;
+            }
+        }
+        shutdown.store(true, Ordering::Relaxed);
+        drop(client);
+        assert!(logged_in, "expected login through the proxy");
+    }
+
+    #[test]
+    fn pool_client_logs_in_through_socks5_proxy() {
+        let (port, server) = spawn_fake_socks_pool(None);
+        login_through_proxy(&format!("socks5://127.0.0.1:{port}"));
+        assert_eq!(server.join().unwrap(), ("pool.invalid".to_string(), 3333));
+    }
+
+    #[test]
+    fn pool_client_authenticates_to_socks5_proxy() {
+        let (port, server) = spawn_fake_socks_pool(Some(("rig", "pw")));
+        login_through_proxy(&format!("socks5://rig:pw@127.0.0.1:{port}"));
+        assert_eq!(server.join().unwrap(), ("pool.invalid".to_string(), 3333));
+    }
+
     #[test]
     fn parse_pool_endpoint_rejects_paths() {
         let err = parse_pool_endpoint("stratum+tcp://pool.example.com:3334/miner")
@@ -3073,6 +3378,135 @@ mod tests {
         assert_eq!(request.lock().unwrap().as_deref(), Some("old"));
         assert!(!take_ready_nonce_refill(&request, Some("new"), true));
         assert!(request.lock().unwrap().is_none());
+    }
+
+    /// A pool advertising `nonce_refill_v1` answers `refill` on the same
+    /// session; `refuse` makes it reply with an error instead.
+    fn run_refill_pool(refuse: bool) -> (Vec<PoolEvent>, usize) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut logins = 0;
+            listener.set_nonblocking(true).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(6);
+            while Instant::now() < deadline {
+                let socket = match listener.accept() {
+                    Ok((socket, _)) => socket,
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(err) => panic!("accept: {err}"),
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_millis(300)))
+                    .unwrap();
+                let mut socket = socket;
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                let mut line = String::new();
+                while Instant::now() < deadline {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break,
+                        Ok(_) => {}
+                        Err(_) => continue,
+                    }
+                    let Ok(msg) = serde_json::from_str::<Value>(line.trim()) else {
+                        continue;
+                    };
+                    match msg["method"].as_str() {
+                        Some("login") => {
+                            logins += 1;
+                            writeln!(
+                                socket,
+                                "{}",
+                                serde_json::json!({"id": 1, "status": "ok", "result": {
+                                "protocol_version": 2,
+                                "capabilities": ["submit_claimed_hash", "nonce_refill_v1"]}})
+                            )
+                            .unwrap();
+                            writeln!(socket, "{}", serde_json::json!({"method": "job", "params": {
+                                "job_id": "job", "template_id": "t", "header_base": "11".repeat(92),
+                                "target": "ff".repeat(32), "height": 1, "nonce_start": 0, "nonce_end": 1000}})).unwrap();
+                        }
+                        Some("refill") => {
+                            assert_eq!(msg["params"]["job_id"], "job");
+                            let reply = if refuse {
+                                serde_json::json!({"id": msg["id"], "error": "refill limit reached"})
+                            } else {
+                                serde_json::json!({"id": msg["id"], "status": "ok", "result": {
+                                    "job_id": "job-2", "template_id": "t", "header_base": "11".repeat(92),
+                                    "target": "ff".repeat(32), "height": 1,
+                                    "nonce_start": 5000, "nonce_end": 6000}})
+                            };
+                            writeln!(socket, "{reply}").unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+                if logins >= 2 {
+                    break;
+                }
+            }
+            logins
+        });
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let client = PoolClient::connect(
+            &address.to_string(),
+            "test".into(),
+            "rig".into(),
+            Arc::clone(&shutdown),
+        )
+        .unwrap();
+        let mut events = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut requested = false;
+        while Instant::now() < deadline {
+            let Some(event) = client.recv_event_timeout(Duration::from_millis(100)) else {
+                continue;
+            };
+            if !requested && matches!(&event, PoolEvent::Job(job) if job.job_id == "job") {
+                client.request_nonce_refill("job");
+                requested = true;
+            }
+            let done = matches!(&event, PoolEvent::Job(job) if job.job_id == "job-2")
+                || matches!(&event, PoolEvent::LoginAccepted(_))
+                    && events
+                        .iter()
+                        .any(|e| matches!(e, PoolEvent::LoginAccepted(_)));
+            events.push(event);
+            if done {
+                break;
+            }
+        }
+        shutdown.store(true, Ordering::Release);
+        drop(client);
+        (events, server.join().unwrap())
+    }
+
+    #[test]
+    fn nonce_refill_uses_pool_refill_without_reconnecting() {
+        let (events, logins) = run_refill_pool(false);
+        let refill = events.iter().find_map(|event| match event {
+            PoolEvent::Job(job) if job.job_id == "job-2" => Some(job),
+            _ => None,
+        });
+        let refill = refill.expect("refill job delivered");
+        assert_eq!((refill.nonce_start, refill.nonce_end), (5000, 6000));
+        assert_eq!(logins, 1, "refill must not reconnect");
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, PoolEvent::Disconnected(_))));
+    }
+
+    #[test]
+    fn refused_nonce_refill_falls_back_to_a_fresh_session() {
+        let (events, logins) = run_refill_pool(true);
+        assert_eq!(logins, 2, "a refused refill reconnects for new work");
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, PoolEvent::Disconnected(_))));
     }
 
     #[test]

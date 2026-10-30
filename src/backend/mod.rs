@@ -86,6 +86,10 @@ pub mod metal {
                 _instance_id: AtomicU64::new(0),
             }
         }
+
+        pub fn blake2b_only(self) -> Self {
+            self
+        }
     }
 
     impl PowBackend for MetalBackend {
@@ -1030,6 +1034,16 @@ pub trait PowBackend: Send + Sync {
 
     /// Total device memory in bytes (e.g. GPU VRAM), if known.
     fn device_memory_bytes(&self) -> Option<u64> {
+        None
+    }
+
+    /// Index of the GPU this instance mines on, once the device is resolved.
+    fn device_index(&self) -> Option<u32> {
+        None
+    }
+
+    /// PCI address (`dddd:bb:dd.f`) of the GPU this instance mines on, if known.
+    fn pci_address(&self) -> Option<String> {
         None
     }
 

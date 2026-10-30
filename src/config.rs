@@ -362,6 +362,17 @@ struct Cli {
     #[arg(long = "pool-worker", visible_alias = "worker", alias = "rig-id")]
     pool_worker: Option<String>,
 
+    /// Reach pools through a SOCKS5 proxy: socks5://[user:pass@]host:port.
+    /// Pool hostnames are resolved by the proxy.
+    #[arg(long = "pool-proxy", visible_alias = "socks5")]
+    pool_proxy: Option<String>,
+
+    /// Run as a farm proxy instead of mining: rigs connect to this address
+    /// (for example 0.0.0.0:3333) and share one session with --pool-url,
+    /// paying --address.
+    #[arg(long = "proxy-listen")]
+    proxy_listen: Option<String>,
+
     /// Accepted for compatibility with other miners' launch templates.
     /// Blocknet pools do not use passwords.
     #[arg(long = "pass", short = 'p', alias = "password")]
@@ -811,6 +822,10 @@ pub struct Config {
     pub mode: MiningMode,
     pub pool_url: Option<String>,
     pub pool_worker: Option<String>,
+    /// SOCKS5 proxy for pool connections.
+    pub pool_proxy: Option<crate::pool::SocksProxy>,
+    /// Run as a farm proxy listening for rigs on this address.
+    pub proxy_listen: Option<String>,
     pub dev_fee_pool_worker: String,
     pub api_url: String,
     pub token: Option<String>,
@@ -870,6 +885,8 @@ pub struct Config {
     pub amd_max_lanes: Option<usize>,
     pub metal_max_lanes: Option<usize>,
     pub metal_hashes_per_launch_per_lane: u32,
+    /// The Metal backend was added automatically and mines BLAKE2b only.
+    pub metal_blake2b_only: bool,
     pub backend_assign_timeout: Duration,
     pub backend_assign_timeout_strikes: u32,
     pub backend_control_timeout: Duration,
@@ -1008,6 +1025,9 @@ impl Config {
             if pool_worker.trim().is_empty() {
                 bail!("--pool-worker is empty");
             }
+        }
+        if cli.proxy_listen.is_some() && cli.mode == Some(MiningMode::Daemon) {
+            bail!("--proxy-listen relays to a pool; it cannot be used with --mode daemon");
         }
         if cli.nonce_iters_per_lane == 0 {
             bail!("nonce-iters-per-lane must be >= 1");
@@ -1196,11 +1216,15 @@ impl Config {
                 backends.contains(&BackendKind::Amd),
             ));
         }
-        let gpu_memory_reservation = if backends.contains(&BackendKind::Metal) {
-            estimate_metal_memory_bytes(cli.metal_max_lanes)
-        } else {
-            0
-        };
+        // The Metal backend Seine adds by itself mines BLAKE2b only and keeps
+        // no Argon2 lanes, so the CPU keeps its full memory budget.
+        let metal_blake2b_only = cli.backends.is_empty() && backends.contains(&BackendKind::Metal);
+        let gpu_memory_reservation =
+            if backends.contains(&BackendKind::Metal) && !metal_blake2b_only {
+                estimate_metal_memory_bytes(cli.metal_max_lanes)
+            } else {
+                0
+            };
         let cpu_backend_instances = backends
             .iter()
             .filter(|kind| matches!(kind, BackendKind::Cpu))
@@ -1392,6 +1416,13 @@ impl Config {
                 .pool_worker
                 .as_ref()
                 .map(|value| value.trim().to_string()),
+            proxy_listen: cli.proxy_listen.clone(),
+            pool_proxy: cli
+                .pool_proxy
+                .as_deref()
+                .map(crate::pool::SocksProxy::parse)
+                .transpose()
+                .context("invalid --pool-proxy")?,
             dev_fee_pool_worker,
             api_url,
             token,
@@ -1454,6 +1485,7 @@ impl Config {
             amd_devices: cli.amd_devices.clone(),
             amd_max_lanes: cli.amd_max_lanes.filter(|v| *v > 0),
             metal_max_lanes: cli.metal_max_lanes.filter(|v| *v > 0),
+            metal_blake2b_only,
             metal_hashes_per_launch_per_lane: cli.metal_hashes_per_launch_per_lane.max(1),
             backend_assign_timeout: Duration::from_millis(cli.backend_assign_timeout_ms),
             backend_assign_timeout_strikes: cli.backend_assign_timeout_strikes.max(1),
@@ -1631,9 +1663,12 @@ fn resolve_backend_selection(
         return (requested_backends.to_vec(), None);
     }
 
-    // Metal and integrated AMD GPUs are not auto-enabled; users can opt in via
-    // --backend cpu,metal or --backend cpu,amd.
+    // Integrated AMD GPUs are not auto-enabled; users can opt in via
+    // --backend cpu,amd. On Apple Silicon builds Metal is added for BLAKE2b
+    // work only; --backend cpu,metal also mines Argon2 on it.
     let mut selected = vec![BackendKind::Cpu];
+    #[cfg(all(feature = "metal", target_os = "macos"))]
+    selected.push(BackendKind::Metal);
     if nvidia_available || !nvidia_devices.is_empty() {
         selected.push(BackendKind::Nvidia);
     }
@@ -3259,10 +3294,11 @@ pub(crate) fn cpu_autotune_capacity_snapshot(
         .max(1);
     let parallelism = cpu_parallelism_cap(cfg.cpu_affinity);
     let cpu_cap = parallelism / instances;
-    let gpu_reserve = if cfg
-        .backend_specs
-        .iter()
-        .any(|s| s.kind == BackendKind::Metal)
+    let gpu_reserve = if !cfg.metal_blake2b_only
+        && cfg
+            .backend_specs
+            .iter()
+            .any(|s| s.kind == BackendKind::Metal)
     {
         estimate_metal_memory_bytes(cfg.metal_max_lanes)
     } else {
@@ -3687,7 +3723,9 @@ mod tests {
             pool_url_args: Vec::new(),
             pool_url: None,
             pool_worker: None,
+            pool_proxy: None,
             pool_password: None,
+            proxy_listen: None,
             api_url: None,
             token: None,
             wallet_password: None,
@@ -3841,6 +3879,73 @@ mod tests {
         cli.apply_miner_style_args();
         assert_eq!(cli.pool_worker.as_deref(), Some("explicit"));
         assert_eq!(cli.mining_address.as_deref(), Some(address));
+    }
+
+    /// The HiveOS package (packaging/hiveos) writes these argument lists; its
+    /// shell tests check h-config.sh still produces them.
+    #[test]
+    fn hiveos_package_arguments_parse() {
+        let parse = |fixture: &str| {
+            let args = std::iter::once("seine").chain(fixture.lines());
+            let mut cli = Cli::try_parse_from(args).expect("HiveOS arguments should parse");
+            cli.apply_miner_style_args();
+            cli
+        };
+
+        let cli = parse(include_str!("../packaging/hiveos/testdata/nvidia-rig.args"));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig01"));
+        assert_eq!(
+            cli.pool_url
+                .as_deref()
+                .and_then(normalize_pool_url)
+                .as_deref(),
+            Some("stratum+tcp://bntpool.com:3333,stratum+ssl://backup.example.com:3443")
+        );
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia]);
+        assert_eq!(cli.ui, UiMode::Plain);
+        assert!(cli.api_server && cli.no_auto_update);
+        assert_eq!(cli.api_bind, "127.0.0.1:9977");
+        assert_eq!(cli.data_dir, PathBuf::from("/var/lib/seine"));
+
+        let cli = parse(include_str!(
+            "../packaging/hiveos/testdata/extra-config.args"
+        ));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig02"));
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia, BackendKind::Cpu]);
+        assert_eq!(cli.threads, Some(2));
+    }
+
+    /// The mmpOS package (packaging/mmpos) writes these argument lists; its
+    /// shell tests check mmp-launch.sh still produces them.
+    #[test]
+    fn mmpos_package_arguments_parse() {
+        let parse = |fixture: &str| {
+            let args = std::iter::once("seine").chain(fixture.lines());
+            let mut cli = Cli::try_parse_from(args).expect("mmpOS arguments should parse");
+            cli.apply_miner_style_args();
+            cli
+        };
+
+        let cli = parse(include_str!("../packaging/mmpos/testdata/gpu-rig.args"));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig01"));
+        assert_eq!(
+            cli.pool_url
+                .as_deref()
+                .and_then(normalize_pool_url)
+                .as_deref(),
+            Some("stratum+ssl://pool.example.com:3443")
+        );
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia, BackendKind::Amd]);
+        assert_eq!(cli.ui, UiMode::Plain);
+        assert!(cli.api_server && cli.no_auto_update);
+        assert_eq!(cli.api_bind, "127.0.0.1:4044");
+        assert_eq!(cli.data_dir, PathBuf::from("/opt/mmp/miners/seine-data"));
+
+        let cli = parse(include_str!("../packaging/mmpos/testdata/extra-args.args"));
+        assert_eq!(cli.mining_address.as_deref(), Some("@miner.one"));
+        assert_eq!(cli.pool_worker.as_deref(), Some("rig02"));
+        assert_eq!(cli.backends, vec![BackendKind::Nvidia, BackendKind::Cpu]);
+        assert_eq!(cli.threads, Some(2));
     }
 
     #[test]
@@ -4922,6 +5027,14 @@ HugePages_Rsvd:          0
         assert!(!cpu_autotune_threads);
     }
 
+    /// The default selection: Apple Silicon builds add Metal after the CPU.
+    fn auto_selected(mut kinds: Vec<BackendKind>) -> Vec<BackendKind> {
+        if cfg!(all(feature = "metal", target_os = "macos")) {
+            kinds.insert(1, BackendKind::Metal);
+        }
+        kinds
+    }
+
     #[test]
     fn resolve_backend_selection_uses_requested_backends_verbatim() {
         let (selected, hint) = resolve_backend_selection(
@@ -4938,32 +5051,45 @@ HugePages_Rsvd:          0
     #[test]
     fn resolve_backend_selection_defaults_to_cpu_only_when_nvidia_unavailable() {
         let (selected, _hint) = resolve_backend_selection(&[], &[], false, &[], false);
-        assert_eq!(selected, vec![BackendKind::Cpu]);
+        assert_eq!(selected, auto_selected(vec![BackendKind::Cpu]));
     }
 
     #[test]
     fn resolve_backend_selection_defaults_to_cpu_and_nvidia_when_available() {
         let (selected, hint) = resolve_backend_selection(&[], &[], true, &[], false);
-        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Nvidia]);
+        assert_eq!(
+            selected,
+            auto_selected(vec![BackendKind::Cpu, BackendKind::Nvidia])
+        );
         assert!(hint.is_none());
     }
 
     #[test]
     fn resolve_backend_selection_adds_amd_when_available() {
         let (selected, hint) = resolve_backend_selection(&[], &[], false, &[], true);
-        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Amd]);
+        assert_eq!(
+            selected,
+            auto_selected(vec![BackendKind::Cpu, BackendKind::Amd])
+        );
         assert!(hint.is_none());
         let (selected, _) = resolve_backend_selection(&[], &[], true, &[], true);
         assert_eq!(
             selected,
-            vec![BackendKind::Cpu, BackendKind::Nvidia, BackendKind::Amd]
+            auto_selected(vec![
+                BackendKind::Cpu,
+                BackendKind::Nvidia,
+                BackendKind::Amd
+            ])
         );
     }
 
     #[test]
     fn resolve_backend_selection_enables_amd_when_devices_are_explicit() {
         let (selected, _) = resolve_backend_selection(&[], &[], false, &[0], false);
-        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Amd]);
+        assert_eq!(
+            selected,
+            auto_selected(vec![BackendKind::Cpu, BackendKind::Amd])
+        );
     }
 
     #[test]
@@ -4990,7 +5116,10 @@ HugePages_Rsvd:          0
     #[test]
     fn resolve_backend_selection_enables_nvidia_when_devices_are_explicit() {
         let (selected, hint) = resolve_backend_selection(&[], &[0, 1], false, &[], false);
-        assert_eq!(selected, vec![BackendKind::Cpu, BackendKind::Nvidia]);
+        assert_eq!(
+            selected,
+            auto_selected(vec![BackendKind::Cpu, BackendKind::Nvidia])
+        );
         assert!(hint.is_none());
     }
 

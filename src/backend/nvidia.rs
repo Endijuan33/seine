@@ -38,6 +38,52 @@ const BACKEND_NAME: &str = "nvidia";
 
 // Check the dependency's own library search before its infallible accessor can
 // panic. Successful checks are cached; a failed check can be retried next start.
+/// Whether the CUDA NVRTC library loads. Without it only the prebuilt
+/// BLAKE2b kernel can run.
+fn nvrtc_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| unsafe {
+        cudarc::driver::sys::is_culib_present() && nvrtc_sys::is_culib_present()
+    })
+}
+
+/// The driver checks of `require_cuda_libraries`, for the BLAKE2b engine,
+/// which falls back to prebuilt PTX when NVRTC is missing.
+fn require_cuda_driver() -> Result<()> {
+    if nvrtc_available() {
+        return require_cuda_libraries();
+    }
+    let driver = unsafe { cudarc::driver::sys::is_culib_present() };
+    crate::diagnostics::nvidia_software(cuda_software_versions(driver, false));
+    check_cuda_libraries(|| driver, || true)
+}
+
+/// Records and reports, once per process, that NVRTC is missing and this
+/// GPU mines BLAKE2b only.
+fn note_nvrtc_unavailable(device_index: u32) {
+    use seine_telemetry::{
+        DiagnosticCode, DiagnosticKind, DiagnosticOperation, FailureDetail, FailureReason,
+    };
+    static NOTED: std::sync::Once = std::sync::Once::new();
+    NOTED.call_once(|| {
+        crate::diagnostics::record_failure(
+            DiagnosticCode::Warning,
+            DiagnosticKind::Compilation,
+            Some(BACKEND_NAME),
+            FailureDetail::new(
+                FailureReason::NvrtcUnavailable,
+                DiagnosticOperation::BackendStartup,
+            ),
+        );
+    });
+    crate::miner::ui::warn(
+        "NVIDIA",
+        format!(
+            "GPU {device_index}: CUDA NVRTC library not found; this GPU mines BLAKE2b blocks only. Install the CUDA NVRTC libraries to mine Argon2 on it"
+        ),
+    );
+}
+
 fn require_cuda_libraries() -> Result<()> {
     static READY: std::sync::OnceLock<seine_telemetry::NvidiaSoftware> = std::sync::OnceLock::new();
     if let Some(software) = READY.get() {
@@ -1181,6 +1227,7 @@ pub struct NvidiaBackend {
     autotune_secs: u64,
     tuning_options: NvidiaBackendTuningOptions,
     resolved_device: RwLock<Option<NvidiaDeviceInfo>>,
+    pci_address: Mutex<Option<String>>,
     kernel_tuning: RwLock<Option<NvidiaKernelTuning>>,
     shared: Arc<NvidiaShared>,
     nonblocking_control: Mutex<NonblockingControlState>,
@@ -1220,6 +1267,7 @@ impl NvidiaBackend {
                 enforce_template_stop: tuning_options.enforce_template_stop,
             },
             resolved_device: RwLock::new(None),
+            pci_address: Mutex::new(None),
             kernel_tuning: RwLock::new(None),
             shared: Arc::new(NvidiaShared::new()),
             nonblocking_control: Mutex::new(NonblockingControlState::default()),
@@ -1647,6 +1695,21 @@ impl PowBackend for NvidiaBackend {
         })
     }
 
+    fn device_index(&self) -> Option<u32> {
+        self.resolved_device
+            .read()
+            .ok()
+            .and_then(|dev| dev.as_ref().map(|d| d.index))
+    }
+
+    fn pci_address(&self) -> Option<String> {
+        let mut cached = self.pci_address.lock().ok()?;
+        if cached.is_none() {
+            *cached = query_cuda_pci_address(self.device_index()?);
+        }
+        cached.clone()
+    }
+
     fn set_instance_id(&self, id: BackendInstanceId) {
         self.instance_id.store(id, Ordering::Release);
     }
@@ -1668,12 +1731,18 @@ impl PowBackend for NvidiaBackend {
             }
         }
 
-        require_cuda_libraries()?;
+        require_cuda_driver()?;
         let selected = self.validate_or_select_device()?;
+        // Without NVRTC only the prebuilt BLAKE2b kernel runs: the backend
+        // stays idle on Argon2 work (`supports_pow`) and mines BLAKE2b.
+        if !nvrtc_available() {
+            note_nvrtc_unavailable(selected.index);
+        }
         // A GPU joining a BLAKE2b network skips the Argon2 autotune and engine;
         // the worker builds the engine if Argon2 work arrives.
-        let blake2b_only =
-            self.network_pow_at_start(&selected) == Some(crate::backend::PowAlgorithm::Blake2b512);
+        let blake2b_only = !nvrtc_available()
+            || self.network_pow_at_start(&selected)
+                == Some(crate::backend::PowAlgorithm::Blake2b512);
         let tuning = self.resolve_kernel_tuning(&selected, blake2b_only);
         let engine = if blake2b_only {
             None
@@ -2013,8 +2082,10 @@ impl PowBackend for NvidiaBackend {
         PreemptionGranularity::Hashes((self.lanes() as u64).saturating_mul(per_launch).max(1))
     }
 
-    fn supports_pow(&self, _pow: crate::backend::PowAlgorithm) -> bool {
-        true
+    fn supports_pow(&self, pow: crate::backend::PowAlgorithm) -> bool {
+        // Argon2 kernels are compiled at startup with NVRTC; BLAKE2b has a
+        // prebuilt kernel.
+        pow == crate::backend::PowAlgorithm::Blake2b512 || nvrtc_available()
     }
 
     fn capabilities(&self) -> BackendCapabilities {
@@ -3503,6 +3574,29 @@ fn build_nvidia_autotune_key(
         cuda_kernel_fingerprint: cuda_kernel_fingerprint(),
         nvrtc_version: nvrtc_compiler_identity(),
     }
+}
+
+/// PCI address of the CUDA device at `device_index`, read from the driver so it
+/// names the device CUDA actually opens for that index.
+fn query_cuda_pci_address(device_index: u32) -> Option<String> {
+    use cudarc::driver::{result as driver_result, sys::CUdevice_attribute};
+
+    // Calling into a driver library that failed to load panics.
+    if !unsafe { cudarc::driver::sys::is_culib_present() } {
+        return None;
+    }
+    driver_result::init().ok()?;
+    let device = driver_result::device::get(i32::try_from(device_index).ok()?).ok()?;
+    let attribute = |attrib| unsafe { driver_result::device::get_attribute(device, attrib) }.ok();
+    let domain = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID)?;
+    let bus = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_BUS_ID)?;
+    let slot = attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID)?;
+    Some(format!(
+        "{:04x}:{:02x}:{:02x}.0",
+        domain.max(0),
+        bus.max(0),
+        slot.max(0)
+    ))
 }
 
 fn query_cuda_compute_capability(device_index: u32) -> Option<(u32, u32)> {

@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # A manual run builds, checks and packages every platform as workflow
+  # artifacts; only version tags publish a release.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,13 +14,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux builds run in Ubuntu 20.04 so the binary needs at most
+          # glibc 2.31 and starts on older distributions and mining OSes.
           - os: ubuntu-latest
+            container: ubuntu:20.04
             target: x86_64-unknown-linux-gnu
             name: seine-linux-x86_64
             # NVIDIA (default) plus the AMD HIP backend; both resolve their
             # runtimes at startup via dlopen, so the build needs neither toolkit.
             features: --features amd
           - os: ubuntu-24.04-arm
+            container: ubuntu:20.04
             target: aarch64-unknown-linux-gnu
             name: seine-linux-aarch64
             features: --no-default-features
@@ -34,11 +41,19 @@ jobs:
             features: --no-default-features --features metal
 
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     env:
       # Set only after HTTPS ingestion and the published privacy policy are verified.
       SEINE_TELEMETRY_URL: ${{ vars.SEINE_TELEMETRY_URL }}
 
     steps:
+      - name: Install build tools (container)
+        if: matrix.container
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential ca-certificates curl git
+
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@1.93.0
@@ -58,8 +73,18 @@ jobs:
           cargo test --release --locked --target ${{ matrix.target }} -p blocknet-pow-kernel
           cargo run --release --locked --target ${{ matrix.target }} -p blocknet-pow-kernel --example verify_cpu_kernels
 
+      - name: Check Linux glibc requirement
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          newest=$(objdump -T "target/${{ matrix.target }}/release/seine" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "newest glibc symbol: ${newest}"
+          test "$(printf '%s\n' "${newest#GLIBC_}" 2.31 | sort -V | tail -1)" = 2.31
+
       - name: Package (Unix)
-        if: runner.os != 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
           stage="${RUNNER_TEMP}/${{ matrix.name }}"
@@ -79,7 +104,7 @@ jobs:
           tar -C "${stage}" -czf "${GITHUB_WORKSPACE}/${{ matrix.name }}.tar.gz" .
 
       - name: Package (Windows)
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -115,7 +140,6 @@ jobs:
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath '${{ matrix.name }}.zip'
 
       - name: Upload artifact
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
@@ -190,3 +214,53 @@ jobs:
             seine-*.tar.gz
             seine-*.zip
           generate_release_notes: false
+
+  # HiveOS custom miner package (docs/guides/hiveos.md), built from the Linux
+  # x86_64 release archive and added to the published release. It runs after
+  # the release exists and cannot fail it.
+  hiveos:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: seine-linux-x86_64
+
+      - name: Package
+        run: packaging/hiveos/build.sh --archive seine-linux-x86_64.tar.gz --version "$GITHUB_REF_NAME" --out-dir dist
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/seine-hiveos-*.tar.gz
+
+  # mmpOS custom miner package (docs/guides/mmpos.md), built the same way as
+  # the HiveOS package and added to the published release. It runs after the
+  # release exists and cannot fail it.
+  mmpos:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: seine-linux-x86_64
+
+      - name: Package
+        run: packaging/mmpos/build.sh --archive seine-linux-x86_64.tar.gz --version "$GITHUB_REF_NAME" --out-dir dist
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/seine-mmpos-*.tar.gz

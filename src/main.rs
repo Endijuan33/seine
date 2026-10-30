@@ -10,6 +10,7 @@ mod hardware_telemetry;
 mod memory_modules;
 mod miner;
 mod pool;
+mod proxy;
 mod runtime_identity;
 mod self_update;
 mod shortname;
@@ -48,7 +49,9 @@ fn run() -> Result<()> {
 
     let _shutdown_guard = shutdown::install(Arc::clone(&shutdown))?;
 
-    let result = if cfg.api_server_enabled || cfg.service_mode {
+    let result = if cfg.proxy_listen.is_some() {
+        proxy::run(&cfg, shutdown)
+    } else if cfg.api_server_enabled || cfg.service_mode {
         control_api::run(cfg, shutdown)
     } else if !cfg.bench && miner::should_enable_tui(&cfg) {
         control_api::run_interactive(cfg, shutdown)

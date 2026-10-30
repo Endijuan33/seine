@@ -33,8 +33,27 @@ pub const HIPRTC_SUCCESS: HiprtcResult = 0;
 /// can overtake a long-running fill kernel.
 pub const HIP_STREAM_NON_BLOCKING: c_uint = 0x1;
 
-const HIP_LIBRARY_CANDIDATES: &[&str] = &["libamdhip64.so", "libamdhip64.so.6", "libamdhip64.so.5"];
-const HIPRTC_LIBRARY_CANDIDATES: &[&str] = &["libhiprtc.so", "libhiprtc.so.6", "libhiprtc.so.5"];
+// Current runtimes on the loader search path, then the default ROCm prefix (some
+// ROCm installs do not register it with the dynamic loader), and only then a ROCm 5
+// runtime, so a stale distribution copy cannot shadow the installed one.
+const HIP_LIBRARY_CANDIDATES: &[&str] = &[
+    "libamdhip64.so",
+    "libamdhip64.so.7",
+    "libamdhip64.so.6",
+    "/opt/rocm/lib/libamdhip64.so",
+    "/opt/rocm/lib/libamdhip64.so.7",
+    "/opt/rocm/lib/libamdhip64.so.6",
+    "libamdhip64.so.5",
+];
+const HIPRTC_LIBRARY_CANDIDATES: &[&str] = &[
+    "libhiprtc.so",
+    "libhiprtc.so.7",
+    "libhiprtc.so.6",
+    "/opt/rocm/lib/libhiprtc.so",
+    "/opt/rocm/lib/libhiprtc.so.7",
+    "/opt/rocm/lib/libhiprtc.so.6",
+    "libhiprtc.so.5",
+];
 
 pub const ROCM_RUNTIME_NOT_FOUND: &str = "ROCm runtime not found (libamdhip64.so)";
 pub const HIPRTC_NOT_FOUND: &str = "ROCm hipRTC compiler not found (libhiprtc.so)";
