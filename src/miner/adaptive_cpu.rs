@@ -7,6 +7,8 @@ use std::thread::{self, JoinHandle};
 
 const RECOVERY_SECS: u64 = 30;
 const RETRY_SECS: u64 = 300;
+/// Longest wait between down-probes at the cap after repeated losses.
+const MAX_RETRY_SECS: u64 = 2400;
 const MAX_DRIFT: f64 = 0.08;
 const JOINT_TIMEOUT_SECS: u64 = 15 * 60;
 const SWITCH_TIMEOUT_SECS: u64 = 10 * 60;
@@ -409,6 +411,8 @@ struct Policy {
     ramp: bool,
     next_up_probe: Option<usize>,
     unsuccessful: usize,
+    /// Consecutive losing down-probes while running at the cap.
+    capped_losses: u32,
     next_trial: u64,
     allocation_retry_at: u64,
     headroom_since: u64,
@@ -448,6 +452,7 @@ impl Policy {
             ramp: true,
             next_up_probe: None,
             unsuccessful: 0,
+            capped_losses: 0,
             next_trial: 0,
             allocation_retry_at: 0,
             headroom_since: 0,
@@ -505,6 +510,7 @@ impl Policy {
             if cap > self.previous_cap {
                 self.up = true;
                 self.ramp = true;
+                self.capped_losses = 0;
                 self.next_trial = self.next_trial.min(now.saturating_add(RECOVERY_SECS));
             }
             self.previous_cap = cap;
@@ -609,6 +615,7 @@ impl Policy {
             self.ramp = true;
             self.attempts = 0;
             self.unsuccessful = 0;
+            self.capped_losses = 0;
             let (mut action, decision) = if self.joint.is_some() {
                 self.cancel_joint(kernels, now, snapshots, cap, actual, allocation_limited)
             } else {
@@ -973,6 +980,7 @@ impl Policy {
                     let ratio = hps / old;
                     if (ratio - 1.0).abs() > MAX_DRIFT {
                         self.next_trial = now;
+                        self.capped_losses = 0;
                         self.up = true;
                         self.ramp = true;
                         self.peak_hps = hps;
@@ -1100,12 +1108,21 @@ impl Policy {
                     self.unsuccessful += 1;
                     self.ramp = !stable;
                 }
+                // At the cap only fewer workers can be tried. Double the wait after
+                // each further losing down-probe there; up-probes below the cap keep
+                // the RETRY_SECS cadence that finds recovered capacity.
+                if stable && !better && candidate < base && base >= cap {
+                    self.capped_losses += 1;
+                } else {
+                    self.capped_losses = 0;
+                }
                 self.reset(
                     now,
                     if self.unsuccessful < 2 {
                         RECOVERY_SECS
                     } else {
-                        RETRY_SECS
+                        (RETRY_SECS << self.capped_losses.saturating_sub(2).min(3))
+                            .min(MAX_RETRY_SECS)
                     },
                 );
                 self.next_up_probe = next_up_probe;
@@ -2405,6 +2422,30 @@ mod tests {
             confirmations >= 20,
             "exercise repeated rechecks, not one endpoint"
         );
+    }
+
+    #[test]
+    fn capped_host_backs_off_repeated_losing_down_probes() {
+        let mut p = policy(8);
+        p.max = 8;
+        // Every worker helps up to the cap, so each down-probe loses.
+        let rates = [0, 24, 48, 72, 96, 112, 124, 132, 136];
+        let mut hashes = 0;
+        let mut probes = Vec::new();
+        for now in 0..14_400 {
+            hashes += rates[p.current];
+            if let Some(d) = p.tick(now, hashes, true, 8, false, p.current) {
+                if d.reason == "measuring useful mining work" {
+                    probes.push(now);
+                }
+            }
+        }
+        let late = probes.iter().filter(|&&t| t >= 7200).count();
+        // A fixed RETRY_SECS cadence probes about 20 times in the last two hours;
+        // the doubled wait settles at MAX_RETRY_SECS.
+        assert!(late <= 4, "probes in the last 2 h: {late} ({probes:?})");
+        assert!(late >= 2, "still re-checks occasionally ({probes:?})");
+        assert_eq!(p.current, 8);
     }
 
     #[test]
