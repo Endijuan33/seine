@@ -9,25 +9,15 @@ supported hardware only.
 
 ## Unreleased
 
-- **The Linux release runs on more systems:** Ubuntu 20.04 and 22.04, Debian 11 and 12, and other distributions with glibc 2.31 or newer, where it previously would not start.
-- **Mine on HiveOS.** Each release now includes a HiveOS custom miner package: add it to a flight sheet with one installation URL and see hashrate, shares, and per-GPU rates and temperatures on the HiveOS dashboard. See [docs/guides/hiveos.md](docs/guides/hiveos.md).
-- **Mine on mmpOS.** Each release now includes an mmpOS custom miner package: add it to a miner profile with one download URL and see hashrate, shares and per-GPU rates on the mmpOS dashboard. See [docs/guides/mmpos.md](docs/guides/mmpos.md).
-- **Ryzen 9000 and 7000 desktops mine faster:** about 16% on Zen 5 (Ryzen 7 9700X) on Linux and 14% on Windows, and 7% on Zen 4 (Ryzen 7 7700X) on Linux, with every thread in use.
-- **AMD Radeon GPUs mine on Linux, and RDNA3 cards about twice as fast as the first HIP kernel** (measured on a Radeon PRO V710, run as root: +88% at 12 lanes, +95% at 8), and the Linux release now includes the AMD backend. With the ROCm HIP runtime installed, Seine mines on every discrete AMD GPU alongside the CPU with no extra flags; each hash lane uses 2 GiB of VRAM. Run Seine as root, or apply the one-line command it prints at startup, to get the full gain. See [docs/guides/amd.md](docs/guides/amd.md).
-- **About 7% faster on AMD Zen 4c and Zen 3 EPYC, and 5% on Zen 2 EPYC, on Linux** (measured on an EPYC 9754, a dual-socket EPYC 7443 and an AWS instance with AMD Zen 2 EPYC).
-- **NVIDIA and AMD GPUs switch to a new job without a pause.** Stopping the previous job at each new block or job used to take 0.3-1.9 s and now takes a few milliseconds (measured on an NVIDIA A10G).
-- **CPU threads start on a new block about 0.3 s sooner.** When the pool moves to a new block, Seine now drops hashes that can no longer win instead of finishing them first (job switch measured at 240 ms → 7 ms on a Zen 4 EPYC). Job refreshes within the same block still finish their hashes, so those shares still count.
-- **Encrypted pool connections and backup pools.** Point Seine at a pool's TLS port with `stratum+ssl://host:port`, and list backup pools with repeated `--pool-url` flags or commas: Seine switches to the next pool when one is down and returns to your first pool once it is back. See [pool connections](docs/guides/configuration.md#pool-connections).
-- Seine accepts the `-o URL -u ADDRESS.WORKER -p x` launch flags that mining OS templates use, so it drops into existing rig setups without custom scripts.
-- **Farm proxy for many rigs:** `seine --proxy-listen 0.0.0.0:3333` lets every rig on your network share a few pool connections instead of one each, with each rig mining its own part of the work and paying its own address. See [farm proxy](docs/guides/farm-proxy.md).
-- Seine shuts down cleanly when stopped by systemd, Docker or a closed terminal session, not only with Ctrl+C.
-- Fast rigs get more work from the pool without reconnecting, on pools that support it.
-- No more idle dev-fee rounds on networks that cannot reach bntpool.com: they now mine on your own pool instead.
-- Mine from networks that block pool ports: `--pool-proxy socks5://host:port` sends pool connections through a SOCKS5 proxy, including Tor or an SSH tunnel.
-- **Releases are signed and Seine keeps itself current.** Every release now ships a signature over its checksum list, Seine verifies it against the key built into the miner before installing anything, and a running miner installs new releases automatically and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
-- Desktop PCs with one memory module, or RAM running below its rated or EXPO/XMP speed, now get a one-line hint at startup naming the fix (Windows, and Linux when run as root).
-- The local control API reports live hashrate, accepted and rejected shares, and per-GPU rates with PCI addresses at `GET /v1/miner/stats`, for rig dashboards and mining OS stats scripts. See [docs/API.md](docs/API.md).
-- Seine backs off when a pool connection keeps failing (2 seconds, doubling to a minute) and follows a full pool's suggested wait, instead of reconnecting in a tight loop. Self-hosted telemetry collectors need the schema 12 update before this release.
+- **Faster CPU mining on AMD:** about 16% on Ryzen 9000 (Ryzen 7 9700X) on Linux and 14% on Windows, 7% on Ryzen 7000 (Ryzen 7 7700X) on Linux, with every thread in use; about 7% on Zen 4c and Zen 3 EPYC (EPYC 9754 and 7443) and 5% on Zen 2 EPYC, on Linux.
+- **AMD Radeon GPUs mine on Linux**, with RDNA3 cards about twice as fast as the first HIP kernel (measured on a Radeon PRO V710). With the ROCm HIP runtime installed, Seine mines on every discrete AMD GPU alongside the CPU with no extra flags; each hash lane uses 2 GiB of VRAM. Run Seine as root, or apply the one-line command it prints at startup, to get the full speed. See [AMD GPUs](docs/guides/amd.md).
+- **No pause between jobs:** NVIDIA and AMD GPUs switch to a new job in milliseconds instead of up to 1.9 s, and CPU threads start on a new block about 0.3 s sooner.
+- **Runs on more rigs:** the Linux release now starts on Ubuntu 20.04 and 22.04, Debian 11 and 12 and other systems with glibc 2.31 or newer, and each release includes packages for [HiveOS](docs/guides/hiveos.md) and [mmpOS](docs/guides/mmpos.md) with hashrate and shares on their dashboards.
+- **Every Blocknet pool, your way:** encrypted connections (`stratum+ssl://`), backup pools that Seine switches to and back from, a SOCKS5 proxy for networks that block pool ports, and the `-o`/`-u ADDRESS.WORKER`/`-p` flags that mining OS templates use. For farms, `--proxy-listen` lets every rig share a few pool connections and pay its own address. See [pool connections](docs/guides/configuration.md#pool-connections) and [farm proxy](docs/guides/farm-proxy.md).
+- **Signed releases that keep themselves current:** Seine checks each release's signature before installing it, and a running miner installs new releases and restarts with the same settings. Pass `--no-auto-update` to only be told about new releases.
+- Also: fast rigs get fresh work without reconnecting on pools that support it; Seine backs off when a pool keeps failing instead of reconnecting in a tight loop; dev-fee rounds no longer sit idle when bntpool.com is unreachable; Seine shuts down cleanly when stopped by systemd, Docker or a closed terminal; PCs with one memory module or slow RAM get a hint at startup; and the local API reports live hashrate, shares and per-GPU rates at `GET /v1/miner/stats` (see [docs/API.md](docs/API.md)).
+
+Upgrade note: self-hosted telemetry collectors need the schema 12 update before this release.
 
 ## v0.2.45
 
